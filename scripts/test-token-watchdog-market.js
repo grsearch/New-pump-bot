@@ -175,7 +175,11 @@ assert.strictEqual(
     60_000,
     'legacy 15-minute watchdog configuration must be clamped to one minute',
   );
-  assert.strictEqual(watchdog.maxTokenAgeMs, 7_200_000, 'default token AGE removal must be 2 hours');
+  assert.strictEqual(
+    Object.hasOwn(watchdog, 'maxTokenAgeMs'),
+    false,
+    'watchdog must not configure an AGE removal threshold',
+  );
   watchdog.minFdVUsd = 15_000;
   watchdog.minLiquidityUsd = 3_000;
   watchdog.minVolume24hUsd = 0;
@@ -216,7 +220,6 @@ assert.strictEqual(
   staleWatchdog.minLiquidityUsd = 3_000;
   staleWatchdog.minVolume24hUsd = 0;
   staleWatchdog.noBuyRemoveMs = 0;
-  staleWatchdog.maxTokenAgeMs = 0;
   staleWatchdog.maxWatchDurationMs = 0;
 
   await staleWatchdog._check();
@@ -251,9 +254,9 @@ assert.strictEqual(
   oldAgeWatchdog.maxWatchDurationMs = 0;
 
   await oldAgeWatchdog._check();
-  assert.strictEqual(oldAgeRemoved, true, 'migration AGE over 2 hours must remove the token');
+  assert.strictEqual(oldAgeRemoved, false, 'migration AGE must not remove a monitored token');
 
-  console.log('Token market refresh and webhook AGE tests passed');
+  console.log('Token market refresh and AGE retention tests passed');
   process.exit(0);
 })().catch((err) => {
   console.error(err);

@@ -14,7 +14,7 @@ function numberEnv(name, fallback) {
 }
 
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
-const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
+const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 10000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
 
 const config = {
@@ -198,7 +198,6 @@ const config = {
     // v3.17.13: 代币监控超时（毫秒），0 = 禁用
     //   v3.17.20: 用户明确不要"监控超时退出"（不要 6 小时到期退出），保持 0
     maxWatchDurationMs: parseInt(process.env.MAX_WATCH_DURATION_MS || '0', 10),
-    maxTokenAgeMs: parseInt(process.env.MAX_TOKEN_AGE_MS || '7200000', 10),
     // v3.17.20: FDV lower bound in USD; refreshed once per minute by TokenWatchdog.
     minFdVUsd: parseFloat(process.env.MIN_FDV_USD || '15000'),
     // Birdeye liquidity in USD. Shared by discovery admission and watchdog removal.
@@ -218,7 +217,7 @@ const config = {
       (process.env.ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL ?? process.env.ORDER_FLOW_REPLACE_DUMP_SIGNAL ?? 'true')
         .toLowerCase() === 'true',
     entryMode: String(process.env.ACTIVITY_FLOW_ENTRY_MODE || 'VOLUME_RATIO_1M').toUpperCase(),
-    minVolume1mUsd: parseFloat(process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_USD || '3000'),
+    minVolume1mUsd: parseFloat(process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_USD || '10000'),
     minVolume1mSol: parseFloat(
       process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_SOL || String(activityFlow1mMinVolumeSolDefault),
     ),

@@ -28,7 +28,7 @@ Solana / Pump.fun 短线交易机器人。当前默认买入策略是 **Activity
 
 每个监控代币收到实时 swap 后，程序立即重算最近 1 分钟窗口：
 
-- 1 分钟总成交量默认必须达到 `$3,000`，按 `SOL_PRICE_USD` 换算成 SOL。`.env.example` 默认 `SOL_PRICE_USD=72`，所以约等于 `41.7 SOL/分钟`。
+- 1 分钟总成交量默认必须达到 `$10,000`，按 `SOL_PRICE_USD` 换算成 SOL。`.env.example` 默认 `SOL_PRICE_USD=72`，所以约等于 `138.9 SOL/分钟`。
 - 1 分钟买量 / 卖量默认必须 `>= 1.35`。
 - 1 分钟交易次数默认必须 `>=25`，过滤低频小量币。
 - 1 分钟 RSI(7) 的已收盘值和实时值必须同时 `<50`；按每分钟最后成交价作为收盘价，并采用 Wilder RMA。至少需要 8 根已完成的 1 分钟 K 线，数据不足时拒绝买入但继续监控。
@@ -44,7 +44,7 @@ Solana / Pump.fun 短线交易机器人。当前默认买入策略是 **Activity
 默认入口日志应显示：
 
 ```text
-Entry: ACTIVITY_FLOW (VOLUME_RATIO_1M: 1m volume>=...SOL (~$3000), buy/sell>=1.35, RSI(7,1m) closed/live<50)
+Entry: ACTIVITY_FLOW (VOLUME_RATIO_1M: 1m volume>=...SOL (~$10000), buy/sell>=1.35, RSI disabled)
 Legacy dumpSignal: suppressed
 [main] ActivityFlow enabled: mode=VOLUME_RATIO_1M ...
 ```
@@ -68,8 +68,8 @@ TokenWatchdog 默认每 1 分钟巡检一次 FDV 和 LP：
 - FDV 必须在 `$15,000 ~ $1,000,000`
 - Birdeye LP 必须 `>= $3,000`
 - 24h 交易量必须 `>= $5,000`
-- AGE 从 Pump 迁移时间开始计算；迁移超过 `24h` 的代币会被移除，已有持仓会保留监控直到平仓
-- 迁移时间未知时 AGE 显示未知并跳过 AGE 移除，不使用 mint 创建时间或添加时间猜测
+- AGE 继续从 Pump 迁移时间开始计算并保存到特征库，但不参与监控列表过滤或移除
+- 迁移时间未知时 AGE 显示未知，不使用 mint 创建时间或添加时间猜测
 - 监控列表上限默认 `500` 个；只有新增代币后超过该上限才会触发驱逐
 
 ## 数据留存
@@ -129,7 +129,7 @@ npm run optimize:activity -- --self-test
 ACTIVITY_FLOW_ENABLED=true
 ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL=true
 ACTIVITY_FLOW_ENTRY_MODE=VOLUME_RATIO_1M
-ACTIVITY_FLOW_1M_MIN_VOLUME_USD=3000
+ACTIVITY_FLOW_1M_MIN_VOLUME_USD=10000
 ACTIVITY_FLOW_1M_MIN_VOLUME_SOL=
 ACTIVITY_FLOW_1M_MIN_BUY_SELL_RATIO=1.35
 ACTIVITY_FLOW_1M_MIN_TRADES=25
@@ -170,13 +170,11 @@ ADDON_ENABLED=0
 ADDON_DROP_PCT=20
 
 REBUY_COOLDOWN_MS=300000
-TOKEN_MAX_AGE_MS=0
 MIN_FDV_USD=15000
 MAX_FDV_USD=1000000
 MIN_LIQUIDITY_USD=3000
 WATCHDOG_CHECK_INTERVAL_MS=60000
 WATCHDOG_MARKET_STALE_MS=180000
-MAX_TOKEN_AGE_MS=7200000
 MAX_MINT_AGE_HOURS=0
 NEW_COIN_AGE_THRESHOLD_MS=0
 MAX_WATCHED_TOKENS=500

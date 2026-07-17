@@ -41,10 +41,6 @@ class TokenWatchdog {
       : config.strategy.minLiquidityUsd;
     this.minVolume24hUsd = parseFloat(process.env.MIN_VOLUME_24H_USD || '20000');
     this.noBuyRemoveMs = parseInt(process.env.NO_BUY_REMOVE_MS || '86400000', 10);
-    this.maxTokenAgeMs = process.env.MAX_TOKEN_AGE_MS != null
-      ? parseInt(process.env.MAX_TOKEN_AGE_MS, 10)
-      : config.strategy.maxTokenAgeMs;
-
     const configuredCheckIntervalMs = Math.max(
       10_000,
       parseInt(process.env.WATCHDOG_CHECK_INTERVAL_MS || '60000', 10),
@@ -88,7 +84,6 @@ class TokenWatchdog {
     if (this.minLiquidityUsd > 0) features.push(`minLiquidity=$${this.minLiquidityUsd}`);
     if (this.minVolume24hUsd > 0) features.push(`minVol24h=$${this.minVolume24hUsd}`);
     if (this.noBuyRemoveMs > 0) features.push(`noBuyRemove=${this.noBuyRemoveMs / 3600000}h`);
-    if (this.maxTokenAgeMs > 0) features.push(`maxAge=${this.maxTokenAgeMs / 3600000}h`);
     console.log(`[TokenWatchdog] enabled: ${features.join(', ')}`);
   }
 
@@ -99,8 +94,7 @@ class TokenWatchdog {
       this.maxFdVUsd <= 0 &&
       this.minLiquidityUsd <= 0 &&
       this.minVolume24hUsd <= 0 &&
-      this.noBuyRemoveMs <= 0 &&
-      this.maxTokenAgeMs <= 0
+      this.noBuyRemoveMs <= 0
     ) {
       return;
     }
@@ -131,12 +125,6 @@ class TokenWatchdog {
     } finally {
       this._checking = false;
     }
-  }
-
-  _getMigrationAgeMs(token, now = Date.now()) {
-    const migrationTime = Number(token?.migration_time);
-    if (!Number.isFinite(migrationTime) || migrationTime <= 0) return null;
-    return now - migrationTime;
   }
 
   _isMarketFresh(token, now = Date.now()) {
@@ -337,18 +325,6 @@ class TokenWatchdog {
             }
           } catch (_) {}
         }
-      }
-
-      const migrationAge = this._getMigrationAgeMs(token, now);
-      if (
-        this.maxTokenAgeMs > 0 &&
-        migrationAge != null &&
-        migrationAge >= this.maxTokenAgeMs
-      ) {
-        reasons.push(
-          `migration_too_old(${Math.round(migrationAge / 3600000)}h >= ` +
-          `${this.maxTokenAgeMs / 3600000}h)`,
-        );
       }
 
       if (reasons.length === 0) continue;

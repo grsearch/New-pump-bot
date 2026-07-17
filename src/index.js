@@ -25,7 +25,6 @@ const FeatureRecorder = require('./core/FeatureRecorder');
 const monitor = getMonitor();
 
 async function main() {
-  const maxTokenAgeMs = config.strategy.maxTokenAgeMs;
   const watchdogCheckIntervalMs = parseInt(process.env.WATCHDOG_CHECK_INTERVAL_MS || '60000', 10);
   const watchdogFdvRange = config.strategy.maxFdVUsd > 0
     ? `$${config.strategy.minFdVUsd}-$${config.strategy.maxFdVUsd}`
@@ -57,7 +56,7 @@ async function main() {
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
-      `migrationAge=${maxTokenAgeMs > 0 ? (maxTokenAgeMs / 3_600_000) + 'h' : 'disabled'} ` +
+      `ageFilter=disabled ` +
       `(check every ${watchdogCheckIntervalMs / 60_000}min)`,
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
@@ -385,19 +384,7 @@ async function main() {
     }
   }, 3600_000);
 
-  // Optional token age cleanup. Disabled by default; set TOKEN_MAX_AGE_MS > 0 to enable.
-  const TOKEN_MAX_AGE_MS = parseInt(process.env.TOKEN_MAX_AGE_MS || '0', 10);
-  if (TOKEN_MAX_AGE_MS > 0) {
-    setInterval(() => {
-      const removed = tokenRegistry.removeStaleByAge(TOKEN_MAX_AGE_MS);
-      if (removed > 0 && tickStream && tickStream.watchedMints) {
-        const activeMints = tokenRegistry.listActive().map(t => t.mint);
-        void activeMints;
-      }
-    }, 300_000);
-  } else {
-    console.log('[main] token age cleanup disabled (TOKEN_MAX_AGE_MS=0)');
-  }
+  console.log('[main] token age filtering disabled; AGE is retained for analytics only');
 
   // ============ 定期补缺 pool 信息（每 60 秒扫描一次） ============
   // 防止 onTokenAdded 时 PoolFinder 失败导致代币永远没有 pool

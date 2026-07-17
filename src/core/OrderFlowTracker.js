@@ -54,7 +54,7 @@ class OrderFlowTracker extends EventEmitter {
           'VOLUME_RATIO_1M',
       ).toUpperCase();
     this.minVolume1mUsd =
-      opts.minVolume1mUsd ?? flowConfig.minVolume1mUsd ?? numEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
+      opts.minVolume1mUsd ?? flowConfig.minVolume1mUsd ?? numEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 10000);
     this.minVolume1mSol =
       opts.minVolume1mSol ??
       flowConfig.minVolume1mSol ??

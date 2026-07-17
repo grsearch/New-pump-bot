@@ -391,6 +391,17 @@ const config = {
 
   capture: {
     swapEventsEnabled: (process.env.SWAP_EVENT_LOG_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabEnabled: (process.env.STRATEGY_LAB_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabSnapshotIntervalMs: parseInt(process.env.STRATEGY_LAB_SNAPSHOT_INTERVAL_MS || '1000', 10),
+    strategyLabRetentionMs: parseInt(process.env.STRATEGY_LAB_RETENTION_MS || '300000', 10),
+    strategyLabLabelEnabled: (process.env.STRATEGY_LAB_LABEL_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabLabelIntervalMs: parseInt(process.env.STRATEGY_LAB_LABEL_INTERVAL_MS || '10000', 10),
+    strategyLabLabelBatchSize: parseInt(process.env.STRATEGY_LAB_LABEL_BATCH_SIZE || '500', 10),
+    strategyLabSnapshotAllActive: (process.env.STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE ?? 'false').toLowerCase() === 'true',
+    strategyLabBuyBurstThreshold: parseInt(process.env.STRATEGY_LAB_BUY_BURST_THRESHOLD || '10', 10),
+    strategyLabTpsDoubleMin: parseFloat(process.env.STRATEGY_LAB_TPS_DOUBLE_MIN || '5'),
+    strategyLabLpChangePct: parseFloat(process.env.STRATEGY_LAB_LP_CHANGE_PCT || '10'),
+    strategyLabFdvBandsUsd: process.env.STRATEGY_LAB_FDV_BANDS_USD || '50000,100000,250000,500000,1000000',
   },
 
   // Passing this gate only adds a mint to monitoring; it does not buy the token.

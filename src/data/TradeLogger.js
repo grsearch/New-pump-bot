@@ -191,6 +191,228 @@ class TradeLogger {
     try {
       this.db.exec('ALTER TABLE positions ADD COLUMN is_addon INTEGER DEFAULT 0');
     } catch (_) { /* column already exists */ }
+
+    this._initStrategyLabSchema();
+  }
+
+  _strategyLabWindows() {
+    return [1, 5, 10, 20, 30, 60];
+  }
+
+  _strategyLabHorizons() {
+    return [30, 60, 180];
+  }
+
+  _snapshotFeatureColumns() {
+    const cols = [
+      ['ts', 'INTEGER NOT NULL'],
+      ['bucket_ts', 'INTEGER NOT NULL'],
+      ['mint', 'TEXT NOT NULL'],
+      ['symbol', 'TEXT'],
+      ['price', 'REAL'],
+      ['market_cap', 'REAL'],
+      ['fdv', 'REAL'],
+      ['liquidity', 'REAL'],
+      ['age_ms', 'INTEGER'],
+      ['age_min', 'REAL'],
+      ['holders', 'INTEGER'],
+      ['pool_address', 'TEXT'],
+      ['pool_quote_after', 'REAL'],
+    ];
+
+    const windowMetrics = [
+      ['buy_volume', 'REAL'],
+      ['sell_volume', 'REAL'],
+      ['net_volume', 'REAL'],
+      ['buy_sell_ratio', 'REAL'],
+      ['buy_count', 'INTEGER'],
+      ['sell_count', 'INTEGER'],
+      ['tx_count', 'INTEGER'],
+      ['unique_buy_wallets', 'INTEGER'],
+      ['unique_sell_wallets', 'INTEGER'],
+      ['unique_wallets', 'INTEGER'],
+      ['new_buy_wallets', 'INTEGER'],
+      ['repeat_buy_wallets', 'INTEGER'],
+      ['new_sell_wallets', 'INTEGER'],
+      ['repeat_sell_wallets', 'INTEGER'],
+      ['largest_buy', 'REAL'],
+      ['largest_sell', 'REAL'],
+      ['avg_buy_size', 'REAL'],
+      ['avg_sell_size', 'REAL'],
+      ['median_buy_size', 'REAL'],
+      ['median_sell_size', 'REAL'],
+      ['tx_per_second', 'REAL'],
+      ['price_change', 'REAL'],
+      ['high', 'REAL'],
+      ['low', 'REAL'],
+      ['volatility', 'REAL'],
+      ['atr', 'REAL'],
+    ];
+
+    for (const w of this._strategyLabWindows()) {
+      for (const [name, type] of windowMetrics) {
+        cols.push([`${name}_${w}s`, type]);
+      }
+    }
+
+    cols.push(
+      ['buy_streak', 'INTEGER'],
+      ['sell_streak', 'INTEGER'],
+      ['lp_change_60s_pct', 'REAL'],
+      ['fdv_change_60s_pct', 'REAL'],
+      ['latency_detect_ms', 'INTEGER'],
+      ['latency_decision_ms', 'INTEGER'],
+      ['latency_send_ms', 'INTEGER'],
+      ['latency_confirm_ms', 'INTEGER'],
+    );
+
+    for (const horizon of this._strategyLabHorizons()) {
+      cols.push(
+        [`future_max_${horizon}s_pct`, 'REAL'],
+        [`future_close_${horizon}s_pct`, 'REAL'],
+        [`future_drawdown_${horizon}s_pct`, 'REAL'],
+      );
+    }
+    cols.push(['label_updated_at', 'INTEGER']);
+
+    return cols;
+  }
+
+  _ensureColumns(tableName, columns) {
+    const existing = new Set(this.db.pragma(`table_info(${tableName})`).map((row) => row.name));
+    for (const [name, type] of columns) {
+      if (!existing.has(name)) {
+        const alterType = String(type).replace(/\s+NOT NULL\b/gi, '');
+        this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${name} ${alterType}`);
+      }
+    }
+  }
+
+  _initStrategyLabSchema() {
+    const snapshotColumnsSql = this._snapshotFeatureColumns()
+      .map(([name, type]) => `        ${name} ${type}`)
+      .join(',\n');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS token_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+${snapshotColumnsSql},
+        UNIQUE(mint, bucket_ts)
+      );
+      CREATE INDEX IF NOT EXISTS idx_token_snapshots_ts ON token_snapshots(ts);
+      CREATE INDEX IF NOT EXISTS idx_token_snapshots_mint_ts ON token_snapshots(mint, ts);
+      CREATE INDEX IF NOT EXISTS idx_token_snapshots_labels ON token_snapshots(label_updated_at, ts);
+
+      CREATE TABLE IF NOT EXISTS token_candles (
+        timeframe TEXT NOT NULL,
+        bucket_ts INTEGER NOT NULL,
+        mint TEXT NOT NULL,
+        symbol TEXT,
+        open REAL,
+        high REAL,
+        low REAL,
+        close REAL,
+        volume_sol REAL,
+        buy_volume_sol REAL,
+        sell_volume_sol REAL,
+        buy_count INTEGER,
+        sell_count INTEGER,
+        tx_count INTEGER,
+        unique_buy_wallets INTEGER,
+        unique_sell_wallets INTEGER,
+        fdv REAL,
+        liquidity REAL,
+        updated_at INTEGER,
+        PRIMARY KEY(timeframe, mint, bucket_ts)
+      );
+      CREATE INDEX IF NOT EXISTS idx_token_candles_mint_timeframe_ts
+        ON token_candles(mint, timeframe, bucket_ts);
+
+      CREATE TABLE IF NOT EXISTS token_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts INTEGER NOT NULL,
+        mint TEXT NOT NULL,
+        symbol TEXT,
+        event_type TEXT NOT NULL,
+        event_key TEXT NOT NULL,
+        price REAL,
+        fdv REAL,
+        liquidity REAL,
+        age_ms INTEGER,
+        value REAL,
+        details_json TEXT,
+        created_at INTEGER,
+        UNIQUE(mint, event_type, event_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_token_events_ts ON token_events(ts);
+      CREATE INDEX IF NOT EXISTS idx_token_events_type_ts ON token_events(event_type, ts);
+      CREATE INDEX IF NOT EXISTS idx_token_events_mint_ts ON token_events(mint, ts);
+
+      CREATE TABLE IF NOT EXISTS bot_latency_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts INTEGER NOT NULL,
+        mint TEXT,
+        symbol TEXT,
+        signature TEXT,
+        phase TEXT,
+        latency_detect_ms INTEGER,
+        latency_decision_ms INTEGER,
+        latency_send_ms INTEGER,
+        latency_confirm_ms INTEGER,
+        details_json TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_bot_latency_events_ts ON bot_latency_events(ts);
+      CREATE INDEX IF NOT EXISTS idx_bot_latency_events_mint_ts ON bot_latency_events(mint, ts);
+    `);
+
+    this._ensureColumns('token_snapshots', this._snapshotFeatureColumns());
+    this._ensureColumns('token_candles', [
+      ['timeframe', 'TEXT'],
+      ['bucket_ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['open', 'REAL'],
+      ['high', 'REAL'],
+      ['low', 'REAL'],
+      ['close', 'REAL'],
+      ['volume_sol', 'REAL'],
+      ['buy_volume_sol', 'REAL'],
+      ['sell_volume_sol', 'REAL'],
+      ['buy_count', 'INTEGER'],
+      ['sell_count', 'INTEGER'],
+      ['tx_count', 'INTEGER'],
+      ['unique_buy_wallets', 'INTEGER'],
+      ['unique_sell_wallets', 'INTEGER'],
+      ['fdv', 'REAL'],
+      ['liquidity', 'REAL'],
+      ['updated_at', 'INTEGER'],
+    ]);
+    this._ensureColumns('token_events', [
+      ['ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['event_type', 'TEXT'],
+      ['event_key', 'TEXT'],
+      ['price', 'REAL'],
+      ['fdv', 'REAL'],
+      ['liquidity', 'REAL'],
+      ['age_ms', 'INTEGER'],
+      ['value', 'REAL'],
+      ['details_json', 'TEXT'],
+      ['created_at', 'INTEGER'],
+    ]);
+    this._ensureColumns('bot_latency_events', [
+      ['ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['signature', 'TEXT'],
+      ['phase', 'TEXT'],
+      ['latency_detect_ms', 'INTEGER'],
+      ['latency_decision_ms', 'INTEGER'],
+      ['latency_send_ms', 'INTEGER'],
+      ['latency_confirm_ms', 'INTEGER'],
+      ['details_json', 'TEXT'],
+    ]);
   }
 
   _prepareStatements() {
@@ -399,6 +621,109 @@ class TradeLogger {
         SELECT * FROM positions WHERE status = 'stuck' ORDER BY opened_at DESC
       `),
     };
+
+    this._prepareStrategyLabStatements();
+  }
+
+  _snapshotColumnNames() {
+    return this._snapshotFeatureColumns().map(([name]) => name);
+  }
+
+  _prepareStrategyLabStatements() {
+    const snapshotColumns = this._snapshotColumnNames();
+    const snapshotInsertColumns = snapshotColumns.join(', ');
+    const snapshotInsertParams = snapshotColumns.map((name) => `@${name}`).join(', ');
+    const snapshotUpdateColumns = snapshotColumns
+      .filter((name) => name !== 'mint' && name !== 'bucket_ts')
+      .filter((name) => !name.startsWith('future_') && name !== 'label_updated_at')
+      .map((name) => `${name} = excluded.${name}`)
+      .join(',\n          ');
+
+    this.stmts.upsertTokenSnapshot = this.db.prepare(`
+      INSERT INTO token_snapshots (${snapshotInsertColumns})
+      VALUES (${snapshotInsertParams})
+      ON CONFLICT(mint, bucket_ts) DO UPDATE SET
+          ${snapshotUpdateColumns}
+    `);
+
+    this.stmts.upsertTokenCandle = this.db.prepare(`
+      INSERT INTO token_candles
+        (timeframe, bucket_ts, mint, symbol, open, high, low, close,
+         volume_sol, buy_volume_sol, sell_volume_sol, buy_count, sell_count, tx_count,
+         unique_buy_wallets, unique_sell_wallets, fdv, liquidity, updated_at)
+      VALUES
+        (@timeframe, @bucket_ts, @mint, @symbol, @open, @high, @low, @close,
+         @volume_sol, @buy_volume_sol, @sell_volume_sol, @buy_count, @sell_count, @tx_count,
+         @unique_buy_wallets, @unique_sell_wallets, @fdv, @liquidity, @updated_at)
+      ON CONFLICT(timeframe, mint, bucket_ts) DO UPDATE SET
+        symbol = excluded.symbol,
+        open = excluded.open,
+        high = excluded.high,
+        low = excluded.low,
+        close = excluded.close,
+        volume_sol = excluded.volume_sol,
+        buy_volume_sol = excluded.buy_volume_sol,
+        sell_volume_sol = excluded.sell_volume_sol,
+        buy_count = excluded.buy_count,
+        sell_count = excluded.sell_count,
+        tx_count = excluded.tx_count,
+        unique_buy_wallets = excluded.unique_buy_wallets,
+        unique_sell_wallets = excluded.unique_sell_wallets,
+        fdv = excluded.fdv,
+        liquidity = excluded.liquidity,
+        updated_at = excluded.updated_at
+    `);
+
+    this.stmts.insertTokenEvent = this.db.prepare(`
+      INSERT OR IGNORE INTO token_events
+        (ts, mint, symbol, event_type, event_key, price, fdv, liquidity, age_ms, value, details_json, created_at)
+      VALUES
+        (@ts, @mint, @symbol, @event_type, @event_key, @price, @fdv, @liquidity, @age_ms, @value, @details_json, @created_at)
+    `);
+
+    this.stmts.insertBotLatencyEvent = this.db.prepare(`
+      INSERT INTO bot_latency_events
+        (ts, mint, symbol, signature, phase,
+         latency_detect_ms, latency_decision_ms, latency_send_ms, latency_confirm_ms, details_json)
+      VALUES
+        (@ts, @mint, @symbol, @signature, @phase,
+         @latency_detect_ms, @latency_decision_ms, @latency_send_ms, @latency_confirm_ms, @details_json)
+    `);
+
+    this.stmts.pendingSnapshotLabels = this.db.prepare(`
+      SELECT id, mint, ts, price
+      FROM token_snapshots
+      WHERE price > 0
+        AND ts <= ?
+        AND label_updated_at IS NULL
+      ORDER BY ts ASC
+      LIMIT ?
+    `);
+
+    this.stmts.futurePricesForLabel = this.db.prepare(`
+      SELECT ts, price
+      FROM swap_events
+      WHERE mint = ?
+        AND ts > ?
+        AND ts <= ?
+        AND price > 0
+      ORDER BY ts ASC, id ASC
+    `);
+
+    this.stmts.updateSnapshotLabels = this.db.prepare(`
+      UPDATE token_snapshots SET
+        future_max_30s_pct = COALESCE(@future_max_30s_pct, future_max_30s_pct),
+        future_close_30s_pct = COALESCE(@future_close_30s_pct, future_close_30s_pct),
+        future_drawdown_30s_pct = COALESCE(@future_drawdown_30s_pct, future_drawdown_30s_pct),
+        future_max_60s_pct = COALESCE(@future_max_60s_pct, future_max_60s_pct),
+        future_close_60s_pct = COALESCE(@future_close_60s_pct, future_close_60s_pct),
+        future_drawdown_60s_pct = COALESCE(@future_drawdown_60s_pct, future_drawdown_60s_pct),
+        future_max_180s_pct = COALESCE(@future_max_180s_pct, future_max_180s_pct),
+        future_close_180s_pct = COALESCE(@future_close_180s_pct, future_close_180s_pct),
+        future_drawdown_180s_pct = COALESCE(@future_drawdown_180s_pct, future_drawdown_180s_pct),
+        label_updated_at = @label_updated_at
+      WHERE id = @id
+    `);
   }
 
   // ============================================================
@@ -479,6 +804,149 @@ class TradeLogger {
         poolQuoteAfter: num(swap.poolQuoteAfter),
       });
     } catch (_) { /* best effort; strategy must never block on analytics writes */ }
+  }
+
+  // ============================================================
+  // Strategy Lab API
+  // ============================================================
+
+  _cleanDbValue(value) {
+    if (typeof value === 'number' && !Number.isFinite(value)) return null;
+    return value ?? null;
+  }
+
+  saveTokenSnapshot(snapshot) {
+    if (!snapshot || !snapshot.mint) return;
+    const row = {};
+    for (const name of this._snapshotColumnNames()) {
+      row[name] = this._cleanDbValue(snapshot[name]);
+    }
+    row.ts = row.ts || Date.now();
+    row.bucket_ts = row.bucket_ts || row.ts;
+    try {
+      this.stmts.upsertTokenSnapshot.run(row);
+    } catch (_) { /* analytics only */ }
+  }
+
+  saveTokenCandle(candle) {
+    if (!candle || !candle.mint || !candle.timeframe || !candle.bucket_ts) return;
+    const row = {
+      timeframe: candle.timeframe,
+      bucket_ts: candle.bucket_ts,
+      mint: candle.mint,
+      symbol: candle.symbol || null,
+      open: this._cleanDbValue(candle.open),
+      high: this._cleanDbValue(candle.high),
+      low: this._cleanDbValue(candle.low),
+      close: this._cleanDbValue(candle.close),
+      volume_sol: this._cleanDbValue(candle.volume_sol),
+      buy_volume_sol: this._cleanDbValue(candle.buy_volume_sol),
+      sell_volume_sol: this._cleanDbValue(candle.sell_volume_sol),
+      buy_count: this._cleanDbValue(candle.buy_count),
+      sell_count: this._cleanDbValue(candle.sell_count),
+      tx_count: this._cleanDbValue(candle.tx_count),
+      unique_buy_wallets: this._cleanDbValue(candle.unique_buy_wallets),
+      unique_sell_wallets: this._cleanDbValue(candle.unique_sell_wallets),
+      fdv: this._cleanDbValue(candle.fdv),
+      liquidity: this._cleanDbValue(candle.liquidity),
+      updated_at: candle.updated_at || Date.now(),
+    };
+    try {
+      this.stmts.upsertTokenCandle.run(row);
+    } catch (_) { /* analytics only */ }
+  }
+
+  logTokenEvent(event) {
+    if (!event || !event.mint || !event.eventType) return;
+    const details = event.detailsJson != null
+      ? event.detailsJson
+      : (event.details == null ? null : JSON.stringify(event.details));
+    try {
+      this.stmts.insertTokenEvent.run({
+        ts: event.ts || Date.now(),
+        mint: event.mint,
+        symbol: event.symbol || null,
+        event_type: event.eventType,
+        event_key: event.eventKey || 'first',
+        price: this._cleanDbValue(event.price),
+        fdv: this._cleanDbValue(event.fdv),
+        liquidity: this._cleanDbValue(event.liquidity),
+        age_ms: this._cleanDbValue(event.ageMs),
+        value: this._cleanDbValue(event.value),
+        details_json: details,
+        created_at: Date.now(),
+      });
+    } catch (_) { /* analytics only */ }
+  }
+
+  logBotLatencyEvent(event) {
+    if (!event) return;
+    const details = event.detailsJson != null
+      ? event.detailsJson
+      : (event.details == null ? null : JSON.stringify(event.details));
+    try {
+      this.stmts.insertBotLatencyEvent.run({
+        ts: event.ts || Date.now(),
+        mint: event.mint || null,
+        symbol: event.symbol || null,
+        signature: event.signature || null,
+        phase: event.phase || null,
+        latency_detect_ms: this._cleanDbValue(event.latencyDetectMs),
+        latency_decision_ms: this._cleanDbValue(event.latencyDecisionMs),
+        latency_send_ms: this._cleanDbValue(event.latencySendMs),
+        latency_confirm_ms: this._cleanDbValue(event.latencyConfirmMs),
+        details_json: details,
+      });
+    } catch (_) { /* analytics only */ }
+  }
+
+  backfillSnapshotLabels({ now = Date.now(), batchSize = 500 } = {}) {
+    const horizons = this._strategyLabHorizons();
+    const maxHorizonMs = Math.max(...horizons) * 1000;
+    let updated = 0;
+    try {
+      const pending = this.stmts.pendingSnapshotLabels.all(now - maxHorizonMs, batchSize);
+      for (const snap of pending) {
+        const basePrice = Number(snap.price);
+        if (!Number.isFinite(basePrice) || basePrice <= 0) continue;
+        const prices = this.stmts.futurePricesForLabel.all(
+          snap.mint,
+          snap.ts,
+          snap.ts + maxHorizonMs,
+        );
+        const params = {
+          id: snap.id,
+          label_updated_at: now,
+          future_max_30s_pct: null,
+          future_close_30s_pct: null,
+          future_drawdown_30s_pct: null,
+          future_max_60s_pct: null,
+          future_close_60s_pct: null,
+          future_drawdown_60s_pct: null,
+          future_max_180s_pct: null,
+          future_close_180s_pct: null,
+          future_drawdown_180s_pct: null,
+        };
+
+        for (const horizon of horizons) {
+          const until = snap.ts + horizon * 1000;
+          const rows = prices.filter((row) => row.ts <= until);
+          if (rows.length === 0) continue;
+          const values = rows.map((row) => Number(row.price)).filter((price) => Number.isFinite(price) && price > 0);
+          if (values.length === 0) continue;
+          const maxPrice = Math.max(...values);
+          const minPrice = Math.min(...values);
+          const closePrice = values[values.length - 1];
+          params[`future_max_${horizon}s_pct`] = ((maxPrice - basePrice) / basePrice) * 100;
+          params[`future_close_${horizon}s_pct`] = ((closePrice - basePrice) / basePrice) * 100;
+          params[`future_drawdown_${horizon}s_pct`] = ((minPrice - basePrice) / basePrice) * 100;
+        }
+
+        this.stmts.updateSnapshotLabels.run(params);
+        updated++;
+      }
+    } catch (_) { /* analytics only */ }
+    return updated;
   }
 
   // ============================================================

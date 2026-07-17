@@ -76,6 +76,26 @@ TokenWatchdog 默认每 1 分钟巡检一次 FDV 和 LP：
 
 默认开启 `SWAP_EVENT_LOG_ENABLED=true`。程序会把每一笔已解析的监控币实时 swap 写入 SQLite 的 `swap_events` 表，后续可以基于这张表离线重算窗口并回测阈值。
 
+## Strategy Lab
+
+默认开启 `STRATEGY_LAB_ENABLED=true`。程序会基于实时 `swapParsed` 成交流写入一套特征数据库：
+
+- `token_snapshots`：最近活跃代币的每秒特征快照，包含 FDV、LP、AGE、买卖量/次数、唯一钱包、新/老买家、最大/平均/中位买单、BUY/SELL streak、TPS、价格变化、波动率、LP/FDV 变化、机器人延迟，以及延迟回填的 30s/60s/180s 未来收益标签。
+- `token_candles`：15 秒和 1 分钟 K 线，包含 OHLC、买卖量、交易次数和唯一买卖钱包。
+- `token_events`：首次突破 1 分钟高点、资金流转正、Buy Burst、TPS 翻倍、Smart Wallet 买入、LP 变化和 FDV 档位突破等事件。
+- `bot_latency_events`：买入链路的 detect / decision / send / confirm 延迟拆分。
+
+默认只给最近有成交的代币持续快照，避免全监控列表每秒刷库影响交易延迟。若要强制整个监控列表每秒记录，设置 `STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE=true`。
+
+导出策略数据集：
+
+```bash
+npm run export:strategy -- --hours 168
+npm run export:strategy -- --hours 0 --all
+```
+
+默认只导出已经拥有 `future_max_60s_pct` 标签的样本；需要导出未打标签快照时可加 `--include-unlabeled`。
+
 ## 参数优化回测
 
 运行内置优化器：
@@ -166,6 +186,13 @@ BUY_CAP_PRIORITY_FEE_LAMPORTS=500000
 BUY_MAX_PRIORITY_FEE_LAMPORTS=500000
 MAX_PRIORITY_FEE_LAMPORTS=500000
 SWAP_EVENT_LOG_ENABLED=true
+STRATEGY_LAB_ENABLED=true
+STRATEGY_LAB_SNAPSHOT_INTERVAL_MS=1000
+STRATEGY_LAB_LABEL_ENABLED=true
+STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE=false
+STRATEGY_LAB_BUY_BURST_THRESHOLD=10
+STRATEGY_LAB_TPS_DOUBLE_MIN=5
+STRATEGY_LAB_LP_CHANGE_PCT=10
 ```
 
 上线前核对 `.env` 已填好 Helius、Birdeye 和钱包密钥，并确认启动日志显示 `VOLUME_RATIO_1M`。

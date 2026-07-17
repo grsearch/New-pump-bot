@@ -20,6 +20,7 @@ const TokenWatchdog = require('./core/TokenWatchdog');
 const CompetitorTracker = require('./core/CompetitorTracker');
 const ActivityFlowTracker = require('./core/OrderFlowTracker');
 const PumpGraduationDiscovery = require('./core/PumpGraduationDiscovery');
+const FeatureRecorder = require('./core/FeatureRecorder');
 
 const monitor = getMonitor();
 
@@ -204,6 +205,8 @@ async function main() {
     followSellMinClosed: parseInt(process.env.COMPETITOR_FOLLOW_SELL_MIN_CLOSED || '10', 10),
   });
   const activityFlowTracker = new ActivityFlowTracker({ tokenRegistry });
+  const featureRecorder = new FeatureRecorder({ tradeLogger, tokenRegistry });
+  featureRecorder.start();
   console.log(
     `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
       `mode=${activityFlowTracker.entryMode} ` +
@@ -218,10 +221,17 @@ async function main() {
       `pool>=${activityFlowTracker.minPoolQuoteSol}SOL ` +
       `replaceDump=${activityFlowTracker.replaceDumpSignal}`,
   );
+  console.log(
+    `[main] StrategyLab ${featureRecorder.enabled ? 'enabled' : 'disabled'}: ` +
+      `snapshot=${featureRecorder.snapshotIntervalMs}ms ` +
+      `labels=${featureRecorder.labelEnabled ? featureRecorder.labelIntervalMs + 'ms' : 'disabled'} ` +
+      `allActive=${featureRecorder.snapshotAllActive}`,
+  );
   dumpDetector.on("swapParsed", (swap) => {
-    if (config.capture.swapEventsEnabled) {
+    if (config.capture.swapEventsEnabled || config.capture.strategyLabEnabled) {
       try { tradeLogger.logSwapEvent(swap); } catch (_) { /* analytics only */ }
     }
+    try { featureRecorder.handleSwap(swap); } catch (_) { /* analytics only */ }
     try { competitorTracker.handleSwap(swap); } catch (_) { /* prevent CT errors from breaking DumpDetector */ }
     try { activityFlowTracker.handleSwap(swap); } catch (err) {
       console.warn(`[ActivityFlow] handleSwap failed: ${err.message}`);
@@ -784,6 +794,30 @@ async function main() {
     }
 
     // 记录 BUY trade（用同一 positionId）
+    if (order._signalReceivedAt && buyResult) {
+      const signalToBuyMs = Date.now() - order._signalReceivedAt;
+      const fromDumpTsMs = order.ts ? Date.now() - order.ts : null;
+      try {
+        featureRecorder.recordLatency({
+          ts: Date.now(),
+          mint: order.mint,
+          symbol: order.symbol,
+          signature: buyResult.signature || order.signature,
+          phase: 'buy',
+          latencyDetectMs: fromDumpTsMs,
+          latencyDecisionMs: signalToBuyMs,
+          latencySendMs: buyResult.sendLatencyMs,
+          latencyConfirmMs: buyResult.latencyMs,
+          details: {
+            success: !!buyResult.success,
+            reason: order.reason,
+            stateLatencyMs: buyResult.stateLatencyMs,
+            error: buyResult.error || null,
+          },
+        });
+      } catch (_) { /* analytics only */ }
+    }
+
     if (!order.mint) {
       console.error(`[main] BUG: buyOrder with null mint! order=`, JSON.stringify(order).slice(0, 200));
       return;

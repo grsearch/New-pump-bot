@@ -1,0 +1,48 @@
+{
+  "name": "dump-sniper",
+  "version": "4.0.0-clean",
+  "description": "Solana Pump.fun short-window trader with activity-flow entry.",
+  "main": "src/index-flow.js",
+  "scripts": {
+    "start": "node src/index-flow.js",
+    "start:legacy": "node src/index-legacy.js",
+    "dev": "node --trace-warnings src/index-flow.js",
+    "dev:legacy": "node --trace-warnings src/index-legacy.js",
+    "health": "node scripts/health.js",
+    "health:json": "node scripts/health.js --json",
+    "diagnose": "node scripts/diagnose.js",
+    "diagnose:quick": "node scripts/diagnose.js --quick",
+    "backtest:activity": "node scripts/backtest-activity-flow.js",
+    "optimize:activity": "node scripts/optimize-activity-flow.js",
+    "test:rsi": "node scripts/test-rsi-calculator.js",
+    "test:exit-policy": "node scripts/test-position-exit-policy.js",
+    "test:pump-discovery": "node scripts/test-pump-migration-parser.js",
+    "test:token-market": "node scripts/test-token-watchdog-market.js",
+    "fill-pools": "node scripts/fill-pools.js",
+    "verify-pools": "node scripts/verify-pools.js",
+    "verify-pools:fix": "node scripts/verify-pools.js --fix",
+    "stuck": "node scripts/stuck.js"
+  },
+  "dependencies": {
+    "@allenhark/slipstream": "^0.3.5",
+    "@coral-xyz/anchor": "^0.30.1",
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.1",
+    "@pump-fun/pump-swap-sdk": "^1.14.0",
+    "@solana/spl-token": "^0.4.8",
+    "@solana/web3.js": "^1.95.3",
+    "@triton-one/yellowstone-grpc": "^5.0.8",
+    "axios": "^1.7.7",
+    "better-sqlite3": "^11.3.0",
+    "bn.js": "^5.2.1",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.0",
+    "shredstream": "^2.0.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -6,6 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { config } = require('../src/config');
+const {
+  REQUIRED_LABEL_COLUMNS,
+  inspectStrategyLabQuality,
+  qualitySummary,
+} = require('../src/data/StrategyLabQuality');
 
 const DEFAULT_COLUMNS = [
   'ts',
@@ -18,6 +23,15 @@ const DEFAULT_COLUMNS = [
   'age_min',
   'holders',
   'data_quality_version',
+  'trusted_price_ts',
+  'trusted_price_age_ms',
+  'trusted_event_count_60s',
+  'filtered_event_count_60s',
+  'trusted_volume_sol_60s',
+  'filtered_volume_sol_60s',
+  'trusted_event_share_60s',
+  'trusted_volume_share_60s',
+  'feature_quality_status',
   'buy_volume_5s',
   'sell_volume_5s',
   'buy_sell_ratio_5s',
@@ -73,7 +87,10 @@ function parseArgs(argv) {
     limit: 0,
     allColumns: false,
     includeUnlabeled: false,
-    minQualityVersion: 2,
+    minQualityVersion: 4,
+    allowQualityFailures: false,
+    maxJumpRatio: 2,
+    maxBacklogAgeMs: 300_000,
   };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
@@ -82,6 +99,9 @@ function parseArgs(argv) {
     else if (arg === '--limit') args.limit = Number(argv[++i] || 0);
     else if (arg === '--all') args.allColumns = true;
     else if (arg === '--include-unlabeled') args.includeUnlabeled = true;
+    else if (arg === '--allow-quality-failures') args.allowQualityFailures = true;
+    else if (arg === '--max-jump-ratio') args.maxJumpRatio = Number(argv[++i]);
+    else if (arg === '--max-backlog-age-ms') args.maxBacklogAgeMs = Number(argv[++i]);
     else if (arg === '--min-quality-version') {
       args.minQualityVersion = Number(argv[++i]);
       if (!Number.isFinite(args.minQualityVersion) || args.minQualityVersion < 0) {
@@ -105,7 +125,11 @@ Options:
   --limit N              Maximum rows to export. 0 means no limit.
   --all                  Export every token_snapshots column.
   --include-unlabeled    Include rows whose future labels are still null.
-  --min-quality-version  Minimum data quality version. Defaults to 2; use 0 for legacy rows.
+  --min-quality-version  Minimum data quality version. Defaults to 4; use 0 for legacy rows.
+  --max-jump-ratio N     Reject unverified adjacent price jumps above this ratio. Default 2.
+  --max-backlog-age-ms N Reject label backlogs older than this age. Default 300000.
+  --allow-quality-failures
+                         Export even when quality checks fail; writes failures to the sidecar report.
 `);
 }
 
@@ -136,6 +160,23 @@ function main() {
 
   const columns = getColumns(db, args.allColumns);
   const available = new Set(db.pragma('table_info(token_snapshots)').map((row) => row.name));
+  if (args.minQualityVersion >= 4) {
+    for (const name of [
+      'label_status',
+      'label_quality_version',
+      'trusted_price_ts',
+      'feature_quality_status',
+      'trusted_event_count_60s',
+      'filtered_event_count_60s',
+      'trusted_volume_sol_60s',
+      'filtered_volume_sol_60s',
+      ...REQUIRED_LABEL_COLUMNS,
+    ]) {
+      if (!available.has(name)) {
+        throw new Error(`token_snapshots.${name} is missing. Restart the V4 bot before exporting.`);
+      }
+    }
+  }
   const selected = columns.filter((name) => available.has(name));
   if (!selected.includes('ts')) selected.unshift('ts');
   if (args.allColumns) {
@@ -147,7 +188,12 @@ function main() {
 
   const where = [];
   const params = {};
-  if (!args.includeUnlabeled) where.push('future_max_60s_pct IS NOT NULL');
+  if (!args.includeUnlabeled) {
+    params.minQualityVersion = Math.max(1, Math.floor(args.minQualityVersion || 1));
+    where.push("label_status = 'complete'");
+    where.push('COALESCE(label_quality_version, 0) >= @minQualityVersion');
+    for (const name of REQUIRED_LABEL_COLUMNS) where.push(`${name} IS NOT NULL`);
+  }
   if (
     Number.isFinite(args.minQualityVersion) &&
     args.minQualityVersion > 0
@@ -159,10 +205,30 @@ function main() {
     }
     params.minQualityVersion = Math.floor(args.minQualityVersion);
     where.push('COALESCE(data_quality_version, 0) >= @minQualityVersion');
+    if (args.minQualityVersion >= 4) {
+      where.push('trusted_price_ts IS NOT NULL');
+      where.push("feature_quality_status IN ('trusted', 'mixed_filtered', 'quiet')");
+    }
   }
   if (Number.isFinite(args.hours) && args.hours > 0) {
     params.since = Date.now() - args.hours * 60 * 60 * 1000;
     where.push('ts >= @since');
+  }
+
+  const quality = inspectStrategyLabQuality(db, {
+    sinceTs: params.since || 0,
+    minQualityVersion: args.minQualityVersion > 0
+      ? Math.max(1, Math.floor(args.minQualityVersion))
+      : 1,
+    maxJumpRatio: args.maxJumpRatio,
+    maxBacklogAgeMs: args.maxBacklogAgeMs,
+  });
+  console.log(qualitySummary(quality));
+  if (!quality.passed && !args.allowQualityFailures) {
+    throw new Error(
+      `Strategy Lab quality checks failed. Fix the data or use --allow-quality-failures: ` +
+        quality.failures.join('; '),
+    );
   }
   const limitSql = Number.isFinite(args.limit) && args.limit > 0 ? ` LIMIT ${Math.floor(args.limit)}` : '';
   const sql = `
@@ -188,7 +254,9 @@ function main() {
     rows++;
   }
   stream.end();
+  fs.writeFileSync(`${outPath}.quality.json`, JSON.stringify(quality, null, 2));
   console.log(`Exported ${rows} rows / ${selected.length + 1} CSV columns to ${outPath}`);
+  console.log(`Quality report: ${outPath}.quality.json`);
 }
 
 main();

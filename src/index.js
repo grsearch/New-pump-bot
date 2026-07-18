@@ -203,8 +203,9 @@ async function main() {
   const swapSanitizer = dumpDetector.swapEventSanitizer;
   console.log(
     `[main] SwapSanitizer ${swapSanitizer.enabled ? 'enabled' : 'disabled'}: ` +
-      `quality=v${swapSanitizer.enabled ? 2 : 1} ` +
-      `jump<=${swapSanitizer.maxJumpRatio}x market<=${swapSanitizer.marketMaxRatio}x`,
+      `quality=v${swapSanitizer.enabled ? swapSanitizer.dataQualityVersion : 1} ` +
+      `jump<=${swapSanitizer.maxJumpRatio}x market<=${swapSanitizer.marketMaxRatio}x ` +
+      `independentSources>=${swapSanitizer.confirmMinIndependentSources}`,
   );
   console.log(
     `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
@@ -220,6 +221,7 @@ async function main() {
     `[main] StrategyLab ${featureRecorder.enabled ? 'enabled' : 'disabled'}: ` +
       `snapshot=${featureRecorder.snapshotIntervalMs}ms ` +
       `labels=${featureRecorder.labelEnabled ? featureRecorder.labelIntervalMs + 'ms' : 'disabled'} ` +
+      `labelBatch=${featureRecorder.labelBatchSize}x${featureRecorder.labelMaxBatchesPerTick} ` +
       `allActive=${featureRecorder.snapshotAllActive}`,
   );
   dumpDetector.on("swapParsed", (swap) => {
@@ -227,12 +229,16 @@ async function main() {
       try { tradeLogger.logSwapEvent(swap); } catch (_) { /* analytics only */ }
     }
     try { featureRecorder.handleSwap(swap); } catch (_) { /* analytics only */ }
-    try { competitorTracker.handleSwap(swap); } catch (_) { /* prevent CT errors from breaking DumpDetector */ }
-    try { activityFlowTracker.handleSwap(swap); } catch (err) {
-      console.warn(`[ActivityFlow] handleSwap failed: ${err.message}`);
-    }
-    try { positionManager.handleSwapForExit(swap); } catch (err) {
-      console.warn(`[FlowExit] handleSwap failed: ${err.message}`);
+    if (swap.featureEligible === true) {
+      try { competitorTracker.handleSwap(swap); } catch (_) { /* prevent CT errors from breaking DumpDetector */ }
+      try { activityFlowTracker.handleSwap(swap); } catch (err) {
+        console.warn(`[ActivityFlow] handleSwap failed: ${err.message}`);
+      }
+      try { positionManager.handleSwapForExit(swap); } catch (err) {
+        console.warn(`[FlowExit] handleSwap failed: ${err.message}`);
+      }
+    } else {
+      monitor.inc('main.filteredSwapEvent', 1, 'main');
     }
   });
 

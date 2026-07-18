@@ -43,8 +43,10 @@ function sanitizer(overrides = {}) {
     marketMaxRatio: 5,
     confirmWindowMs: 5_000,
     confirmMinSamples: 3,
+    confirmMinIndependentSources: 2,
     confirmMinSpanMs: 100,
     confirmClusterRatio: 1.25,
+    minPoolQuoteSol: 30,
     ...overrides,
   });
 }
@@ -58,7 +60,8 @@ function run() {
   assert.strictEqual(volumeOnly.status, 'volume_only');
   assert.strictEqual(volumeOnly.event.price, null);
   assert.strictEqual(volumeOnly.event.solVolume, 1);
-  assert.strictEqual(volumeOnly.event.dataQualityVersion, 2);
+  assert.strictEqual(volumeOnly.event.dataQualityVersion, 4);
+  assert.strictEqual(volumeOnly.event.featureEligible, false);
 
   const market = sanitizer({
     solPriceUsd: 72,
@@ -88,6 +91,7 @@ function run() {
   const seed = continuity.sanitize(swap());
   assert.strictEqual(seed.status, 'accepted');
   assert.strictEqual(seed.reason, 'direct_seed');
+  assert.strictEqual(seed.event.featureEligible, true);
 
   const discontinuity = continuity.sanitize(swap({
     source: 'cpi',
@@ -99,6 +103,7 @@ function run() {
   assert.strictEqual(discontinuity.status, 'sanitized');
   assert.strictEqual(discontinuity.event.price, 0.000001);
   assert.strictEqual(discontinuity.event.rawPrice, 0.0001);
+  assert.strictEqual(discontinuity.event.featureEligible, false);
 
   const cleanBefore = continuity.sanitize(swap({
     source: 'cpi',
@@ -112,15 +117,31 @@ function run() {
   assert.strictEqual(cleanBefore.event.priceSanitized, true);
   assert(Math.abs(cleanBefore.event.priceChangePct - 10) < 1e-9);
 
+  const samePool = sanitizer();
+  samePool.sanitize(swap());
+  const samePoolJump1 = samePool.sanitize(swap({ price: 0.000003, priceBefore: 0.000003, ts: BASE_TS + 100 }));
+  const samePoolJump2 = samePool.sanitize(swap({ price: 0.0000031, priceBefore: 0.000003, ts: BASE_TS + 200 }));
+  const samePoolJump3 = samePool.sanitize(swap({ price: 0.00000305, priceBefore: 0.000003, ts: BASE_TS + 300 }));
+  assert.strictEqual(samePoolJump1.status, 'sanitized');
+  assert.strictEqual(samePoolJump2.status, 'sanitized');
+  assert.strictEqual(samePoolJump3.status, 'sanitized');
+  assert.strictEqual(samePool.getPrice(MINT), 0.000001);
+
   const confirmed = sanitizer();
   confirmed.sanitize(swap());
-  const jump1 = confirmed.sanitize(swap({ price: 0.000003, priceBefore: 0.000003, ts: BASE_TS + 100 }));
-  const jump2 = confirmed.sanitize(swap({ price: 0.0000031, priceBefore: 0.000003, ts: BASE_TS + 200 }));
-  const jump3 = confirmed.sanitize(swap({ price: 0.00000305, priceBefore: 0.000003, ts: BASE_TS + 300 }));
+  const jump1 = confirmed.sanitize(swap({
+    poolAddress: 'PoolA', price: 0.000003, priceBefore: 0.000003, ts: BASE_TS + 100,
+  }));
+  const jump2 = confirmed.sanitize(swap({
+    poolAddress: 'PoolB', price: 0.0000031, priceBefore: 0.000003, ts: BASE_TS + 200,
+  }));
+  const jump3 = confirmed.sanitize(swap({
+    poolAddress: 'PoolA', price: 0.00000305, priceBefore: 0.000003, ts: BASE_TS + 300,
+  }));
   assert.strictEqual(jump1.status, 'sanitized');
   assert.strictEqual(jump2.status, 'sanitized');
   assert.strictEqual(jump3.status, 'accepted');
-  assert.strictEqual(jump3.reason, 'direct_jump_confirmed');
+  assert.strictEqual(jump3.reason, 'direct_jump_independently_confirmed');
 
   const staleMarketRegistry = {
     getToken: () => ({ price: 0.000072, market_updated_at: BASE_TS }),
@@ -131,8 +152,31 @@ function run() {
   const marketJump3 = marketJump.sanitize(swap({ price: 0.00000605, priceBefore: 0.000006, ts: BASE_TS + 300 }));
   assert.strictEqual(marketJump1.status, 'sanitized');
   assert.strictEqual(marketJump2.status, 'sanitized');
-  assert.strictEqual(marketJump3.status, 'accepted');
-  assert.strictEqual(marketJump3.reason, 'direct_market_jump_confirmed');
+  assert.strictEqual(marketJump3.status, 'sanitized');
+  assert.strictEqual(marketJump3.reason, 'market_anchor_mismatch');
+
+  const shallowSeed = sanitizer().sanitize(swap({ poolQuoteAfter: 0.05 }));
+  assert.strictEqual(shallowSeed.status, 'volume_only');
+  assert.strictEqual(shallowSeed.reason, 'direct_insufficient_pool');
+  assert.strictEqual(shallowSeed.event.featureEligible, false);
+
+  const shallowAfterSeed = continuity.sanitize(swap({
+    poolQuoteAfter: 0.05,
+    price: 0.0000011,
+    priceBefore: 0.000001,
+    ts: BASE_TS + 30,
+  }));
+  assert.strictEqual(shallowAfterSeed.status, 'volume_only');
+  assert.strictEqual(shallowAfterSeed.reason, 'direct_insufficient_pool');
+
+  const balanceOnly = continuity.sanitize(swap({
+    source: 'balance_only',
+    price: 0.0000011,
+    priceBefore: 0.000001,
+    ts: BASE_TS + 40,
+  }));
+  assert.strictEqual(balanceOnly.event.featureEligible, false);
+  assert.strictEqual(balanceOnly.reason, 'untrusted_feature_source');
 
   let marketToken = { price: 0.000072, market_updated_at: BASE_TS };
   const refreshedMarket = sanitizer({
@@ -170,11 +214,22 @@ function run() {
     },
   });
   recorder.handleSwap(seed.event);
+  recorder.handleSwap({ ...volumeOnly.event, solVolume: 100 });
   recorder.flush(BASE_TS + 1_000);
   assert.strictEqual(saved.snapshots.length, 1);
-  assert.strictEqual(saved.snapshots[0].data_quality_version, 2);
+  assert.strictEqual(saved.snapshots[0].data_quality_version, 4);
+  assert.strictEqual(saved.snapshots[0].tx_count_60s, 1);
+  assert.strictEqual(saved.snapshots[0].buy_volume_60s, 1);
+  assert.strictEqual(saved.snapshots[0].filtered_event_count_60s, 1);
+  assert.strictEqual(saved.snapshots[0].filtered_volume_sol_60s, 100);
+  assert(Math.abs(saved.snapshots[0].trusted_volume_share_60s - (1 / 101)) < 1e-12);
+  assert.strictEqual(saved.snapshots[0].feature_quality_status, 'mixed_filtered');
   assert(saved.candles.length >= 1);
-  assert(saved.candles.every((row) => row.data_quality_version === 2));
+  assert(saved.candles.every((row) => row.data_quality_version === 4));
+  assert(saved.candles.every((row) => row.tx_count === 1));
+  assert(saved.candles.every((row) => row.volume_sol === 1));
+  assert(saved.candles.every((row) => row.filtered_event_count === 1));
+  assert(saved.candles.every((row) => row.filtered_volume_sol === 100));
 
   console.log('Swap sanitizer and Strategy Lab quality tests passed');
 }

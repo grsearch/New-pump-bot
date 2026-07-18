@@ -287,8 +287,15 @@ const config = {
       marketMaxAgeMs: parseInt(process.env.SWAP_SANITIZER_MARKET_MAX_AGE_MS || '300000', 10),
       confirmWindowMs: parseInt(process.env.SWAP_SANITIZER_CONFIRM_WINDOW_MS || '5000', 10),
       confirmMinSamples: parseInt(process.env.SWAP_SANITIZER_CONFIRM_MIN_SAMPLES || '3', 10),
+      confirmMinIndependentSources: parseInt(
+        process.env.SWAP_SANITIZER_CONFIRM_MIN_INDEPENDENT_SOURCES || '2',
+        10,
+      ),
       confirmMinSpanMs: parseInt(process.env.SWAP_SANITIZER_CONFIRM_MIN_SPAN_MS || '100', 10),
       confirmClusterRatio: parseFloat(process.env.SWAP_SANITIZER_CONFIRM_CLUSTER_RATIO || '1.25'),
+      minPoolQuoteSol: parseFloat(
+        process.env.SWAP_SANITIZER_MIN_POOL_QUOTE_SOL || process.env.MIN_POOL_QUOTE_SOL || '30',
+      ),
       debug: (process.env.SWAP_SANITIZER_DEBUG ?? 'false').toLowerCase() === 'true',
     },
   },
@@ -407,7 +414,15 @@ const config = {
     strategyLabRetentionMs: parseInt(process.env.STRATEGY_LAB_RETENTION_MS || '300000', 10),
     strategyLabLabelEnabled: (process.env.STRATEGY_LAB_LABEL_ENABLED ?? 'true').toLowerCase() === 'true',
     strategyLabLabelIntervalMs: parseInt(process.env.STRATEGY_LAB_LABEL_INTERVAL_MS || '10000', 10),
-    strategyLabLabelBatchSize: parseInt(process.env.STRATEGY_LAB_LABEL_BATCH_SIZE || '500', 10),
+    strategyLabLabelBatchSize: parseInt(process.env.STRATEGY_LAB_LABEL_BATCH_SIZE || '1000', 10),
+    strategyLabLabelMaxBatchesPerTick: parseInt(
+      process.env.STRATEGY_LAB_LABEL_MAX_BATCHES_PER_TICK || '4',
+      10,
+    ),
+    strategyLabLabelWarnAgeMs: parseInt(
+      process.env.STRATEGY_LAB_LABEL_WARN_AGE_MS || '300000',
+      10,
+    ),
     strategyLabSnapshotAllActive: (process.env.STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE ?? 'false').toLowerCase() === 'true',
     strategyLabBuyBurstThreshold: parseInt(process.env.STRATEGY_LAB_BUY_BURST_THRESHOLD || '10', 10),
     strategyLabTpsDoubleMin: parseFloat(process.env.STRATEGY_LAB_TPS_DOUBLE_MIN || '5'),

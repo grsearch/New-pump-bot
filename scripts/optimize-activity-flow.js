@@ -1023,6 +1023,7 @@ function loadRows(dbPath, sinceTs) {
              ts, signature, pool_address AS poolAddress, pool_quote_after AS poolQuoteAfter
       FROM swap_events
       WHERE ts >= ?
+        AND COALESCE(feature_eligible, 0) = 1
       ORDER BY mint, ts, id
     `).all(sinceTs);
   } finally {
@@ -1274,7 +1275,7 @@ function main() {
   const sinceTs = args.hours > 0 ? Date.now() - args.hours * HOUR_MS : 0;
   console.log(`Loading swap_events from ${dbPath}...`);
   const rows = loadRows(dbPath, sinceTs);
-  if (rows.length === 0) throw new Error('No swap_events found in the requested time range.');
+  if (rows.length === 0) throw new Error('No research-eligible V4 swap_events found in the requested time range.');
   const preparedRows = prepareRows(rows, {
     maxConsecutivePriceRatio:
       args.maxPriceJumpRatio ?? runtime.maxConsecutivePriceRatio ?? FALLBACK.maxConsecutivePriceRatio,

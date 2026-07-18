@@ -145,6 +145,7 @@ function main() {
              ts, slot, signature, pool_quote_after AS poolQuoteAfter
       FROM swap_events
       WHERE ts >= ? AND ts < ?
+        AND COALESCE(feature_eligible, 0) = 1
       ORDER BY mint, ts, id
     `).all(sinceMs, untilMs).map((row) => ({
       ...row,
@@ -161,7 +162,7 @@ function main() {
   }
 
   if (rows.length === 0) {
-    console.log('No swap events are available in the selected period.');
+    console.log('No research-eligible swap events are available in the selected period.');
     return;
   }
 

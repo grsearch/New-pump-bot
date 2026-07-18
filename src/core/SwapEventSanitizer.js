@@ -30,8 +30,19 @@ class SwapEventSanitizer {
     this.marketMaxAgeMs = Math.max(1_000, finitePositive(opts.marketMaxAgeMs ?? settings.marketMaxAgeMs) || 300_000);
     this.confirmWindowMs = Math.max(100, finitePositive(opts.confirmWindowMs ?? settings.confirmWindowMs) || 5_000);
     this.confirmMinSamples = Math.max(2, Math.floor(finitePositive(opts.confirmMinSamples ?? settings.confirmMinSamples) || 3));
+    this.confirmMinIndependentSources = Math.max(
+      2,
+      Math.floor(finitePositive(
+        opts.confirmMinIndependentSources ?? settings.confirmMinIndependentSources,
+      ) || 2),
+    );
     this.confirmMinSpanMs = Math.max(0, finiteNumber(opts.confirmMinSpanMs ?? settings.confirmMinSpanMs, 100));
     this.confirmClusterRatio = Math.max(1.01, finitePositive(opts.confirmClusterRatio ?? settings.confirmClusterRatio) || 1.25);
+    this.minPoolQuoteSol = Math.max(
+      0,
+      finiteNumber(opts.minPoolQuoteSol ?? settings.minPoolQuoteSol, config.strategy?.minPoolQuoteSol ?? 30),
+    );
+    this.dataQualityVersion = 4;
     this.debug = opts.debug ?? settings.debug ?? false;
     this.prices = new Map();
     this.pending = new Map();
@@ -75,6 +86,7 @@ class SwapEventSanitizer {
           source,
           priceReliable: rawReliable,
           priceSanitized: false,
+          featureEligible: false,
           sanitizerReason: 'disabled',
           dataQualityVersion: 1,
         }),
@@ -85,9 +97,47 @@ class SwapEventSanitizer {
 
     const market = this._marketAnchor(swap.mint, now);
     let canonical = this.prices.get(swap.mint) || null;
+    const previousCanonical = canonical;
+    let marketRefreshedAcrossJump = false;
     if (market && (!canonical || market.updatedAt > canonical.ts)) {
+      marketRefreshedAcrossJump = Boolean(
+        canonical && distanceRatio(market.price, canonical.price) > this.maxJumpRatio,
+      );
       canonical = { price: market.price, ts: market.updatedAt, source: 'market' };
       this.prices.set(swap.mint, canonical);
+    }
+
+    const featureSource = this._isFeatureSource(source);
+    if (rawReliable && !featureSource) {
+      if (!canonical) {
+        return this._volumeOnly(swap, {
+          side,
+          solVolume,
+          rawPrice,
+          rawPriceBefore,
+          source,
+          reason: 'untrusted_feature_source',
+        });
+      }
+      return this._fallback(swap, canonical.price, {
+        side,
+        solVolume,
+        rawPrice,
+        rawPriceBefore,
+        source,
+        reason: 'untrusted_feature_source',
+      });
+    }
+
+    if (rawReliable && featureSource && !this._hasPlausiblePool(swap)) {
+      return this._volumeOnly(swap, {
+        side,
+        solVolume,
+        rawPrice,
+        rawPriceBefore,
+        source,
+        reason: `${source}_insufficient_pool`,
+      });
     }
 
     if (!rawReliable) {
@@ -107,7 +157,7 @@ class SwapEventSanitizer {
         rawPrice,
         rawPriceBefore,
         source,
-        reason: 'unreliable_price',
+        reason: marketRefreshedAcrossJump ? 'market_anchor_refresh' : 'unreliable_price',
       });
     }
 
@@ -131,31 +181,23 @@ class SwapEventSanitizer {
     }
 
     if (market && distanceRatio(rawPrice, market.price) > this.marketMaxRatio) {
-      if (source === 'direct' && this._confirmDirectJump(swap.mint, rawPrice, now)) {
-        return this._accept(swap, rawPrice, rawPriceBefore, {
-          side,
-          solVolume,
-          source,
-          reason: 'direct_market_jump_confirmed',
-        });
-      }
       return this._fallback(swap, canonical.price, {
         side,
         solVolume,
         rawPrice,
         rawPriceBefore,
         source,
-        reason: 'market_anchor_mismatch',
+        reason: marketRefreshedAcrossJump ? 'market_anchor_refresh' : 'market_anchor_mismatch',
       });
     }
 
     if (distanceRatio(rawPrice, canonical.price) > this.maxJumpRatio) {
-      if (source === 'direct' && this._confirmDirectJump(swap.mint, rawPrice, now)) {
+      if (source === 'direct' && this._confirmDirectJump(swap.mint, rawPrice, now, swap)) {
         return this._accept(swap, rawPrice, rawPriceBefore, {
           side,
           solVolume,
           source,
-          reason: 'direct_jump_confirmed',
+          reason: 'direct_jump_independently_confirmed',
         });
       }
       return this._fallback(swap, canonical.price, {
@@ -164,7 +206,7 @@ class SwapEventSanitizer {
         rawPrice,
         rawPriceBefore,
         source,
-        reason: 'price_discontinuity',
+        reason: marketRefreshedAcrossJump ? 'market_anchor_refresh' : 'price_discontinuity',
       });
     }
 
@@ -173,7 +215,9 @@ class SwapEventSanitizer {
       side,
       solVolume,
       source,
-      reason: 'continuous_price',
+      reason: marketRefreshedAcrossJump && previousCanonical
+        ? 'market_anchor_refresh'
+        : 'continuous_price',
     });
   }
 
@@ -199,16 +243,34 @@ class SwapEventSanitizer {
     return anchor;
   }
 
-  _confirmDirectJump(mint, price, ts) {
+  _hasPlausiblePool(swap) {
+    if (this.minPoolQuoteSol <= 0) return true;
+    return finitePositive(swap?.poolQuoteAfter) >= this.minPoolQuoteSol;
+  }
+
+  _isFeatureSource(source) {
+    return source === 'direct' || source === 'cpi';
+  }
+
+  _directEvidenceKey(swap) {
+    const source = String(swap?.source || 'direct').toLowerCase();
+    const pool = String(swap?.poolAddress || '').trim();
+    return `${source}:${pool || 'unknown-pool'}`;
+  }
+
+  _confirmDirectJump(mint, price, ts, swap) {
+    if (!this._hasPlausiblePool(swap)) return false;
     let samples = this.pending.get(mint) || [];
     samples = samples.filter((sample) => ts - sample.ts <= this.confirmWindowMs);
     const latest = samples[samples.length - 1];
     if (latest && distanceRatio(price, latest.price) > this.confirmClusterRatio) samples = [];
-    samples.push({ price, ts });
+    samples.push({ price, ts, evidenceKey: this._directEvidenceKey(swap) });
     this.pending.set(mint, samples);
     if (samples.length < this.confirmMinSamples) return false;
     const recent = samples.slice(-this.confirmMinSamples);
     if (recent[recent.length - 1].ts - recent[0].ts < this.confirmMinSpanMs) return false;
+    const independentSources = new Set(recent.map((sample) => sample.evidenceKey));
+    if (independentSources.size < this.confirmMinIndependentSources) return false;
     this.pending.delete(mint);
     return true;
   }
@@ -232,8 +294,9 @@ class SwapEventSanitizer {
         rawPriceBefore: finitePositive(swap.priceBefore),
         priceReliable: swap.priceReliable !== false,
         priceSanitized: cleanPriceBefore !== rawCleanPriceBefore,
+        featureEligible: true,
         sanitizerReason: context.reason,
-        dataQualityVersion: 2,
+        dataQualityVersion: this.dataQualityVersion,
       }),
       status: 'accepted',
       reason: context.reason,
@@ -249,8 +312,9 @@ class SwapEventSanitizer {
         priceChangePct: null,
         priceReliable: false,
         priceSanitized: true,
+        featureEligible: false,
         sanitizerReason: context.reason,
-        dataQualityVersion: 2,
+        dataQualityVersion: this.dataQualityVersion,
       }),
       status: 'volume_only',
       reason: context.reason,
@@ -266,8 +330,9 @@ class SwapEventSanitizer {
         priceChangePct: 0,
         priceReliable: false,
         priceSanitized: true,
+        featureEligible: false,
         sanitizerReason: context.reason,
-        dataQualityVersion: 2,
+        dataQualityVersion: this.dataQualityVersion,
       }),
       status: 'sanitized',
       reason: context.reason,
@@ -296,6 +361,7 @@ class SwapEventSanitizer {
       rawPriceBefore: values.rawPriceBefore,
       priceReliable: values.priceReliable,
       priceSanitized: values.priceSanitized,
+      featureEligible: values.featureEligible,
       sanitizerReason: values.sanitizerReason,
       dataQualityVersion: values.dataQualityVersion,
     };

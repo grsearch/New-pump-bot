@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const TradeLogger = require('../src/data/TradeLogger');
+const { inspectStrategyLabQuality } = require('../src/data/StrategyLabQuality');
 
 function createDatabase() {
   try {
@@ -47,6 +48,7 @@ function run() {
     'raw_price',
     'raw_price_before',
     'sanitizer_reason',
+    'feature_eligible',
     'data_quality_version',
   ]) {
     assert(swapColumns.has(name), `missing migrated swap_events.${name}`);
@@ -58,14 +60,20 @@ function run() {
     bucket_ts: ts,
     mint: 'CleanMint',
     price: 1,
-    data_quality_version: 2,
+    trusted_price_ts: ts,
+    trusted_price_age_ms: 0,
+    feature_quality_status: 'trusted',
+    data_quality_version: 4,
   });
   logger.saveTokenSnapshot({
     ts: ts + 10,
     bucket_ts: ts,
     mint: 'CleanMint',
     price: 1,
-    data_quality_version: 2,
+    trusted_price_ts: ts,
+    trusted_price_age_ms: 10,
+    feature_quality_status: 'quiet',
+    data_quality_version: 4,
   });
   assert.strictEqual(
     db.prepare("SELECT COUNT(*) AS count FROM token_snapshots WHERE mint = 'CleanMint'").get().count,
@@ -79,12 +87,22 @@ function run() {
     price: 1,
     data_quality_version: 1,
   });
+  logger.saveTokenSnapshot({
+    ts,
+    bucket_ts: ts,
+    mint: 'UntrustedMint',
+    price: 3,
+    trusted_price_ts: null,
+    feature_quality_status: 'no_trusted_price',
+    data_quality_version: 4,
+  });
 
   const events = [
-    { ts: ts + 10_000, price: 1.1, quality: 2, signature: 'clean-10' },
-    { ts: ts + 60_000, price: 1.2, quality: 2, signature: 'clean-60' },
+    { ts: ts + 10_000, price: 1.1, quality: 4, signature: 'clean-10', eligible: true },
+    { ts: ts + 60_000, price: 1.2, quality: 4, signature: 'clean-60', eligible: true },
     { ts: ts + 90_000, price: 100, quality: 1, signature: 'legacy-outlier' },
-    { ts: ts + 180_000, price: 0.9, quality: 2, signature: 'clean-180' },
+    { ts: ts + 120_000, price: 1000, quality: 4, signature: 'filtered-outlier' },
+    { ts: ts + 180_000, price: 0.9, quality: 4, signature: 'clean-180', eligible: true },
   ];
   for (const event of events) {
     logger.logSwapEvent({
@@ -95,6 +113,8 @@ function run() {
       priceBefore: event.price,
       ts: event.ts,
       signature: event.signature,
+      priceReliable: event.eligible === true,
+      featureEligible: event.eligible === true,
       dataQualityVersion: event.quality,
     });
   }
@@ -105,7 +125,8 @@ function run() {
     price: null,
     ts: ts + 1,
     signature: 'null-price',
-    dataQualityVersion: 2,
+    featureEligible: false,
+    dataQualityVersion: 4,
   });
   const nullPrice = db.prepare("SELECT price FROM swap_events WHERE mint = 'NullPriceMint'").get();
   assert.strictEqual(nullPrice.price, null);
@@ -114,9 +135,94 @@ function run() {
   assert.strictEqual(updated, 1);
   const clean = db.prepare("SELECT * FROM token_snapshots WHERE mint = 'CleanMint'").get();
   const legacy = db.prepare("SELECT * FROM token_snapshots WHERE mint = 'LegacyMint'").get();
+  const untrusted = db.prepare("SELECT * FROM token_snapshots WHERE mint = 'UntrustedMint'").get();
   assert(Math.abs(clean.future_max_180s_pct - 20) < 1e-9);
   assert(Math.abs(clean.future_drawdown_180s_pct - (-10)) < 1e-9);
+  assert.strictEqual(clean.label_status, 'complete');
+  assert.strictEqual(clean.label_quality_version, 4);
+  assert.strictEqual(clean.label_sample_count_30s, 1);
+  assert.strictEqual(clean.label_sample_count_60s, 2);
+  assert.strictEqual(clean.label_sample_count_180s, 3);
   assert.strictEqual(legacy.label_updated_at, null);
+  assert.strictEqual(untrusted.label_updated_at, null);
+
+  logger.saveTokenSnapshot({
+    ts: ts + 1_000,
+    bucket_ts: ts + 1_000,
+    mint: 'QuietMint',
+    price: 2,
+    trusted_price_ts: ts,
+    trusted_price_age_ms: 1_000,
+    feature_quality_status: 'quiet',
+    data_quality_version: 4,
+  });
+  const beforeQuietBackfill = logger.getSnapshotLabelBacklog({ now: ts + 182_000 });
+  assert.strictEqual(beforeQuietBackfill.count, 1);
+  assert.strictEqual(logger.backfillSnapshotLabels({ now: ts + 182_000, batchSize: 10 }), 1);
+  const quiet = db.prepare("SELECT * FROM token_snapshots WHERE mint = 'QuietMint'").get();
+  assert.strictEqual(quiet.future_max_180s_pct, 0);
+  assert.strictEqual(quiet.future_close_180s_pct, 0);
+  assert.strictEqual(quiet.future_drawdown_180s_pct, 0);
+  assert.strictEqual(quiet.label_sample_count_180s, 0);
+  assert.strictEqual(logger.getSnapshotLabelBacklog({ now: ts + 182_000 }).count, 0);
+
+  const quality = inspectStrategyLabQuality(db, {
+    now: ts + 182_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(quality.passed, true);
+  assert.strictEqual(quality.snapshots.completeCount, 2);
+  assert.strictEqual(quality.events.eligibleCount, 3);
+  assert.strictEqual(quality.events.filteredCount, 2);
+  assert.strictEqual(quality.contaminatedLabelCount, 0);
+
+  db.prepare("UPDATE token_snapshots SET future_max_60s_pct = NULL WHERE mint = 'QuietMint'").run();
+  const incompleteQuality = inspectStrategyLabQuality(db, {
+    now: ts + 182_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(incompleteQuality.passed, false);
+  assert.strictEqual(incompleteQuality.snapshots.processedIncompleteCount, 1);
+  db.prepare("UPDATE token_snapshots SET future_max_60s_pct = 0 WHERE mint = 'QuietMint'").run();
+
+  logger.logSwapEvent({
+    mint: 'CleanMint',
+    side: 'BUY',
+    solVolume: 1,
+    price: 10,
+    priceBefore: 10,
+    ts: ts + 181_000,
+    signature: 'market-anchor-jump',
+    sanitizerReason: 'market_anchor_refresh',
+    priceReliable: true,
+    featureEligible: true,
+    dataQualityVersion: 4,
+  });
+  const anchoredQuality = inspectStrategyLabQuality(db, {
+    now: ts + 182_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(anchoredQuality.passed, true);
+
+  logger.logSwapEvent({
+    mint: 'CleanMint',
+    side: 'BUY',
+    solVolume: 1,
+    price: 100,
+    priceBefore: 100,
+    ts: ts + 181_500,
+    signature: 'unverified-jump',
+    sanitizerReason: 'continuous_price',
+    priceReliable: true,
+    featureEligible: true,
+    dataQualityVersion: 4,
+  });
+  const failedQuality = inspectStrategyLabQuality(db, {
+    now: ts + 182_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(failedQuality.passed, false);
+  assert.strictEqual(failedQuality.prices.badJumpCount, 1);
 
   new TradeLogger(db);
   if (typeof db.close === 'function') db.close();

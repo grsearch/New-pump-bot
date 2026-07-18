@@ -99,7 +99,17 @@ class FeatureRecorder {
     );
     this.labelBatchSize = Math.max(
       1,
-      opts.labelBatchSize ?? capture.strategyLabLabelBatchSize ?? numEnv('STRATEGY_LAB_LABEL_BATCH_SIZE', 500),
+      opts.labelBatchSize ?? capture.strategyLabLabelBatchSize ?? numEnv('STRATEGY_LAB_LABEL_BATCH_SIZE', 1000),
+    );
+    this.labelMaxBatchesPerTick = Math.max(
+      1,
+      opts.labelMaxBatchesPerTick ?? capture.strategyLabLabelMaxBatchesPerTick ??
+        numEnv('STRATEGY_LAB_LABEL_MAX_BATCHES_PER_TICK', 4),
+    );
+    this.labelWarnAgeMs = Math.max(
+      60_000,
+      opts.labelWarnAgeMs ?? capture.strategyLabLabelWarnAgeMs ??
+        numEnv('STRATEGY_LAB_LABEL_WARN_AGE_MS', 300_000),
     );
     this.snapshotAllActive =
       opts.snapshotAllActive ?? capture.strategyLabSnapshotAllActive ?? boolEnv('STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE', false);
@@ -129,6 +139,9 @@ class FeatureRecorder {
     this.states = new Map();
     this._snapshotTimer = null;
     this._labelTimer = null;
+    this._labelBackfillRunning = false;
+    this._lastLabelWarningAt = 0;
+    this.lastLabelBackfillStats = null;
   }
 
   start() {
@@ -138,13 +151,61 @@ class FeatureRecorder {
       if (this._snapshotTimer.unref) this._snapshotTimer.unref();
     }
     if (this.labelEnabled && !this._labelTimer) {
-      this._labelTimer = setInterval(() => {
-        try {
-          this.tradeLogger.backfillSnapshotLabels({ batchSize: this.labelBatchSize });
-        } catch (_) {}
-      }, this.labelIntervalMs);
+      this._labelTimer = setInterval(() => this._drainLabelBacklog(), this.labelIntervalMs);
       if (this._labelTimer.unref) this._labelTimer.unref();
     }
+  }
+
+  _drainLabelBacklog() {
+    if (this._labelBackfillRunning || !this.tradeLogger) return;
+    this._labelBackfillRunning = true;
+    const startedAt = Date.now();
+    let batches = 0;
+    let updated = 0;
+
+    const finish = () => {
+      let backlog = null;
+      try {
+        backlog = this.tradeLogger.getSnapshotLabelBacklog?.() || null;
+      } catch (_) {}
+      this.lastLabelBackfillStats = {
+        batches,
+        updated,
+        elapsedMs: Date.now() - startedAt,
+        backlog,
+      };
+      const now = Date.now();
+      if (
+        backlog?.oldestAgeMs > this.labelWarnAgeMs &&
+        now - this._lastLabelWarningAt >= 60_000
+      ) {
+        this._lastLabelWarningAt = now;
+        console.warn(
+          `[StrategyLab] label backlog=${backlog.count} ` +
+            `oldest=${Math.round(backlog.oldestAgeMs / 1000)}s`,
+        );
+      }
+      this._labelBackfillRunning = false;
+    };
+
+    const runBatch = () => {
+      let count = 0;
+      try {
+        count = this.tradeLogger.backfillSnapshotLabels({ batchSize: this.labelBatchSize });
+      } catch (error) {
+        console.warn(`[StrategyLab] label backfill failed: ${error.message}`);
+        finish();
+        return;
+      }
+      batches++;
+      updated += count;
+      if (count >= this.labelBatchSize && batches < this.labelMaxBatchesPerTick) {
+        setImmediate(runBatch);
+      } else {
+        finish();
+      }
+    };
+    runBatch();
   }
 
   stop() {
@@ -161,7 +222,7 @@ class FeatureRecorder {
 
     const state = this._stateOf(swap.mint);
     const ts = finite(swap.ts, Date.now());
-    const price = positive(swap.price, state.lastPrice);
+    const price = positive(swap.price, null);
     const priceBefore = positive(swap.priceBefore, null);
     const solVolume = Math.max(0, finite(swap.solVolume, 0));
 
@@ -181,7 +242,30 @@ class FeatureRecorder {
       poolQuoteAfter: positive(swap.poolQuoteAfter, null),
       dataQualityVersion: Math.max(1, Math.floor(finite(swap.dataQualityVersion, 1))),
       priceSanitized: Boolean(swap.priceSanitized),
+      priceReliable: swap.priceReliable === true,
+      featureEligible: swap.featureEligible === true,
+      source: swap.source || null,
+      sanitizerReason: swap.sanitizerReason || null,
     };
+    state.symbol = ev.symbol || state.symbol;
+    state.lastSeenAt = Math.max(state.lastSeenAt || 0, ev.ts);
+    state.lastDataQualityVersion = Math.max(
+      state.lastDataQualityVersion || 1,
+      ev.dataQualityVersion,
+    );
+
+    if (!ev.featureEligible || !ev.priceReliable || !ev.price) {
+      state.filteredEvents.push(ev);
+      if (
+        state.filteredEvents.length > 1 &&
+        state.filteredEvents[state.filteredEvents.length - 2].ts > ev.ts
+      ) {
+        state.filteredEvents.sort((a, b) => (a.ts - b.ts) || ((a.slot || 0) - (b.slot || 0)));
+      }
+      this._prune(state, ev.ts);
+      return;
+    }
+
     if (ev.priceChangePct == null && ev.price && ev.priceBefore) {
       ev.priceChangePct = ((ev.price - ev.priceBefore) / ev.priceBefore) * 100;
     }
@@ -190,12 +274,10 @@ class FeatureRecorder {
     if (state.events.length > 1 && state.events[state.events.length - 2].ts > ev.ts) {
       state.events.sort((a, b) => (a.ts - b.ts) || ((a.slot || 0) - (b.slot || 0)));
     }
-    state.symbol = ev.symbol || state.symbol;
     state.poolAddress = ev.poolAddress || state.poolAddress;
     state.lastPoolQuoteAfter = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
-    state.lastSeenAt = Math.max(state.lastSeenAt || 0, ev.ts);
-    state.lastDataQualityVersion = Math.max(state.lastDataQualityVersion || 1, ev.dataQualityVersion);
-    if (ev.price) state.lastPrice = ev.price;
+    state.lastPrice = ev.price;
+    state.lastPriceTs = ev.ts;
 
     if (ev.signer) {
       if (ev.side === 'BUY' && !state.firstBuySeen.has(ev.signer)) state.firstBuySeen.set(ev.signer, ev.ts);
@@ -243,7 +325,6 @@ class FeatureRecorder {
         const state = this._stateOf(token.mint);
         state.symbol = token.symbol || state.symbol;
         state.lastSeenAt = Math.max(state.lastSeenAt || 0, now);
-        state.lastPrice = positive(state.lastPrice, positive(token.price, null));
       }
     }
 
@@ -279,12 +360,14 @@ class FeatureRecorder {
       state = {
         mint,
         events: [],
+        filteredEvents: [],
         firstBuySeen: new Map(),
         firstSellSeen: new Map(),
         symbol: null,
         poolAddress: null,
         lastPoolQuoteAfter: null,
         lastPrice: null,
+        lastPriceTs: null,
         lastDataQualityVersion: 1,
         lastSeenAt: 0,
         buyStreak: 0,
@@ -304,6 +387,9 @@ class FeatureRecorder {
   _prune(state, now) {
     const cutoff = now - Math.max(this.retentionMs, 180_000) - 5_000;
     while (state.events.length > 0 && state.events[0].ts < cutoff) state.events.shift();
+    while (state.filteredEvents.length > 0 && state.filteredEvents[0].ts < cutoff) {
+      state.filteredEvents.shift();
+    }
     const walletCutoff = now - 24 * 60 * 60 * 1000;
     for (const [wallet, ts] of state.firstBuySeen) {
       if (ts < walletCutoff) state.firstBuySeen.delete(wallet);
@@ -319,6 +405,13 @@ class FeatureRecorder {
   _windowEvents(state, now, windowMs) {
     const start = now - windowMs;
     return state.events
+      .filter((ev) => ev.ts >= start && ev.ts <= now)
+      .sort((a, b) => (a.ts - b.ts) || ((a.slot || 0) - (b.slot || 0)));
+  }
+
+  _windowFilteredEvents(state, now, windowMs) {
+    const start = now - windowMs;
+    return state.filteredEvents
       .filter((ev) => ev.ts >= start && ev.ts <= now)
       .sort((a, b) => (a.ts - b.ts) || ((a.slot || 0) - (b.slot || 0)));
   }
@@ -375,10 +468,21 @@ class FeatureRecorder {
 
   _buildSnapshot(state, now, bucketTs) {
     const token = this.tokenRegistry ? this.tokenRegistry.getToken(state.mint) : null;
-    const price = positive(state.lastPrice, positive(token?.price, null));
+    const price = positive(state.lastPrice, null);
     const fdv = finite(token?.fdv, null);
     const liquidity = finite(token?.liquidity, null);
     const ageMs = this._ageMs(token, now);
+    const trusted60 = this._windowEvents(state, now, 60_000);
+    const filtered60 = this._windowFilteredEvents(state, now, 60_000);
+    const trustedVolume60 = sum(trusted60, (ev) => ev.solVolume);
+    const filteredVolume60 = sum(filtered60, (ev) => ev.solVolume);
+    const totalEvents60 = trusted60.length + filtered60.length;
+    const totalVolume60 = trustedVolume60 + filteredVolume60;
+    let featureQualityStatus = 'quiet';
+    if (!state.lastPriceTs) featureQualityStatus = 'no_trusted_price';
+    else if (trusted60.length > 0 && filtered60.length > 0) featureQualityStatus = 'mixed_filtered';
+    else if (trusted60.length > 0) featureQualityStatus = 'trusted';
+    else if (filtered60.length > 0) featureQualityStatus = 'untrusted_only';
     const snapshot = {
       ts: now,
       bucket_ts: bucketTs,
@@ -394,6 +498,15 @@ class FeatureRecorder {
       pool_address: state.poolAddress || token?.pool_address || null,
       pool_quote_after: finite(state.lastPoolQuoteAfter, null),
       data_quality_version: state.lastDataQualityVersion || 1,
+      trusted_price_ts: state.lastPriceTs,
+      trusted_price_age_ms: state.lastPriceTs ? Math.max(0, now - state.lastPriceTs) : null,
+      trusted_event_count_60s: trusted60.length,
+      filtered_event_count_60s: filtered60.length,
+      trusted_volume_sol_60s: trustedVolume60,
+      filtered_volume_sol_60s: filteredVolume60,
+      trusted_event_share_60s: totalEvents60 > 0 ? trusted60.length / totalEvents60 : null,
+      trusted_volume_share_60s: totalVolume60 > 0 ? trustedVolume60 / totalVolume60 : null,
+      feature_quality_status: featureQualityStatus,
       buy_streak: state.buyStreak,
       sell_streak: state.sellStreak,
       lp_change_60s_pct: this._marketDeltaPct(state, now, 'liquidity', liquidity),
@@ -447,6 +560,8 @@ class FeatureRecorder {
     if (events.length === 0) return null;
     const prices = events.map((ev) => ev.price).filter((price) => Number.isFinite(price) && price > 0);
     if (prices.length === 0) return null;
+    const filteredEvents = state.filteredEvents
+      .filter((ev) => ev.ts >= bucketTs && ev.ts < bucketTs + frame.ms);
     const buys = events.filter((ev) => ev.side === 'BUY');
     const sells = events.filter((ev) => ev.side === 'SELL');
     const token = this.tokenRegistry ? this.tokenRegistry.getToken(state.mint) : null;
@@ -470,6 +585,9 @@ class FeatureRecorder {
       fdv: finite(token?.fdv, null),
       liquidity: finite(token?.liquidity, null),
       data_quality_version: Math.min(...events.map((ev) => ev.dataQualityVersion || 1)),
+      filtered_event_count: filteredEvents.length,
+      filtered_volume_sol: sum(filteredEvents, (ev) => ev.solVolume),
+      feature_quality_status: filteredEvents.length > 0 ? 'mixed_filtered' : 'trusted',
       updated_at: now,
     };
   }

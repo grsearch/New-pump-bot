@@ -325,6 +325,7 @@ function main() {
              price_change_pct AS priceChangePct, ts, slot, signature, pool_quote_after AS poolQuoteAfter
       FROM swap_events
       WHERE ts >= ? AND ts < ?
+        AND COALESCE(feature_eligible, 0) = 1
       ORDER BY mint, ts ASC
     `).all(sinceMs, untilMs).map((row) => ({
       ...row,
@@ -339,7 +340,7 @@ function main() {
   }
 
   if (rows.length === 0) {
-    console.log('No swap_events found. Keep the service running with SWAP_EVENT_LOG_ENABLED=true first.');
+    console.log('No research-eligible swap_events found. Keep the V4 service collecting data first.');
     return;
   }
 

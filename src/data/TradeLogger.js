@@ -1,5 +1,18 @@
 'use strict';
 
+const STRATEGY_LAB_QUALITY_VERSION = 4;
+
+function upperBoundByTs(rows, target) {
+  let low = 0;
+  let high = rows.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (rows[middle].ts <= target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 /**
  * TradeLogger
  * ===========
@@ -152,6 +165,7 @@ class TradeLogger {
         raw_price REAL,
         raw_price_before REAL,
         sanitizer_reason TEXT,
+        feature_eligible INTEGER DEFAULT 0,
         data_quality_version INTEGER DEFAULT 1
       );
       CREATE INDEX IF NOT EXISTS idx_swap_events_ts ON swap_events(ts);
@@ -220,8 +234,13 @@ class TradeLogger {
       ['raw_price', 'REAL'],
       ['raw_price_before', 'REAL'],
       ['sanitizer_reason', 'TEXT'],
+      ['feature_eligible', 'INTEGER DEFAULT 0'],
       ['data_quality_version', 'INTEGER DEFAULT 1'],
     ]);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_swap_events_feature_labels
+        ON swap_events(mint, ts) WHERE feature_eligible = 1;
+    `);
 
     this._initStrategyLabSchema();
   }
@@ -250,6 +269,15 @@ class TradeLogger {
       ['pool_address', 'TEXT'],
       ['pool_quote_after', 'REAL'],
       ['data_quality_version', 'INTEGER'],
+      ['trusted_price_ts', 'INTEGER'],
+      ['trusted_price_age_ms', 'INTEGER'],
+      ['trusted_event_count_60s', 'INTEGER'],
+      ['filtered_event_count_60s', 'INTEGER'],
+      ['trusted_volume_sol_60s', 'REAL'],
+      ['filtered_volume_sol_60s', 'REAL'],
+      ['trusted_event_share_60s', 'REAL'],
+      ['trusted_volume_share_60s', 'REAL'],
+      ['feature_quality_status', 'TEXT'],
     ];
 
     const windowMetrics = [
@@ -303,9 +331,14 @@ class TradeLogger {
         [`future_max_${horizon}s_pct`, 'REAL'],
         [`future_close_${horizon}s_pct`, 'REAL'],
         [`future_drawdown_${horizon}s_pct`, 'REAL'],
+        [`label_sample_count_${horizon}s`, 'INTEGER'],
       );
     }
-    cols.push(['label_updated_at', 'INTEGER']);
+    cols.push(
+      ['label_status', 'TEXT'],
+      ['label_quality_version', 'INTEGER'],
+      ['label_updated_at', 'INTEGER'],
+    );
 
     return cols;
   }
@@ -355,6 +388,9 @@ ${snapshotColumnsSql},
         fdv REAL,
         liquidity REAL,
         data_quality_version INTEGER,
+        filtered_event_count INTEGER,
+        filtered_volume_sol REAL,
+        feature_quality_status TEXT,
         updated_at INTEGER,
         PRIMARY KEY(timeframe, mint, bucket_ts)
       );
@@ -419,6 +455,9 @@ ${snapshotColumnsSql},
       ['fdv', 'REAL'],
       ['liquidity', 'REAL'],
       ['data_quality_version', 'INTEGER'],
+      ['filtered_event_count', 'INTEGER'],
+      ['filtered_volume_sol', 'REAL'],
+      ['feature_quality_status', 'TEXT'],
       ['updated_at', 'INTEGER'],
     ]);
     this._ensureColumns('token_events', [
@@ -496,11 +535,13 @@ ${snapshotColumnsSql},
         INSERT OR IGNORE INTO swap_events
           (ts, mint, symbol, signer, side, sol_volume, price, price_before, price_change_pct,
            slot, signature, pool_address, pool_quote_after, source, price_reliable,
-           price_sanitized, raw_price, raw_price_before, sanitizer_reason, data_quality_version)
+           price_sanitized, raw_price, raw_price_before, sanitizer_reason, feature_eligible,
+           data_quality_version)
         VALUES
           (@ts, @mint, @symbol, @signer, @side, @solVolume, @price, @priceBefore, @priceChangePct,
            @slot, @signature, @poolAddress, @poolQuoteAfter, @source, @priceReliable,
-           @priceSanitized, @rawPrice, @rawPriceBefore, @sanitizerReason, @dataQualityVersion)
+            @priceSanitized, @rawPrice, @rawPriceBefore, @sanitizerReason, @featureEligible,
+            @dataQualityVersion)
       `),
 
       swapEventsInRange: this.db.prepare(`
@@ -671,7 +712,7 @@ ${snapshotColumnsSql},
     const snapshotInsertParams = snapshotColumns.map((name) => `@${name}`).join(', ');
     const snapshotUpdateColumns = snapshotColumns
       .filter((name) => name !== 'mint' && name !== 'bucket_ts')
-      .filter((name) => !name.startsWith('future_') && name !== 'label_updated_at')
+      .filter((name) => !name.startsWith('future_') && !name.startsWith('label_'))
       .map((name) => `${name} = excluded.${name}`)
       .join(',\n          ');
 
@@ -686,11 +727,13 @@ ${snapshotColumnsSql},
       INSERT INTO token_candles
         (timeframe, bucket_ts, mint, symbol, open, high, low, close,
          volume_sol, buy_volume_sol, sell_volume_sol, buy_count, sell_count, tx_count,
-         unique_buy_wallets, unique_sell_wallets, fdv, liquidity, data_quality_version, updated_at)
+         unique_buy_wallets, unique_sell_wallets, fdv, liquidity, data_quality_version,
+         filtered_event_count, filtered_volume_sol, feature_quality_status, updated_at)
       VALUES
         (@timeframe, @bucket_ts, @mint, @symbol, @open, @high, @low, @close,
          @volume_sol, @buy_volume_sol, @sell_volume_sol, @buy_count, @sell_count, @tx_count,
-         @unique_buy_wallets, @unique_sell_wallets, @fdv, @liquidity, @data_quality_version, @updated_at)
+          @unique_buy_wallets, @unique_sell_wallets, @fdv, @liquidity, @data_quality_version,
+          @filtered_event_count, @filtered_volume_sol, @feature_quality_status, @updated_at)
       ON CONFLICT(timeframe, mint, bucket_ts) DO UPDATE SET
         symbol = excluded.symbol,
         open = excluded.open,
@@ -708,6 +751,9 @@ ${snapshotColumnsSql},
         fdv = excluded.fdv,
         liquidity = excluded.liquidity,
         data_quality_version = excluded.data_quality_version,
+        filtered_event_count = excluded.filtered_event_count,
+        filtered_volume_sol = excluded.filtered_volume_sol,
+        feature_quality_status = excluded.feature_quality_status,
         updated_at = excluded.updated_at
     `);
 
@@ -731,35 +777,55 @@ ${snapshotColumnsSql},
       SELECT id, mint, ts, price
       FROM token_snapshots
       WHERE price > 0
-        AND COALESCE(data_quality_version, 1) >= 2
-        AND ts <= ?
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND trusted_price_ts IS NOT NULL
+        AND COALESCE(feature_quality_status, '') IN ('trusted', 'mixed_filtered', 'quiet')
+        AND ts <= @mature_before
         AND label_updated_at IS NULL
       ORDER BY ts ASC
-      LIMIT ?
+      LIMIT @limit
     `);
 
     this.stmts.futurePricesForLabel = this.db.prepare(`
       SELECT ts, price
       FROM swap_events
-      WHERE mint = ?
-        AND ts > ?
-        AND ts <= ?
+      WHERE mint = @mint
+        AND ts > @from_ts
+        AND ts <= @until_ts
         AND price > 0
-        AND COALESCE(data_quality_version, 1) >= 2
-      ORDER BY ts ASC, id ASC
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND COALESCE(feature_eligible, 0) = 1
+        AND COALESCE(price_reliable, 0) = 1
+        ORDER BY ts ASC, id ASC
+    `);
+
+    this.stmts.snapshotLabelBacklog = this.db.prepare(`
+      SELECT COUNT(*) AS count, MIN(ts) AS oldest_ts, MAX(ts) AS newest_ts
+      FROM token_snapshots
+      WHERE price > 0
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND trusted_price_ts IS NOT NULL
+        AND COALESCE(feature_quality_status, '') IN ('trusted', 'mixed_filtered', 'quiet')
+        AND ts <= @mature_before
+        AND label_updated_at IS NULL
     `);
 
     this.stmts.updateSnapshotLabels = this.db.prepare(`
       UPDATE token_snapshots SET
-        future_max_30s_pct = COALESCE(@future_max_30s_pct, future_max_30s_pct),
-        future_close_30s_pct = COALESCE(@future_close_30s_pct, future_close_30s_pct),
-        future_drawdown_30s_pct = COALESCE(@future_drawdown_30s_pct, future_drawdown_30s_pct),
-        future_max_60s_pct = COALESCE(@future_max_60s_pct, future_max_60s_pct),
-        future_close_60s_pct = COALESCE(@future_close_60s_pct, future_close_60s_pct),
-        future_drawdown_60s_pct = COALESCE(@future_drawdown_60s_pct, future_drawdown_60s_pct),
-        future_max_180s_pct = COALESCE(@future_max_180s_pct, future_max_180s_pct),
-        future_close_180s_pct = COALESCE(@future_close_180s_pct, future_close_180s_pct),
-        future_drawdown_180s_pct = COALESCE(@future_drawdown_180s_pct, future_drawdown_180s_pct),
+        future_max_30s_pct = @future_max_30s_pct,
+        future_close_30s_pct = @future_close_30s_pct,
+        future_drawdown_30s_pct = @future_drawdown_30s_pct,
+        label_sample_count_30s = @label_sample_count_30s,
+        future_max_60s_pct = @future_max_60s_pct,
+        future_close_60s_pct = @future_close_60s_pct,
+        future_drawdown_60s_pct = @future_drawdown_60s_pct,
+        label_sample_count_60s = @label_sample_count_60s,
+        future_max_180s_pct = @future_max_180s_pct,
+        future_close_180s_pct = @future_close_180s_pct,
+        future_drawdown_180s_pct = @future_drawdown_180s_pct,
+        label_sample_count_180s = @label_sample_count_180s,
+        label_status = @label_status,
+        label_quality_version = @label_quality_version,
         label_updated_at = @label_updated_at
       WHERE id = @id
     `);
@@ -848,6 +914,7 @@ ${snapshotColumnsSql},
         rawPrice: num(swap.rawPrice),
         rawPriceBefore: num(swap.rawPriceBefore),
         sanitizerReason: swap.sanitizerReason || null,
+        featureEligible: swap.featureEligible === true ? 1 : 0,
         dataQualityVersion: num(swap.dataQualityVersion) || 1,
       });
     } catch (_) { /* best effort; strategy must never block on analytics writes */ }
@@ -897,6 +964,9 @@ ${snapshotColumnsSql},
       fdv: this._cleanDbValue(candle.fdv),
       liquidity: this._cleanDbValue(candle.liquidity),
       data_quality_version: this._cleanDbValue(candle.data_quality_version),
+      filtered_event_count: this._cleanDbValue(candle.filtered_event_count),
+      filtered_volume_sol: this._cleanDbValue(candle.filtered_volume_sol),
+      feature_quality_status: candle.feature_quality_status || null,
       updated_at: candle.updated_at || Date.now(),
     };
     try {
@@ -948,53 +1018,97 @@ ${snapshotColumnsSql},
     } catch (_) { /* analytics only */ }
   }
 
-  backfillSnapshotLabels({ now = Date.now(), batchSize = 500 } = {}) {
+  getSnapshotLabelBacklog({ now = Date.now(), minQualityVersion = STRATEGY_LAB_QUALITY_VERSION } = {}) {
+    const maxHorizonMs = Math.max(...this._strategyLabHorizons()) * 1000;
+    const row = this.stmts.snapshotLabelBacklog.get({
+      min_quality_version: minQualityVersion,
+      mature_before: now - maxHorizonMs,
+    });
+    const oldestTs = Number(row?.oldest_ts) || null;
+    return {
+      count: Number(row?.count) || 0,
+      oldestTs,
+      newestTs: Number(row?.newest_ts) || null,
+      oldestAgeMs: oldestTs ? Math.max(0, now - maxHorizonMs - oldestTs) : 0,
+      minQualityVersion,
+    };
+  }
+
+  backfillSnapshotLabels({
+    now = Date.now(),
+    batchSize = 1000,
+    minQualityVersion = STRATEGY_LAB_QUALITY_VERSION,
+  } = {}) {
     const horizons = this._strategyLabHorizons();
     const maxHorizonMs = Math.max(...horizons) * 1000;
-    let updated = 0;
     try {
-      const pending = this.stmts.pendingSnapshotLabels.all(now - maxHorizonMs, batchSize);
+      const pending = this.stmts.pendingSnapshotLabels.all({
+        min_quality_version: minQualityVersion,
+        mature_before: now - maxHorizonMs,
+        limit: Math.max(1, Math.floor(batchSize)),
+      });
+      if (pending.length === 0) return 0;
+
+      const byMint = new Map();
       for (const snap of pending) {
-        const basePrice = Number(snap.price);
-        if (!Number.isFinite(basePrice) || basePrice <= 0) continue;
-        const prices = this.stmts.futurePricesForLabel.all(
-          snap.mint,
-          snap.ts,
-          snap.ts + maxHorizonMs,
-        );
-        const params = {
-          id: snap.id,
-          label_updated_at: now,
-          future_max_30s_pct: null,
-          future_close_30s_pct: null,
-          future_drawdown_30s_pct: null,
-          future_max_60s_pct: null,
-          future_close_60s_pct: null,
-          future_drawdown_60s_pct: null,
-          future_max_180s_pct: null,
-          future_close_180s_pct: null,
-          future_drawdown_180s_pct: null,
-        };
-
-        for (const horizon of horizons) {
-          const until = snap.ts + horizon * 1000;
-          const rows = prices.filter((row) => row.ts <= until);
-          if (rows.length === 0) continue;
-          const values = rows.map((row) => Number(row.price)).filter((price) => Number.isFinite(price) && price > 0);
-          if (values.length === 0) continue;
-          const maxPrice = Math.max(...values);
-          const minPrice = Math.min(...values);
-          const closePrice = values[values.length - 1];
-          params[`future_max_${horizon}s_pct`] = ((maxPrice - basePrice) / basePrice) * 100;
-          params[`future_close_${horizon}s_pct`] = ((closePrice - basePrice) / basePrice) * 100;
-          params[`future_drawdown_${horizon}s_pct`] = ((minPrice - basePrice) / basePrice) * 100;
-        }
-
-        this.stmts.updateSnapshotLabels.run(params);
-        updated++;
+        if (!byMint.has(snap.mint)) byMint.set(snap.mint, []);
+        byMint.get(snap.mint).push(snap);
       }
-    } catch (_) { /* analytics only */ }
-    return updated;
+
+      const updates = [];
+      for (const [mint, snapshots] of byMint) {
+        snapshots.sort((left, right) => left.ts - right.ts);
+        const prices = this.stmts.futurePricesForLabel.all({
+          mint,
+          from_ts: snapshots[0].ts,
+          until_ts: snapshots[snapshots.length - 1].ts + maxHorizonMs,
+          min_quality_version: minQualityVersion,
+        }).map((row) => ({ ts: Number(row.ts), price: Number(row.price) }));
+
+        for (const snap of snapshots) {
+          const basePrice = Number(snap.price);
+          if (!Number.isFinite(basePrice) || basePrice <= 0) continue;
+          const start = upperBoundByTs(prices, snap.ts);
+          const params = {
+            id: snap.id,
+            label_updated_at: now,
+            label_status: 'complete',
+            label_quality_version: minQualityVersion,
+          };
+
+          for (const horizon of horizons) {
+            const until = snap.ts + horizon * 1000;
+            const end = upperBoundByTs(prices, until);
+            let maxPrice = basePrice;
+            let minPrice = basePrice;
+            let closePrice = basePrice;
+            let sampleCount = 0;
+            for (let index = start; index < end; index++) {
+              const price = prices[index].price;
+              if (!Number.isFinite(price) || price <= 0) continue;
+              maxPrice = Math.max(maxPrice, price);
+              minPrice = Math.min(minPrice, price);
+              closePrice = price;
+              sampleCount++;
+            }
+            params[`future_max_${horizon}s_pct`] = ((maxPrice - basePrice) / basePrice) * 100;
+            params[`future_close_${horizon}s_pct`] = ((closePrice - basePrice) / basePrice) * 100;
+            params[`future_drawdown_${horizon}s_pct`] = ((minPrice - basePrice) / basePrice) * 100;
+            params[`label_sample_count_${horizon}s`] = sampleCount;
+          }
+          updates.push(params);
+        }
+      }
+
+      const applyUpdates = () => {
+        for (const params of updates) this.stmts.updateSnapshotLabels.run(params);
+      };
+      if (typeof this.db.transaction === 'function') this.db.transaction(applyUpdates)();
+      else applyUpdates();
+      return updates.length;
+    } catch (error) {
+      throw new Error(`Strategy Lab label backfill failed: ${error.message}`);
+    }
   }
 
   // ============================================================
@@ -1230,3 +1344,4 @@ ${snapshotColumnsSql},
 }
 
 module.exports = TradeLogger;
+module.exports.STRATEGY_LAB_QUALITY_VERSION = STRATEGY_LAB_QUALITY_VERSION;

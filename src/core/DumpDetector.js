@@ -193,7 +193,8 @@ class DumpDetector extends EventEmitter {
       });
       if (sanitized.event) {
         const swap = sanitized.event;
-        const hasTrustedPrice = Number.isFinite(swap.price) && swap.price > 0;
+        const hasTrustedPrice = swap.featureEligible === true &&
+          Number.isFinite(swap.price) && swap.price > 0;
         parsed._analyticsPriceBefore = hasTrustedPrice ? swap.priceBefore : 0;
         parsed._analyticsPriceAfter = hasTrustedPrice ? swap.price : 0;
         parsed._analyticsPriceChangePct = hasTrustedPrice ? swap.priceChangePct : 0;

@@ -204,6 +204,43 @@ function run() {
   });
   assert.strictEqual(anchoredQuality.passed, true);
 
+  for (const event of [
+    { mint: 'LongGapMint', ts: ts + 1_000, price: 1, poolAddress: 'PoolA' },
+    { mint: 'LongGapMint', ts: ts + 130_000, price: 3, poolAddress: 'PoolA' },
+    { mint: 'ConfirmedMint', ts: ts + 150_000, price: 1, poolAddress: 'PoolA' },
+    { mint: 'ConfirmedMint', ts: ts + 151_000, price: 3, poolAddress: 'PoolA' },
+    { mint: 'ConfirmedMint', ts: ts + 151_100, price: 3.1, poolAddress: 'PoolA' },
+    { mint: 'ConfirmedMint', ts: ts + 151_200, price: 3.05, poolAddress: 'PoolA' },
+    { mint: 'ConfirmedMint', ts: ts + 151_300, price: 3, poolAddress: 'PoolA' },
+    { mint: 'PoolBoundaryMint', ts: ts + 160_000, price: 1, poolAddress: 'PoolA' },
+    { mint: 'PoolBoundaryMint', ts: ts + 161_000, price: 3, poolAddress: 'PoolB' },
+  ]) {
+    logger.logSwapEvent({
+      mint: event.mint,
+      side: 'BUY',
+      solVolume: 1,
+      price: event.price,
+      priceBefore: event.price,
+      ts: event.ts,
+      poolAddress: event.poolAddress,
+      signature: `${event.mint}-${event.ts}`,
+      sanitizerReason: 'continuous_price',
+      priceReliable: true,
+      featureEligible: true,
+      dataQualityVersion: 4,
+    });
+  }
+  const boundaryQuality = inspectStrategyLabQuality(db, {
+    now: ts + 220_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(boundaryQuality.passed, true);
+  assert.strictEqual(boundaryQuality.prices.jumpCount, 4);
+  assert.strictEqual(boundaryQuality.prices.reasonConfirmedCount, 1);
+  assert.strictEqual(boundaryQuality.prices.subsequentConfirmedCount, 1);
+  assert.strictEqual(boundaryQuality.prices.gapBoundaryCount, 1);
+  assert.strictEqual(boundaryQuality.prices.poolBoundaryCount, 1);
+
   logger.logSwapEvent({
     mint: 'CleanMint',
     side: 'BUY',
@@ -217,8 +254,14 @@ function run() {
     featureEligible: true,
     dataQualityVersion: 4,
   });
-  const failedQuality = inspectStrategyLabQuality(db, {
+  const recentJumpQuality = inspectStrategyLabQuality(db, {
     now: ts + 182_000,
+    minQualityVersion: 4,
+  });
+  assert.strictEqual(recentJumpQuality.passed, true);
+
+  const failedQuality = inspectStrategyLabQuality(db, {
+    now: ts + 220_000,
     minQualityVersion: 4,
   });
   assert.strictEqual(failedQuality.passed, false);

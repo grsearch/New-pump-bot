@@ -94,7 +94,7 @@ npm run export:strategy -- --hours 168
 npm run export:strategy -- --hours 0 --all
 ```
 
-默认只导出 `data_quality_version>=2` 且已经拥有 `future_max_60s_pct` 标签的干净样本；需要导出未打标签快照时可加 `--include-unlabeled`。`--all` 会校验导出字段数确实等于数据库全部特征字段。只有明确研究旧数据时才使用 `--min-quality-version 0`。
+默认只导出 `data_quality_version>=4`、价格可信且 30s/60s/180s 标签完整的样本。导出前会拒绝未确认的 2x 价格尖峰；超过 120 秒的成交断档会切断价格序列，30 秒内被后续 3 笔可信成交确认的新价格会作为真实跳变保留。需要导出未打标签快照时可加 `--include-unlabeled`。`--all` 会校验导出字段数确实等于数据库全部特征字段。只有明确研究旧数据时才使用 `--min-quality-version 0`。
 
 ## 15 秒策略回测
 

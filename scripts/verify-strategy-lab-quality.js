@@ -24,6 +24,9 @@ function main() {
       sinceTs: hours > 0 ? now - hours * 60 * 60 * 1000 : 0,
       minQualityVersion: numberArg('--min-quality-version', 4),
       maxJumpRatio: numberArg('--max-jump-ratio', 2),
+      maxJumpGapMs: numberArg('--max-jump-gap-ms', 120_000),
+      jumpConfirmWindowMs: numberArg('--jump-confirm-window-ms', 30_000),
+      jumpConfirmClusterRatio: numberArg('--jump-confirm-cluster-ratio', 1.25),
       maxBacklogAgeMs: numberArg('--max-backlog-age-ms', 300_000),
     });
     console.log(qualitySummary(result));

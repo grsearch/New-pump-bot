@@ -90,6 +90,9 @@ function parseArgs(argv) {
     minQualityVersion: 4,
     allowQualityFailures: false,
     maxJumpRatio: 2,
+    maxJumpGapMs: 120_000,
+    jumpConfirmWindowMs: 30_000,
+    jumpConfirmClusterRatio: 1.25,
     maxBacklogAgeMs: 300_000,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -101,6 +104,11 @@ function parseArgs(argv) {
     else if (arg === '--include-unlabeled') args.includeUnlabeled = true;
     else if (arg === '--allow-quality-failures') args.allowQualityFailures = true;
     else if (arg === '--max-jump-ratio') args.maxJumpRatio = Number(argv[++i]);
+    else if (arg === '--max-jump-gap-ms') args.maxJumpGapMs = Number(argv[++i]);
+    else if (arg === '--jump-confirm-window-ms') args.jumpConfirmWindowMs = Number(argv[++i]);
+    else if (arg === '--jump-confirm-cluster-ratio') {
+      args.jumpConfirmClusterRatio = Number(argv[++i]);
+    }
     else if (arg === '--max-backlog-age-ms') args.maxBacklogAgeMs = Number(argv[++i]);
     else if (arg === '--min-quality-version') {
       args.minQualityVersion = Number(argv[++i]);
@@ -127,6 +135,11 @@ Options:
   --include-unlabeled    Include rows whose future labels are still null.
   --min-quality-version  Minimum data quality version. Defaults to 4; use 0 for legacy rows.
   --max-jump-ratio N     Reject unverified adjacent price jumps above this ratio. Default 2.
+  --max-jump-gap-ms N    Treat longer gaps as price-series boundaries. Default 120000.
+  --jump-confirm-window-ms N
+                         Window for 3 subsequent trusted trades to confirm a jump. Default 30000.
+  --jump-confirm-cluster-ratio N
+                         Maximum distance from the new price for confirmation. Default 1.25.
   --max-backlog-age-ms N Reject label backlogs older than this age. Default 300000.
   --allow-quality-failures
                          Export even when quality checks fail; writes failures to the sidecar report.
@@ -221,6 +234,9 @@ function main() {
       ? Math.max(1, Math.floor(args.minQualityVersion))
       : 1,
     maxJumpRatio: args.maxJumpRatio,
+    maxJumpGapMs: args.maxJumpGapMs,
+    jumpConfirmWindowMs: args.jumpConfirmWindowMs,
+    jumpConfirmClusterRatio: args.jumpConfirmClusterRatio,
     maxBacklogAgeMs: args.maxBacklogAgeMs,
   });
   console.log(qualitySummary(quality));

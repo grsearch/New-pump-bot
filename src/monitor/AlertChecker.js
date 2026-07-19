@@ -209,10 +209,16 @@ class AlertChecker {
   _checkStuckPositions() {
     const open = this.positionManager.listOpen();
     const now = Date.now();
+    // v3.21: 波动率感知 stuck 检查
+    // 低波仓位(timeout=0)永不报 stuck，中高波仓位按各自 timeout 判断
     const stuck = [];
     for (const p of open) {
       const age = now - p.openedAt;
-      const timeoutMs = this.config.strategy.maxHoldMs || 0;
+      // 用 PositionManager 的 getPeakAwareTimeoutMs 获取该仓位的实际超时
+      const timeoutMs = this.positionManager.getPeakAwareTimeoutMs
+        ? this.positionManager.getPeakAwareTimeoutMs(0, p.preVol5m)
+        : (this.config.strategy.maxHoldMs || 1800000);
+      // timeoutMs=0 表示永不超时(死扛)，不算 stuck
       if (timeoutMs > 0 && age > timeoutMs + 30000) { // 超时后30s grace
         stuck.push(p);
       }

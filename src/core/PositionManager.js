@@ -172,18 +172,6 @@ class PositionManager extends EventEmitter {
     else this._flowExitEvents.delete(mint);
   }
 
-  _recentNetFlow(mint, now, windowMs) {
-    const cutoff = now - windowMs;
-    const events = this._flowExitEvents.get(mint) || [];
-    let netFlow = 0;
-    for (const event of events) {
-      if (event.ts < cutoff || event.ts > now) continue;
-      if (event.side === 'BUY') netFlow += event.solVolume;
-      else if (event.side === 'SELL') netFlow -= event.solVolume;
-    }
-    return netFlow;
-  }
-
   _maybeFlowReversalExit(pos, price, now) {
     const s = config.strategy;
     if (!s.flowReversalExitEnabled) return;
@@ -194,18 +182,14 @@ class PositionManager extends EventEmitter {
     const holdStart = pos.reconciledAt || pos.openedAt || now;
     const events = this._flowExitEvents.get(pos.mint) || [];
     const observedSince = events.length > 0 ? Math.max(holdStart, events[0].ts) : holdStart;
-    const pattern = evaluateFlowTurnExit(events, now, {
-      sinceTs: observedSince,
-      requireSellerBreadth: s.flowReversalExitRequireSellerBreadth,
-    });
+    const pattern = evaluateFlowTurnExit(events, now, { sinceTs: observedSince });
     if (!pattern.matched) return;
 
     const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
     console.log(
       `[PositionManager] FLOW_REVERSAL_EXIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
         `mode=FLOW_TURN_15S pnl=${pnlPct.toFixed(2)}% ` +
-        `netFlow=${pattern.previousNetFlow.toFixed(2)}->${pattern.currentNetFlow.toFixed(2)}SOL ` +
-        `wallets=${pattern.currentUniqueBuyers}B/${pattern.currentUniqueSellers}S`,
+        `netFlow=${pattern.previousNetFlow.toFixed(2)}->${pattern.currentNetFlow.toFixed(2)}SOL`,
     );
     monitor.inc('PositionManager.flowReversalExit', 1, 'PositionManager');
     this._exitForCondition(pos, price, 'FLOW_REVERSAL_EXIT');
@@ -402,8 +386,2367 @@ class PositionManager extends EventEmitter {
         mint: row.mint,
         symbol: row.symbol,
         entrySol: row.entry_sol,
-        entryPrice: rßo|òÚ$z{-®éÜj×öâ‡÷2æÖ–çB’bbF†—2æW†V7WF÷#òçööÅ7FFT66†R’°¢F†—2æW†V7WF÷"çööÅ7FFT66†Rç&VÖ÷fT†÷B‡÷2æÖ–çB“°¢Ğ ¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"æ6Æ÷6VBrÂÂu÷6—F–öäÖævW"r“°¢Ööæ—F÷"ç6WB‚u÷6—F–öäÖævW"æ÷Vä6÷VçBrÂF†—2ç÷6—F–öç2ç6—¦RÂu÷6—F–öäÖævW"r“°¢–b‡æÅ6öÂâ’Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"çv–ææW'2rÂÂu÷6—F–öäÖævW"r“°¢VÇ6RÖöæ—F÷"æ–æ2‚u÷6—F–öäÖævW"æÆ÷6W'2rÂÂu÷6—F–öäÖævW"r“° ¢6öç6öÆRæÆör€¢µ÷6—F–öäÖævW%Ò	øø4Äõ4TBG·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ò°¢w&÷73ÒG¶w&÷75æÂçFôf—†VBƒB—ÒfVSÒG¶fVU6öÂçFôf—†VBƒB—ÒæWCÒG·æÅ6öÂçFôf—†VBƒB—Ò4ôÂ‚G·æÅ7BçFôf—†VBƒ"—ÒR–À¢“° ¢F†—2æVÖ—B‚v6Æ÷6VBrÂ°¢ââç÷2À¢W†—E&–6RÀ¢W†—E6öÂÀ¢æÅ6öÂÀ¢æÅ7BÀ¢W†—E&V6öã¢f–æÅ&V6öâÀ¢w&÷75æÅ6öÃ¢w&÷75æÂÀ¢fVU6öÂÀ¢Ò“° ¢òòYÎ[ˆXªK¹>K¹>KØŞYÊŠznXù™‹një^[{.{¸ş{¹şKˆ‹ù¾XZ^K‹.ŠÎXÙnX{®™‰şX‰~ûÈÎ‹ù˜xÎXú®ZèÎh‰[Ù>X˜ŞK¹>KØŞ{¹>zé~8 ¢Ğ ¢÷66†VGVÆU&WG'”÷%7GV6²‡÷2ÂG&–vvW%&–6RÂW'$×6r’°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"ç6VÆÅ&WG&–W2rÂÂu÷6—F–öäÖævW"r“° ¢òòc2ãrãC¢Zh.iéÎ™IŠúşiŠò7W7FöÓ£cS2h‰b7W7FöÓ£„–ç7Vff–6–VçBFö¶Vç2ûÈÎŠûNiˆîKº>[ˆ[{.Š*¾X[nK¹nK¹>KØŞXÙnXX¢òòKˆŞXhÒ&WG'ûÈÎy»Nhê^X[>™zŞ˜şXXŞz›®‹ÚÂ"jÊ¢òòc2ãrãC²†÷Ff—ƒ¢¥4ôâW'&÷"f÷&ÖB—2²$7W7FöÒ#£Òæ÷B7W7FöÓ£¢òò×W7BÖF6‚&÷F‚¥4ôâ×V÷FVB$7W7FöÒ#£æBÆ–â7W7FöÓ£¢6öç7B†5Fö¶VävöæScS2ÒW'$×6rbb†W'$×6ræ–æ6ÇVFW2‚t7W7FöÓ£cS2r’ÇÂW'$×6ræ–æ6ÇVFW2‚t7W7FöÒ#£cS2r’“°¢6öç7B†5Fö¶VävöæSÒW'$×6rbb†W'$×6ræ–æ6ÇVFW2‚t7W7FöÓ£Òr’ÇÂW'$×6ræ–æ6ÇVFW2‚t7W7FöÒ#£Òr’“°¢–b††5Fö¶VävöæScS2ÇÂ†5Fö¶VävöæS’°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"ç6VÆÄ&æFöæVE÷Fö¶VävöæRrÂÂu÷6—F–öäÖævW"r“°¢6öç7BW'%G—RÒ†5Fö¶VävöæScS2òt7W7FöÓ£cS2r¢t7W7FöÓ£s°¢6öç6öÆRçv&â€¢µ÷6—F–öäÖævW%Ò	ùª²4TÄÂ&æFöæVBG·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ó¢°¢G¶W'%G—WÒ‡Fö¶Vâ&Ææ6R’(	BÆ–¶VÇ’6öÆB'’æ÷F†W"÷6—F–öâÂf÷&6R6Æ÷6–ævÀ¢“°¢F†—2çG&FTÆövvW"æ6Æ÷6U÷6—F–öâ‡÷2ç÷6—F–öä–BÂ°¢6Æ÷6VDC¢FFRææ÷r‚’À¢W†—E&–6S¢G&–vvW%&–6RÀ¢W†—E6öÃ¢À¢æÅ6öÃ¢×÷2æVçG'•6öÂÀ¢æÅ7C¢ÓÀ¢W†—E&V6öã¢÷2æW†—E&V6öâ²uõDô´TåôtôäRrÀ¢6VÆÅ6–væGW&S¢÷2åöÆ7E6VÆÅ6–væGW&RÇÂçVÆÂÀ¢Ò“°¢òòc2ã#c¢Dô´TåôtôäR‡'Vr’Yâ#F‚Xk~XÛNûÈÎ™‹.jÚ.{º~{ºŞK›XZ^[Ù.™»n[ˆ¢–b‡F†—2ç6–væÄVæv–æRbbF†—2ç6–væÄVæv–æRåöW†—D6ööÆF÷vç2’°¢6öç7B'Vt6ööÆF÷vä×2Ò'6T–çB‡&ö6W72æVçbå%Tuõ$T%U•ô4ôôÄDõtåôÕ2ÇÂsƒcCrÂ“°¢F†—2ç6–væÄVæv–æRåöW†—D6ööÆF÷vç2ç6WB‡÷2æÖ–çBÂFFRææ÷r‚’²'Vt6ööÆF÷vä×2“°¢6öç6öÆRæÆör€¢µ÷6—F–öäÖævW%Ò	ùI"%Tr6ööÆF÷vâG·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Òf÷"G´ÖF‚ç&÷VæB‡'Vt6ööÆF÷vä×2ò3c—Ö‚‡Fö¶VâvöæRÂæò&V'W’–À¢“°¢Ğ¢F†—2ç÷6—F–öç2æFVÆWFR‡÷2ç÷6—F–öä–B“°¢F†—2å÷&VÖ÷fT'”Ö–çB‡÷2æÖ–çBÂ÷2ç÷6—F–öä–B“°¢–b‡F†—2æW†V7WF÷#òçööÅ7FFT66†R’F†—2æW†V7WF÷"çööÅ7FFT66†Rç&VÖ÷fT†÷B‡÷2æÖ–çB“°¢Ööæ—F÷"ç6WB‚u÷6—F–öäÖævW"æ÷Vä6÷VçBrÂF†—2ç÷6—F–öç2ç6—¦RÂu÷6—F–öäÖævW"r“°¢&WGW&ã°¢Ğ ¢òò˜xŞŠù^Kˆ®™™ûÉ®›¹ŠêB"jÊûÈ…4TÄÅõ$UE%•ôDTÄ•5ôÕ29r.ûÈ8.‹h^‹ø~jr7GV6°¢6öç7BÔ…õ$UE$”U2Ò4TÄÅõ$UE%•ôDTÄ•5ôÕ2æÆVæwF‚¢#°¢–b‡÷2ç6VÆÄGFV×G2ãÒÔ…õ$UE$”U2’°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"ç6VÆÅ7GV6²rÂÂu÷6—F–öäÖævW"r“°¢F†—2çG&FTÆövvW"æÖ&µ7GV6²€¢÷2ç÷6—F–öä–BÀ¢vfRWgFW"G·÷2ç6VÆÄGFV×G7ÒGFV×G3¢G¶W'$×6wÖÀ¢“°¢6öç6öÆRæW'&÷"€¢µ÷6—F–öäÖævW%Ò)ªûˆò5ET4²G·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ó¢°¢G·÷2ç6VÆÄGFV×G7ÒjÊ˜xŞŠù^YØ~ZK‹JR(	BFö¶VâyYYÊ™+XÈ^KŠŞûÈÎ™ÈK«®[z^[›.š(FÀ¢“°¢òòX[>™JîûÉ®KùŞhÈW†—F–æs×G'VR™‹.jÚ"F–6²÷&–6UWFFRXhŞjÊŠznXùöW†—B‹ù¾XZ^iz™™[ê®xêğ¢òòK™şKˆŞK¸âF†—2ç÷6—F–öç2XŠ™šNûÉ®KùŞyYKº^Këò&V6öæ6–ÆW"y¹hê~8F6†&ö&Bi‹îzK®ŠÚnY ¢÷2æW†—F–ærÒG'VS°¢÷2ç7FGW2Òw7GV6²s°¢&WGW&ã°¢Ğ ¢6öç7BFVÆ”–G‚ÒÖF‚æÖ–â‡÷2ç6VÆÄGFV×G2ÒÂ4TÄÅõ$UE%•ôDTÄ•5ôÕ2æÆVæwF‚Ò“°¢6öç7BFVÆ’Ò4TÄÅõ$UE%•ôDTÄ•5ôÕ5¶FVÆ”–G…ÒÇÂ3ó°¢6öç7BæW‡E&WG'”BÒFFRææ÷r‚’²FVÆ“° ¢òòhÈK˜^XÉnKˆ¾jÊ˜xŞŠù^i{n™{NûÈÎ˜xŞY
-şYâ&V6öæ6–ÆW"KÉ®hÈi{nYJN˜i ¢F†—2çG&FTÆövvW"æÖ&µ6VÆÄf–ÆVEVæF–æu&WG'’€¢÷2ç÷6—F–öä–BÀ¢æW‡E&WG'”BÀ¢W'$×6rÀ¢÷2æW†—E&V6öâÀ¢“° ¢6öç6öÆRçv&â€¢µ÷6—F–öäÖævW%Ò4TÄÂ&WG'’66†VGVÆVC¢G·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ò°¢†GFV×BG·÷2ç6VÆÄGFV×G7ÒòG´Ô…õ$UE$”U7Ò’–âG¶FVÆ—Ö×2(	BG¶W'$×6wÖÀ¢“° ¢6WEF–ÖV÷WB‚‚’Óâ°¢–b‚F†—2ç÷6—F–öç2æ†2‡÷2ç÷6—F–öä–B’’&WGW&ã°¢6öç7BÆFW7E&–6RÒF†—2ç&–6UG&6¶W"ævWE&–6R‡÷2æÖ–çB’ÇÂG&–vvW%&–6S°¢F†—2åöGFV×E6VÆÂ‡÷2ÂÆFW7E&–6R’æ6F6‚‚†W'"’Óâ°¢Ööæ—F÷"ç&V6÷&DW'&÷"‚u÷6—F–öäÖævW"rÂW'"Â°¢†6S¢w6VÆÅ÷&WG'•ö7&6‚rÀ¢Ö–çC¢÷2æÖ–çBÀ¢Ò“°¢Ò“°¢ÒÂFVÆ’“°¢Ğ ¢ò¢ ¢¢c2ã2˜xŞŠùR&V6öæ6–ÆW ¢¢ÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓĞ¢¢jøòRzy.hš¾Kˆ˜ÒD.ûÈÎh›îX{®h˜iÈ’7FGW3Òw6VÆÅ÷VæF–ærrK‰BæW‡E÷&WG'•öBÃÒæ÷ry¨B÷6—F–öà¢¢‹ùŠhny¹nKŠNzxŞYË®išşûÉ ¢¢â˜xŞY
-şYâ6WEF–ÖV÷WBKŠ.ZK(i"h›îY¹îh˜iÈ‹ø~iÉşy¨B&WG'¢¢"â6öæf—&Õö7–æ2ZK‹J^KØb6WEF–ÖV÷WBK™şiÊ®ŠznXùûÈ†VFvR66^ûÈ¢ ¢¢YÎi{nj8iúR6VÆÅö6öæf—&Ö–ærx«nhûÉ®Zh.iéÎiÈYîKˆjÊhùKªN‹h^‹ør32‹ùYÊ‚6VÆÅö6öæf—&Ö–æ~ûÈÀ¢¢K‹¾Xª‹>KˆjÊ6öæf—&ÕGûÈÎk*zîŠêN[ŠznXù˜xŞŠù^8 ¢¢ğ¢ò¢ ¢¢c2ãBK‹¾Xª‹ÚîŠú.hÈK¹2Fö¶Vây¨BööÂ7FF^ûÈÎzé~X{®[Ù>X˜ŞZéîi{nK»~jÎ8 ¢¢KúîZHÒD”ÔTõUBK‹¾ZûÎ™zîš)ûÉ®[êîy¹[ˆW2Xh^Xúşˆ;Şk*iÈK»¾KÙ^ZIn˜:‚7v(i"&–6UG&6¶W"k‹ùÎKˆŞi»Nik ¢¢(i"k‹ùÎKˆŞŠznXùjÚ.y¸jÚ.hÙò(i"XZ˜:[Ë®[›>8 ¢ ¢¢ZéîxëûÉ®yJ‚W†V7WF÷"y¨BöæÆ–æU6F²y»Nhê^h¸’ööÂ7FF^ûÈÎK¸â&W6W'fW2zérÖ–B&–6^8 ¢¢š)xè~ûÉ®jøòööÅöÆÄ–çFW'fÄ×2›¹ŠêBS×2¢¢K¸^hÈK¹>iÉş™{N‹ÚîŠú.ûÈhÈK¹>K‹®z›®i{nKˆŞXù%>ûÈ¢¢ğ¢7–æ2÷öÆÅööÅ&–6W2‚’°¢–b‡F†—2ç÷6—F–öç2ç6—¦RÓÓÒ’&WGW&ã°¢–b‡F†—2å÷öÆÆ–ær’&WGW&ã²òò™‹.jÚ.Kˆ®Kˆ‹Úî‹ùk*‹yZèÀ¢F†—2å÷öÆÆ–ærÒG'VS°¢G'’°¢òòiKn™¸nh˜iÈ™ÈŠhiú^y¨B†Ö–çBÂööÄFG&W72’{¸NY€¢6öç7BVW&–W2ÒµÓ°¢f÷"†6öç7B÷2öbF†—2ç÷6—F–öç2çfÇVW2‚’’°¢–b‡÷2æW†—F–ær’6öçF–çVS²òòjÚ>YÊXÙny¨NKˆŞ™ÈŠhXhŞ‹ÚîŠú ¢6öç7BFö¶Vä–æfòÒF†—2çFö¶Vå&Vv—7G'’ævWEFö¶Vâ‡÷2æÖ–çB“°¢–b‚Fö¶Vä–æfóòçööÅöFG&W72’°¢òòc2ãrã#s¢Y®ŠÚn(	N(	Nk*iÈ’ööÅöFG&W72y¨NhÈK¹>iŠò.yèîK¹2.ûÈÎKŠNiÚK»~jÎ™;î‹zş˜;ŞYh.KˆŞK¨`¢–b‚÷2åöæõööÅv&æVB’°¢6öç6öÆRçv&â€¢µ÷6—F–öäÖævW%Ò)ªûˆò÷6—F–öâG·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ò†2æòööÅöFG&W72Â°¢6¶—–ær&–6RöÆÂ(	BG&–Æ–ær7F÷v–ÆÂäõBv÷&²f÷"F†—2÷6—F–öâÀ¢“°¢÷2åöæõööÅv&æVBÒG'VS°¢Ğ¢6öçF–çVS°¢Ğ¢VW&–W2çW6‚‡²Ö–çC¢÷2æÖ–çBÂööÄFG&W73¢Fö¶Vä–æfòçööÅöFG&W72ÂFV6–ÖÇ3¢Fö¶Vä–æfòæFV6–ÖÇ2óòbÒ“°¢Ğ¢–b‡VW&–W2æÆVæwF‚ÓÓÒ’&WGW&ã° ¢6öç7BÔ…ô44„UôtUôÕ2Ò²òò{É>ZÙ‹h^‹ørzy.ŠxnK‹®‹ø~iÉşûÈÆfÆÆ&6²X‹%0 ¢òò[›nŠÎh¸ûÈÎKˆŞ™‹¾Zà¢v—B&öÖ—6RæÆÂ€¢VW&–W2æÖ†7–æ2‡’Óâ°¢G'’°¢òòc2ãrã#s¢KÉXXK¸âööÅ7FFT66†RŠû¾{É>ZÙûÈyÈã“"R%>ûÈ¢òòKùŞhªC¢66†RÖ—72(i"fÆÆ&6²X‹xëiúR%>ûÈKùŞKØşZûiÊ®‹ù²†÷DÖ–çG2hÈK¹>y¨NXYÎ[©^ûÈ¢òòKùŞhªC#¢{É>ZÙZJ®izrƒã2’(i"fÆÆ&6²X‹xëiúR%>ûÈ˜şXXŞ‹ø~iÉşi[hÚî[ÛY8ÒG&–Æ–æ~ûÈ¢ÆWB&–6RÒçVÆÃ°¢6öç7B66†RÒF†—2æW†V7WF÷#òçööÅ7FFT66†S°¢–b†66†R’°¢6öç7B66†VE7FFRÒ66†RævWB‡çööÄFG&W72“°¢6öç7B66†TvRÒ66†RævWDvR‡çööÄFG&W72“°¢–b†66†VE7FFRbb66†TvRÓÒçVÆÂbb66†TvRÃÒÔ…ô44„UôtUôÕ2’°¢&–6RÒF†—2å÷&–6Tg&öÕ7FFR†66†VE7FFRÂæFV6–ÖÇ2“°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"çööÅöÆÄ66†T†—BrÂÂu÷6—F–öäÖævW"r“°¢Ğ¢Ğ¢òòfÆÆ&6³¢66†RÖ—72h‰n{É>ZÙZJ®izr(i"‹[%0¢–b‚&–6R’°¢&–6RÒv—BF†—2åöfWF6…ööÄÖ–E&–6R‡çööÄFG&W72ÂæFV6–ÖÇ2“°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"çööÅöÆÅ'4fÆÆ&6²rÂÂu÷6—F–öäÖævW"r“°¢Ğ¢–b‡&–6Rbb&–6Râ’°¢F†—2ç&–6UG&6¶W"çWFFR‡æÖ–çBÂ&–6RÂFFRææ÷r‚’ÂçööÄFG&W72“°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"çööÅöÆÄö²rÂÂu÷6—F–öäÖævW"r“°¢òòy»Nhê^j8iú^˜X{®ûÈÎKˆŞzØ’&–6UG&6¶W"K¨¾K»b(	BXxş[	[»n‹ùğ¢6öç7B–G2ÒF†—2æ'”Ö–çBævWB‡æÖ–çB“°¢–b‡–G2’°¢f÷"†6öç7B–Böb–G2’°¢F†—2åö6†V6´W†—B‡–BÂ&–6R“°¢Ğ¢Ğ¢Ğ¢Ò6F6‚†W'"’°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"çööÅöÆÄf–ÂrÂÂu÷6—F–öäÖævW"r“°¢Ğ¢Ò’À¢“°¢Òf–æÆÇ’°¢F†—2å÷öÆÆ–ærÒfÇ6S°¢Ğ¢Ğ ¢ò¢ ¢¢c2ãrã#s¢K¸âööÅ7FFT66†Ry¨B7FFRzé~K»~jÎûÈ{ªşXh^ZÙûÈÎ™»b%>ûÈ¢¢ğ¢÷&–6Tg&öÕ7FFR‡7FFRÂ&6TFV6–ÖÇ2’°¢–b‚7FFSòçööÄ&6TÖ÷VçBÇÂ7FFSòçööÅV÷FTÖ÷VçB’&WGW&âçVÆÃ°¢6öç7B&6U&rÒG—Vöb7FFRçööÄ&6TÖ÷VçBÓÓÒvö&¦V7Brbb7FFRçööÄ&6TÖ÷VçBçFõ7G&–æp¢òçVÖ&W"‡7FFRçööÄ&6TÖ÷VçBçFõ7G&–ær‚’’¢çVÖ&W"‡7FFRçööÄ&6TÖ÷VçB“°¢6öç7BV÷FU&rÒG—Vöb7FFRçööÅV÷FTÖ÷VçBÓÓÒvö&¦V7Brbb7FFRçööÅV÷FTÖ÷VçBçFõ7G&–æp¢òçVÖ&W"‡7FFRçööÅV÷FTÖ÷VçBçFõ7G&–ær‚’’¢çVÖ&W"‡7FFRçööÅV÷FTÖ÷VçB“°¢–b†&6U&rÃÒÇÂV÷FU&rÃÒ’&WGW&âçVÆÃ°¢&WGW&â‡V÷FU&ròS’’ò†&6U&ròÖF‚ç÷rƒÂ&6TFV6–ÖÇ2’“°¢Ğ ¢ò¢ ¢¢K¸âööÂy¨B&W6W'fW2zérÖ–B&–6RÒV÷FU&W6W'fRò&6U&W6W'f^ûÈhÈ’FV6–ÖÇ2‹>i[NûÈ¢¢yJ‚W†V7WF÷"[{.Xª‹ÛŞy¨BöæÆ–æU6F¾ûÈ†fÆÆ&6³¢K¸R66†RÖ—72i{n‹>yJûÈ¢¢ğ¢7–æ2öfWF6…ööÄÖ–E&–6R‡ööÄFG&W72Â&6TFV6–ÖÇ2’°¢–b‚F†—2æW†V7WF÷"æöæÆ–æU6F²ÇÂF†—2æW†V7WF÷"æ¶W——"’&WGW&âçVÆÃ°¢6öç7B²V&Æ–4¶W’ÒÒ&WV—&R‚t6öÆæ÷vV#2æ§2r“°¢6öç7BööÄ¶W’ÒæWrV&Æ–4¶W’‡ööÄFG&W72“°¢6öç7B7FFRÒv—BF†—2æW†V7WF÷"æöæÆ–æU6F²ç7v6öÆæ7FFR‡ööÄ¶W’ÂF†—2æW†V7WF÷"æ¶W——"çV&Æ–4¶W’“°¢–b‚7FFRÇÂ7FFRçööÄ&6TÖ÷VçBÇÂ7FFRçööÅV÷FTÖ÷VçB’&WGW&âçVÆÃ° ¢òòçVÖ&W"{+î[ªnZû[şK»~jÎZIşyJûÈ‡6ÖÆÂfÆöG>ûÈûÈÎKˆŞyJ‚&–t–çB™š@¢6öç7B&6U&rÒçVÖ&W"‡7FFRçööÄ&6TÖ÷VçBçFõ7G&–ær‚’“°¢6öç7BV÷FU&rÒçVÖ&W"‡7FFRçööÅV÷FTÖ÷VçBçFõ7G&–ær‚’“°¢–b†&6U&rÃÒÇÂV÷FU&rÃÒ’&WGW&âçVÆÃ° ¢òòÖ–E÷&–6RÒ‡V÷FRòS’’ò†&6Ròæ&6TFV6–ÖÇ2¢òòÒV÷FR¢æ&6TFV6–ÖÇ2ò†&6R¢S’¢6öç7B&–6RÒ‡V÷FU&ròS’’ò†&6U&ròÖF‚ç÷rƒÂ&6TFV6–ÖÇ2’“°¢&WGW&â&–6S°¢Ğ ¢7–æ2÷&V6öæ6–ÆU&WG&–W2‚’°¢–b‡F†—2å÷&V6öæ6–Æ–ær’&WGW&ã²òò™‹.jÚ.Kˆ®Kˆ‹Úî‹ùk*‹yZèÎûÈÎik‹Úî[Y
-şXª€¢F†—2å÷&V6öæ6–Æ–ærÒG'VS°¢G'’°¢v—BF†—2å÷&V6öæ6–ÆU&WG&–W4–ææW"‚“°¢Òf–æÆÇ’°¢F†—2å÷&V6öæ6–Æ–ærÒfÇ6S°¢Ğ¢Ğ ¢7–æ2÷&V6öæ6–ÆU&WG&–W4–ææW"‚’°¢6öç7Bæ÷rÒFFRææ÷r‚“°¢6öç7BGVRÒF†—2çG&FTÆövvW"ævWDGVUVæF–æu&WG&–W2†æ÷r“° ¢f÷"†6öç7B&÷röbGVR’°¢6öç7B÷2ÒF†—2ç÷6—F–öç2ævWB‡&÷rç÷6—F–öåö–B“°¢–b‚÷2’6öçF–çVS²òò[{.Š*¾XŠ™š@ ¢òò‹{>‹ør7GV6²y¨NûÈKˆŞXhŞˆz®Xª˜xŞŠù^ûÈÎzØK«®[z^[›.š(NûÈ¢–b‡&÷rç7FGW2ÓÓÒw7GV6²rÇÂ÷2ç7FGW2ÓÓÒw7GV6²r’6öçF–çVS° ¢òò6VÆÅö6öæf—&Ö–æ~ûÉ®‹ùYÊzØ™;îKˆ®zîŠêNûÉ¾Xú®iÈ’Æ7E÷&WG'•öB[{.{¸ş‹h^‹ør32h˜ŞK‹¾Xª˜xŞŠùP¢–b‡&÷rç7FGW2ÓÓÒw6VÆÅö6öæf—&Ö–ærr’°¢6öç7BÆ7E&WG'’Ò&÷ræÆ7E÷&WG'•öBÇÂ°¢–b†æ÷rÒÆ7E&WG'’Â3ó’6öçF–çVS° ¢òò[{.{¸ò32²k*Xª™ÙûÈÎK‹¾Xª‚6öæf—&ÕG‚KˆjÊ¢6öç7B6–rÒ&÷rçVæF–æu÷6VÆÅ÷6–væGW&RÇÂ÷2åöÆ7E6VÆÅ6–væGW&S°¢–b‡6–r’°¢6öç7B&W7VÇBÒv—BF†—2æW†V7WF÷"æ6öæf—&ÕG‚‡6–rÂ²F–ÖV÷WD×3¢3ÂöÆÄ–çFW'fÄ×3¢SÒ“°¢–b‡&W7VÇBæ6öæf—&ÖVB’°¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"ç&V6öæ6–ÆW$6öæf—&ÖVBrÂÂu÷6—F–öäÖævW"r“° ¢òòc2ãrKúîZHÒäÂ'V~ûÉ ¢òòK˜¾X˜ŞyJ‚÷2æVçG'•&–6RKÙÎK‹¢W†—E&–6RXÚKØÒ(i"öf–æÆ—¦U7V66W72˜xÂW†—E6öÀ¢òò˜XÉnK‹¢Fö¶VäÖ÷VçB¢VçG'•&–6RÒVçG'•6öÂ(i"XxäÂ(˜‚ÖfVU6öÎûÈŠúşi‹îzK®K¨şhÙşûÈ8 ¢òòxëYÊK¸î™;îKˆ¢fWF6‚yÉşZéâ4ôÂiKnXZ^ûÈÎhÈyÉşZéîh‰KªNK»~Y¹îXi8 ¢ÆWBW†—E&–6RÒ÷2æVçG'•&–6S°¢ÆWB6öÄ÷WBÒçVÆÃ°¢G'’°¢6öç7B7vÒv—BF†—2æW†V7WF÷"æfWF6…G…7v&W7VÇB‡6–rÂ÷2æÖ–çB“°¢òò4TÄÂy¨B&VÅ6öÄFVÇFiŠşjÚ>i[ûÈ™+XÈR4ôÂZ)îXªûÈûÈÎ™Èâh˜ŞiÈiX€¢–b‡7vbb7vç&VÅ6öÄFVÇFâbb÷2çFö¶VäÖ÷VçBâ’°¢6öÄ÷WBÒ7vç&VÅ6öÄFVÇF°¢W†—E&–6RÒ6öÄ÷WBò÷2çFö¶VäÖ÷VçC°¢òòYÎi{n{JşXª4TÄÂG‚y¨B&6RfV^ûÈ‡&–÷&—G’fVR[{.XÈ^Y
-¾YÊ‚&VÅ6öÄFVÇF˜xÎûÈ¢–b‡7væfVRbb÷2å÷&V6öæ6–ÆW%6VÆÄfVT66÷VçFVB’°¢òò&VÅ6öÄFVÇF[{.{¸şhš>‹ør&–÷&—G’fVR²&6RfV^ûÉ¾‹ù˜xÎKˆŞXhŞXúXª ¢òòûÈ˜şXXŞXøÎ˜xŞhš>XxşûÈ¢÷2å÷&V6öæ6–ÆW%6VÆÄfVT66÷VçFVBÒG'VS°¢Ğ¢6öç6öÆRæÆör€¢µ÷6—F–öäÖævW%Ò	ùHB&V6öæ6–ÆW"f÷VæBÆæFVB6VÆÃ¢G·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—ÒÂ°¢6öÄ÷WCÒG·6öÄ÷WBçFôf—†VBƒB—Ò4ôÂÂW†—E&–6SÒG¶W†—E&–6RçFôW‡öæVçF–ÂƒB—ÖÀ¢“°¢ÒVÇ6R°¢6öç6öÆRçv&â€¢µ÷6—F–öäÖævW%Ò	ùHB&V6öæ6–ÆW"f÷VæBÆæFVB6VÆÃ¢G·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—ÒÂ°¢KØbfWF6…G…7v&W7VÇBh»şKˆŞX‹&VÅ6öÄFVÇF(	BfÆÆ&6²yJ‚VçG'•&–6RXÚKØŞûÈ…äÂ[nKˆŞXxnûÈ–À¢“°¢Ğ¢Ò6F6‚†W'"’°¢Ööæ—F÷"ç&V6÷&DW'&÷"‚u÷6—F–öäÖævW"rÂW'"Â°¢†6S¢w&V6öæ6–ÆW%öfWF6…÷7vrÀ¢Ö–çC¢÷2æÖ–çBÀ¢6–væGW&S¢6–rÀ¢Ò“°¢Ğ ¢F†—2åöf–æÆ—¦U7V66W72‡÷2ÂW†—E&–6RÂ6öÄ÷WBÂ6–rÂçVÆÂ“²òòc2ãrãC3¢&V6öæ6–ÆW"F‚Âæò7GVÅ6VÆÄÖ÷Vç@¢6öçF–çVS°¢Ğ¢Ğ¢òòk*zîŠêNûÈÎŠznXù˜xŞŠùP¢Ööæ—F÷"æ–æ2‚u÷6—F–öäÖævW"ç&V6öæ6–ÆW%&WG&–VBrÂÂu÷6—F–öäÖævW"r“°¢Ğ ¢òò6VÆÅ÷VæF–æ~ûÈiˆîzîzØ[è^˜xŞŠù^ûÈûÉ®y»Nhê^ŠznXù¢6öç7BÆFW7E&–6RÒF†—2ç&–6UG&6¶W"ævWE&–6R‡÷2æÖ–çB’ÇÂ÷2æVçG'•&–6S°¢6öç6öÆRæÆör€¢µ÷6—F–öäÖævW%Ò	ùHB&V6öæ6–ÆW"&WG'––ærG·÷2ç7–Ö&öÂÇÂ÷2æÖ–çBç6Æ–6RƒÂb—Ò°¢‡7FGW3ÒG·&÷rç7FGW7ÒÂGFV×G3ÒG·÷2ç6VÆÄGFV×G7Ò–À¢“°¢òòKˆÒv—NûÈÎŠêZI®KŠ¢&WG'’[›nŠÎûÈKØnYÎKˆ÷2KˆŞKÉ®[›nXùûÈÎYºK‹¢7FGW2ZÙ~jëR²Æö6¾ûÈ¢F†—2åöGFV×E6VÆÂ‡÷2ÂÆFW7E&–6R’æ6F6‚‚†W'"’Óâ°¢Ööæ—F÷"ç&V6÷&DW'&÷"‚u÷6—F–öäÖævW"rÂW'"Â°¢†6S¢w&V6öæ6–ÆW%÷&WG'’rÀ¢Ö–çC¢÷2æÖ–çBÀ¢Ò“°¢Ò“°¢Ğ¢Ğ§Ğ ¦ÖöGVÆRæW‡÷'G2Ò÷6—F–öäÖævW#° 
+        entryPrice: row.entry_price,
+        tokenAmount: row.token_amount,
+        openedAt: row.opened_at,
+        dryRun: !!row.dry_run,
+        buySignature: row.buy_signature,
+        buySlot: row.buy_slot || 0,  // v3.17.11: æ¢å¤æ—¶å¯èƒ½æ²¡æœ‰ buySlot
+        dumpSlot: row.dump_slot || 0, // v3.17.19: æ¢å¤æ—¶å¯èƒ½æ²¡æœ‰ dumpSlot
+        exiting: false,
+        sellAttempts: row.sell_attempts || 0,
+        // åŒç¡®è®¤çŠ¶æ€
+        _tpConfirmCount: 0,
+        _tpFirstTriggerTs: null,
+        // v3.3: é‡è¯•ç›¸å…³
+        status: row.status || 'open',
+        exitReason: row.exit_intent || row.exit_reason || null,
+        nextRetryAt: row.next_retry_at || null,
+        _lastSellSignature: row.pending_sell_signature || null,
+        // v3.17: trailing å­—æ®µ
+        // v3.17.21: ä» DB æ¢å¤ peak_priceï¼Œé¿å…é‡å¯ä¸¢å¤±é«˜ç‚¹
+        highWaterMark: row.peak_price > 0 ? row.peak_price : row.entry_price,
+        highWaterMarkTs: row.peak_ts || Date.now(),
+        // v3.17.27: æœ‰ peak_price æ—¶æ ¹æ®å·²æ¢å¤çš„ HWM é‡æ–°è¯„ä¼° trailingArmed
+        //   é¿å…é‡å¯ååˆè¦é‡æ–°æ¶¨8%æ‰èƒ½æ¿€æ´»ï¼ˆä¹‹å‰çš„é«˜ç‚¹ç™½æ”’äº†ï¼‰
+        //   v3.20: ä½¿ç”¨ DB ä¸­çš„ pre_vol_5m_pct å†³å®š activate é˜ˆå€¼
+        trailingArmed: (() => {
+          if (!row.peak_price || row.peak_price <= 0) return false;
+          const activatePct = config.strategy.trailingActivatePct || 0;
+          if (activatePct <= 0) return false;
+          const peakPnlPct = ((row.peak_price - row.entry_price) / row.entry_price) * 100;
+          return peakPnlPct >= activatePct;
+        })(),
+        // v3.17.28: æ¢å¤ armedHwmï¼Œç¡®ä¿é‡å¯å trailing drawdown è®¡ç®—æ­£ç¡®
+        _armedHwm: (() => {
+          if (!row.peak_price || row.peak_price <= 0) return undefined;
+          const activatePct = config.strategy.trailingActivatePct || 0;
+          if (activatePct <= 0) return undefined;
+          const peakPnlPct = ((row.peak_price - row.entry_price) / row.entry_price) * 100;
+          return peakPnlPct >= activatePct ? row.peak_price : undefined;
+        })(),
+        _armedHwmTs: row.peak_ts || undefined,
+        // v3.17.6: é‡å¯æ—¶ä¹Ÿè¿›å…¥ stabilization æœŸ
+        //   é¿å…é‡å¯åç¬¬ä¸€ä¸ª tick æ‹¿åˆ°çš„å‰§çƒˆæ³¢åŠ¨ä»·æ ¼æ±¡æŸ“ HWM
+        // v3.17.21: å¦‚æœå·²æœ‰ peak_priceï¼ˆæŒä»“æœŸé—´æ¶¨è¿‡ï¼‰ï¼Œè·³è¿‡ stabilization
+        //   æ—§æŒä»“é‡å¯åä¸åº”é‡è·‘ stabilizationï¼Œå¦åˆ™ HWM ä¼šè¢«é‡ç½®åˆ°ä½äºçœŸå®å³°å€¼
+        stabilizing: !row.peak_price || row.peak_price <= 0,
+        reconciledAt: Date.now(),
+        _stabilizeSamples: [],
+        // æ¢å¤æ—¶å·²ç» reconciledï¼ˆDB é‡Œçš„ entryPrice å·²ç»æ˜¯çœŸå®æˆäº¤ä»·ï¼‰
+        reconciled: true,
+        // v3.20: ä»DBæ¢å¤ä¹°å…¥å‰æ³¢åŠ¨ç‡
+        preVol5m: row.pre_vol_5m_pct ?? null,
+        rangeSupport: row.range_support ?? null,
+        // EMA ç­–ç•¥ï¼šä» DB æŒä¹…åŒ–å­—æ®µæ¢å¤ï¼ˆä¸å†é ç¯å¢ƒå˜é‡æ¨æ–­ï¼‰
+        isEmaStrategy: false,  // EMA removed
+        isAddOn: !!row.is_addon,
+      };
+      // å·²ç»åœ¨ sell flow ä¸­ï¼šæ ‡è®° exiting=true é˜²æ­¢é‡æ–°è§¦å‘ _exit
+      if (pos.status === 'sell_pending' || pos.status === 'sell_confirming') {
+        pos.exiting = true;
+      }
+      this.positions.set(pos.positionId, pos);
+      this._addByMint(pos.mint, pos.positionId);
+      // v3.17.22: æ¢å¤çš„æŒä»“ä¹ŸåŠ å…¥ hotMints (isPosition=true â†’ 500ms åˆ·æ–°)
+      const tokenInfo = this.tokenRegistry.getToken(pos.mint);
+      if (tokenInfo?.pool_address && this.executor?.poolStateCache) {
+        this.executor.poolStateCache.addHot(pos.mint, tokenInfo.pool_address, true);
+      }
+      restored.push(pos);
+      const statusBadge = pos.status === 'open' ? '' : ` [status=${pos.status}, attempts=${pos.sellAttempts}]`;
+      console.log(
+        `[PositionManager] ğŸ”„ RESTORED ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `opened ${Math.round((Date.now() - pos.openedAt) / 1000)}s ago, ` +
+          `${(pos.tokenAmount ?? 0).toFixed(2)} tokens${statusBadge}`,
+      );
+    }
+    monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+    return restored;
+  }
+
+  /**
+   * BUY æˆåŠŸåç”± main æµç¨‹è°ƒç”¨ã€‚
+   * @param {object} p
+   * @param {string} [p.positionId] - å¿…é¡»ä¼ ï¼Œä¸ BUY trade åŒ ID
+   * @param {string} p.mint
+   * @param {string} p.symbol
+   * @param {number} p.entrySol - çœŸå®ä»˜å‡ºçš„ SOLï¼ˆå«æ»‘ç‚¹å’Œ fee æŸè€—ï¼‰
+   * @param {number} p.entryPrice - çœŸå®æˆäº¤ä»· = entrySol / tokenAmount
+   * @param {number} p.tokenAmount - çœŸå®ä¹°åˆ°çš„ token UI amount
+   * @param {boolean} p.dryRun
+   * @param {string} p.signature
+   * @param {number} [p.buyFeeLamports] - BUY tx çš„ priority fee + base fee (lamports)
+   */
+  registerOpen({ positionId, mint, symbol, entrySol, entryPrice, tokenAmount, dryRun, signature, buyFeeLamports, buySlot, dumpSlot, entryFdv, entryPoolSol, entryLiquidity, sellCount10s, totalSellSol10s, mintAgeAtBuySec, rsiPreDump, rsi1sPreDump, rsi30sPreDump, isEmaStrategy = false, isAddOn = false }) {
+    const pid = positionId || crypto.randomUUID();
+    const pos = {
+      positionId: pid,
+      mint,
+      symbol,
+      entrySol,
+      entryPrice,
+      tokenAmount,
+      openedAt: Date.now(),
+      dryRun: !!dryRun,
+      buySignature: signature,
+      buyFeeLamports: buyFeeLamports || 0,  // v3.4: çœŸå®æˆæœ¬
+      sellFeeLamports: 0,                    // å–å‡ºæ—¶ç´¯åŠ ï¼ˆåŒ…æ‹¬æ‰€æœ‰é‡è¯•çš„ feeï¼‰
+      buySlot: buySlot || 0,                // v3.17.11: BUY æ—¶çš„é“¾ä¸Š slot
+      dumpSlot: dumpSlot || 0,              // v3.17.19: ç ¸å•çš„é“¾ä¸Š slot (ç”¨äºè®¡ç®— BUY è½é“¾é¢†å…ˆå‡ ä¸ª slot)
+      exiting: false,
+      sellAttempts: 0,
+      _tpConfirmCount: 0,
+      _tpFirstTriggerTs: null,
+      // v3.12: ç­‰ _reconcileBuyAsync å®Œæˆæ‰å…è®¸è§¦å‘ exitï¼›é˜²æ­¢ç”¨é”™çš„ entryPrice è¯¯åˆ¤ PnL
+      // DRY_RUN ä¸èµ° reconcileï¼Œç›´æ¥æ ‡ true
+      reconciled: !!dryRun,
+      // v3.17: ç§»åŠ¨æ­¢ç›ˆè¿½è¸ª
+      highWaterMark: entryPrice,
+      highWaterMarkTs: Date.now(),
+      trailingArmed: false,
+      // v3.17.6: stabilization æœŸ
+      //   DRY_RUNï¼šå¼€ä»“å³è¿›å…¥ stabilization(ç”¨ä¼°ç®—ä»·æ ¼ä½œèµ·ç‚¹)
+      //   LIVEï¼šreconcile å®Œæˆæ—¶è¿›å…¥ stabilization
+      stabilizing: !!dryRun,
+      reconciledAt: dryRun ? Date.now() : null,
+      _stabilizeSamples: dryRun ? [] : null,
+      // v3.20: ä¹°å…¥å‰æ³¢åŠ¨ç‡ â€” åŒæ­¥è®¡ç®—(ç”¨ RsiCalculator çš„å†…å­˜æ•°æ®ï¼Œé¿å…å¼‚æ­¥ç«æ€ä¸¢å¤±)
+      preVol5m: null,
+      rangeSupport: null,  // v3.23: range stop support line
+      // EMA ç­–ç•¥æ ‡è®°
+      isEmaStrategy,
+      isAddOn,
+    };
+    this.positions.set(pid, pos);
+    this._addByMint(mint, pid);
+
+    // v3.26: æ ‡è®°æŒä»“ä»£å¸ â€” PriceTracker å¯¹æŒä»“ä»£å¸ç”¨æ›´å®½æ¾çš„è·³å˜é˜ˆå€¼
+    if (this.priceTracker) {
+      this.priceTracker.markPosition(mint, true);
+    }
+
+    // v3.17.42: åŒæ­¥è®¡ç®—ä¹°å…¥å‰æ³¢åŠ¨ç‡ â€” ä¹‹å‰æ˜¯ asyncï¼Œç«æ€æ¡ä»¶ä¸‹ position å¯èƒ½å·²å…³é—­å¯¼è‡´å†™ä¸¢å¤±
+    this._computePreVol5mSync(pid, mint, pos.openedAt);
+    // v3.23: compute range support for range-based stop-loss
+    this._computeRangeSupport(pid, mint, pos.openedAt);
+
+    // v3.17.22: æŒä»“ä¸­ â†’ åŠ å…¥ hotMints (isPosition=true â†’ 500ms åˆ·æ–°)
+    const tokenInfo = this.tokenRegistry.getToken(mint);
+    if (tokenInfo?.pool_address && this.executor?.poolStateCache) {
+      this.executor.poolStateCache.addHot(mint, tokenInfo.pool_address, true);
+    } else if (!tokenInfo?.pool_address) {
+      // v3.17.27: å‘Šè­¦â€”â€”æ²¡æœ‰ pool_address çš„æŒä»“æ˜¯"çä»“"
+      console.warn(
+        `[PositionManager] âš ï¸ OPEN ${symbol || mint.slice(0, 6)} has no pool_address in tokenRegistry â€” ` +
+        `trailing stop will NOT work! Pool info may still be loading.`,
+      );
+    }
+
+    try {
+      this.tradeLogger.openPosition({
+        positionId: pid,
+        mint,
+        symbol,
+        openedAt: pos.openedAt,
+        entrySol,
+        entryPrice,
+        tokenAmount,
+        dryRun: !!dryRun,
+        buySignature: signature,
+        buyFeeLamports: pos.buyFeeLamports,
+        buySlot: pos.buySlot,                 // v3.17.19: ä¹‹å‰æ²¡ä¼ ,SQLite ä¸€ç›´æ˜¯ 0
+        dumpSlot: pos.dumpSlot,                // v3.17.19: æ–°å¢
+        entryFdv: entryFdv ?? null,            // v3.17.21: ä¹°å…¥ç¬é—´ FDV
+        entryPoolSol: entryPoolSol ?? null,     // v3.17.21: ä¹°å…¥ç¬é—´æ± å­ SOL
+        entryLiquidity: entryLiquidity ?? null, // v3.17.21: ä¹°å…¥ç¬é—´æµåŠ¨æ€§ USD
+        sellCount10s: sellCount10s ?? null,     // v3.17.36: è¿ç¯æ‹”å›æµ‹
+        totalSellSol10s: totalSellSol10s ?? null, // v3.17.36: è¿ç¯æ‹”å›æµ‹
+        mintAgeAtBuySec: mintAgeAtBuySec ?? null, // v3.17.39: é¦–ä¿¡å·åˆ°ä¹°å…¥ç§’æ•°
+        rsiPreDump: rsiPreDump ?? null,           // v3.17.38: ç ¸å•å‰ RSI5s
+        rsi1sPreDump: rsi1sPreDump ?? null,       // v3.17.38: ç ¸å•å‰ RSI1s
+        rsi30sPreDump: rsi30sPreDump ?? null,     // v3.17.42: ç ¸å•å‰ RSI30s
+        isEmaStrategy: 0,  // EMA removed (v3.30: EMAç­–ç•¥æ ‡è®°æŒä¹…åŒ–)
+        isAddOn: isAddOn ? 1 : 0,                 // v3.30: åŠ ä»“æ ‡è®°æŒä¹…åŒ–
+      });
+    } catch (dbErr) {
+      console.error(`[PositionManager] âŒ openPosition DB write FAILED for ${symbol || mint.slice(0,6)}: ${dbErr.message}`);
+    }
+
+    // v3.17.19: log slot lag (ç ¸å• â†’ BUY è½é“¾ç›¸å·®å‡ ä¸ª slot, 0 = åŒ slot æŠ¢å…¥)
+    // âš ï¸ æ³¨æ„ï¼šæ­¤æ—¶ buySlot æ˜¯æäº¤å‰çš„ latestSlotï¼Œä¸æ˜¯çœŸå®è½é“¾ slot
+    //    çœŸå® lag åœ¨ _reconcileBuyAsync å®Œæˆåæ‰“å°
+    if (pos.dumpSlot > 0 && pos.buySlot > 0) {
+      const slotLag = pos.buySlot - pos.dumpSlot;
+      console.log(
+        `[PositionManager] ğŸ“ˆ OPEN ${symbol || mint.slice(0, 6)} @ ${entryPrice.toExponential(4)}, ` +
+          `${tokenAmount.toFixed(2)} tokens, ${entrySol.toFixed(4)} SOL ` +
+          `(dump_slot=${pos.dumpSlot}, buy_slot=${pos.buySlot}, lag=${slotLag} slot${slotLag === 0 ? ' âš¡ SAME-SLOT' : ''})`,
+      );
+    } else {
+      console.log(
+        `[PositionManager] ğŸ“ˆ OPEN ${symbol || mint.slice(0, 6)} @ ${entryPrice.toExponential(4)}, ` +
+          `${tokenAmount.toFixed(2)} tokens, ${entrySol.toFixed(4)} SOL`,
+      );
+    }
+
+    monitor.inc('PositionManager.opened', 1, 'PositionManager');
+    monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+    this.emit('opened', pos);
+
+    // v3.6: å¼‚æ­¥ç­‰é“¾ä¸Šç¡®è®¤å¹¶ç”¨çœŸå®æ•°æ®ä¿®æ­£ position
+    // è¿™æ˜¯å…³é”® PnL å‡†ç¡®æ€§ä¿®å¤ï¼šsizeSol æ˜¯é…ç½®å€¼ï¼ˆå¦‚ 3.0ï¼‰ï¼Œä½†å®é™…é“¾ä¸ŠèŠ±è´¹å¯èƒ½æ˜¯ 2.6
+    // SDK çš„ buyQuoteInput æŠŠ quote å½“ maxï¼›slippage è®©é“¾ä¸Šä»¥æ›´ä¼˜ä»·æ ¼æˆäº¤ï¼Œå°‘èŠ±ä¸€äº› SOL
+    if (!dryRun && signature && !signature.startsWith('DRYRUN')) {
+      this._reconcileBuyAsync(pid, mint, signature).catch((err) => {
+        monitor.recordError('PositionManager', err, {
+          phase: 'reconcile_buy',
+          mint,
+          signature,
+        });
+      });
+
+      // v3.17.9: reconcile watchdog â€”â€” å…œåº•æœºåˆ¶
+      //   èƒŒæ™¯:openclaw å®æˆ˜å‘ç° 1 ç¬” BUY é“¾ä¸Š ProgramFailedToComplete,
+      //         token æ²¡åˆ°è´¦,ä½† status ä¸€ç›´åœåœ¨ open(è®¤ä¸ºä¹°æˆåŠŸ)ã€‚
+      //         ç†è®ºä¸Š _reconcileBuyAsync åº”è¯¥æ£€æµ‹åˆ° confirmed=false å¹¶å…³é—­ position,
+      //         ä½†å®æˆ˜ä¸­å­˜åœ¨å¼‚å¸¸è·¯å¾„å¯¼è‡´ reconcile æ²¡æ­£å¸¸å·¥ä½œ:
+      //           - setImmediate / Promise å¼‚å¸¸è¢«å(å·² catch ä½†å®é™…å¯èƒ½æ²¡è§¦å‘)
+      //           - confirmTx å†…éƒ¨ RPC é•¿æœŸé˜»å¡(>60s)
+      //           - getSignatureStatuses å¯¹å¤±è´¥ tx è¿”å› null,poll åˆ°è¶…æ—¶(8s)ç„¶åæ­£å¸¸å…³é—­
+      //             ä½†æç«¯æƒ…å†µä¸‹ poll å¼‚å¸¸ â†’ reconcile é€€å‡ºä½†æ²¡æ ‡è®°
+      //   å…œåº•:å¼€ä»“å 60 ç§’ watchdog
+      //         å¦‚æœ position ä»å­˜åœ¨ AND reconciled=false â†’ å¼ºåˆ¶æŒ‰"BUY chain failed"å¤„ç†
+      //         (60s è¿œå¤§äºæ­£å¸¸ reconcile å®Œæˆæ—¶é—´ 1-3s,æ­£å¸¸è·¯å¾„ä¸ä¼šè§¦å‘)
+      const watchdogTimer = setTimeout(async () => {
+        const p = this.positions.get(pid);
+        if (p && !p.reconciled && !p.exiting) {
+          // v3.17.13: å…ˆæŸ¥é’±åŒ…ä½™é¢ â€” å¯èƒ½ confirmTx è¶…æ—¶ä½†ä¹°å…¥å®é™…æˆåŠŸäº†
+          const walletBalance = await this.executor.getWalletTokenBalance(mint).catch(() => 0);
+          if (walletBalance > 0) {
+            // ä¹°å…¥æˆåŠŸï¼Œåªæ˜¯ reconcile æ²¡å®Œæˆ
+            console.warn(
+              `[PositionManager] âš ï¸ reconcile watchdog: ${p.symbol || mint.slice(0, 6)} ` +
+                `still un-reconciled after 60s but wallet has ${walletBalance} tokens â†’ treating as BUY success`,
+            );
+            p.reconciled = true;
+            p.reconciledAt = Date.now();
+            p.stabilizing = true;
+            p._stabilizeSamples = [];
+            if (p._reconcileWatchdog) {
+              clearTimeout(p._reconcileWatchdog);
+              p._reconcileWatchdog = null;
+            }
+            monitor.inc('PositionManager.reconcileWatchdogRecovered', 1, 'PositionManager');
+            return;
+          }
+
+          console.error(
+            `[PositionManager] âš ï¸ reconcile watchdog: ${p.symbol || mint.slice(0, 6)} ` +
+              `still un-reconciled after 60s, no tokens in wallet â†’ forcing BUY_CHAIN_FAILED`,
+          );
+          monitor.inc('PositionManager.reconcileWatchdog', 1, 'PositionManager');
+          const feeSol = ((p.buyFeeLamports || 0) + 5000) / 1e9;
+          try {
+            this.tradeLogger.closePosition(pid, {
+              closedAt: Date.now(),
+              exitPrice: p.entryPrice,
+              exitSol: 0,
+              pnlSol: -feeSol,
+              pnlPct: -100,
+              exitReason: 'BUY_RECONCILE_TIMEOUT',
+              sellSignature: null,
+            });
+          } catch (err) {
+            monitor.recordError('PositionManager', err, { phase: 'watchdog_close' });
+          }
+          this.positions.delete(pid);
+          this._removeByMint(mint, pid);
+          // v3.17.21: BUY reconcile è¶…æ—¶ â†’ ä» hotMints ç§»é™¤
+          if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(mint);
+          monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+        }
+      }, 60_000);
+      if (watchdogTimer.unref) watchdogTimer.unref();
+      pos._reconcileWatchdog = watchdogTimer;
+    }
+    return pos;
+  }
+
+  /**
+   * v3.6: BUY æäº¤åå¼‚æ­¥ç­‰é“¾ä¸Šç¡®è®¤ï¼Œç”¨çœŸå® SOL å‡ºè´¦ / çœŸå® token å…¥è´¦ ä¿®æ­£ position
+   * è§£å†³ BUY å®é™…èŠ±è´¹ â‰  é…ç½® sizeSol çš„é—®é¢˜ï¼ˆå…¸å‹åå·® 5-15%ï¼‰
+   */
+  async _reconcileBuyAsync(positionId, mint, signature) {
+    // v3.7: ç­‰ 1 ç§’è®© tx è½é“¾ï¼ˆBUY é€šå¸¸ 400-800ms è½é“¾ï¼Œ1s æ˜¯åˆç†åˆå§‹å»¶è¿Ÿï¼‰
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // çŸ­è¶…æ—¶ç¡®è®¤ï¼ˆconfirmTx å†…éƒ¨ pollï¼Œæœ€å¤š 15 ç§’ï¼‰
+    // v3.17.14: ä» 8s æåˆ° 15sï¼Œä¸‰è·¯ race å tx å¯èƒ½èµ°æ…¢é€šé“éœ€è¦æ›´é•¿æ—¶é—´è½é“¾
+    let result = await this.executor.confirmTx(signature, {
+      timeoutMs: 15_000,
+      pollIntervalMs: 500,
+    });
+
+    const pos = this.positions.get(positionId);
+    if (!pos) return; // position å·²è¢«å¤–éƒ¨æ¸…ç†
+
+    // v3.17.14: confirmTx è¶…æ—¶è¿”å› not_landed æ—¶ï¼Œå…ˆæŸ¥é’±åŒ…ä½™é¢åšäºŒæ¬¡éªŒè¯
+    // å®æˆ˜å‘ç°ï¼šä¸‰è·¯ race å tx å¯èƒ½èµ°æ…¢é€šé“ï¼Œ>15s æ‰ç¡®è®¤ä½†å®é™…å·²ä¸Šé“¾
+    // ç›´æ¥åˆ¤æ­»ä¼šå¯¼è‡´ï¼šé’±åŒ…æœ‰ token ä½† position è¢«å…³é—­ â†’ token å¡æ­»æ— æ³•å–å‡º
+    if (!result.confirmed) {
+      const walletBalance = await this.executor.getWalletTokenBalance(mint);
+      if (walletBalance > 0) {
+        console.log(
+          `[PositionManager] âš ï¸ confirmTx timeout but wallet has ${walletBalance} tokens ` +
+            `â†’ treating as confirmed (slow channel)`,
+        );
+        result = { confirmed: true, slot: null };
+      }
+    }
+
+    // ============ åˆ†æ”¯ A: BUY tx é“¾ä¸Šå¤±è´¥ ============
+    if (!result.confirmed) {
+      monitor.inc('PositionManager.buyChainFail', 1, 'PositionManager');
+      const errMsg = result.error || 'not_landed';
+      console.error(
+        `[PositionManager] âš ï¸ BUY tx FAILED on chain: ${pos.symbol || mint.slice(0, 6)} ` +
+          `sig=${signature.slice(0, 8)}.. error=${errMsg}`,
+      );
+
+      // çœŸå®æŸå¤± = å·²ä»˜ priority fee + base feeï¼ˆé“¾ä¸Š tx å¤±è´¥ä¹Ÿæ‰£ feeï¼‰
+      // æ²¡ä¹°åˆ° tokenï¼Œæ‰€ä»¥ exitSol = 0, tokenAmount åº”è¯¥æ˜¯ 0
+      const feeSol = ((pos.buyFeeLamports || 0) + 5000) / 1e9;
+
+      this.tradeLogger.closePosition(positionId, {
+        closedAt: Date.now(),
+        exitPrice: pos.entryPrice,
+        exitSol: 0,
+        pnlSol: -feeSol, // ä»…æŸå¤± fee
+        pnlPct: -100,
+        exitReason: 'BUY_CHAIN_FAILED',
+        sellSignature: null,
+      });
+
+      this.positions.delete(positionId);
+      this._removeByMint(mint, positionId);
+      // v3.17.21: BUY å¤±è´¥ â†’ ä» hotMints ç§»é™¤
+      if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(mint);
+      monitor.inc('PositionManager.buyFailedClosed', 1, 'PositionManager');
+      monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+      monitor.recordError('PositionManager', new Error('BUY chain failed'), {
+        mint,
+        symbol: pos.symbol,
+        signature,
+        error: errMsg,
+      });
+      // v3.17.9: æ¸… watchdog
+      if (pos._reconcileWatchdog) {
+        clearTimeout(pos._reconcileWatchdog);
+        pos._reconcileWatchdog = null;
+      }
+      this.emit('buyChainFailed', { positionId, mint, symbol: pos.symbol, signature, error: errMsg });
+
+      // v3.32: IncorrectProgramId â†’ pool å·²è¿ç§»åˆ° Raydiumï¼Œæ ‡è®° pool dead é˜²æ­¢å†æ¬¡æµªè´¹è´¹
+      if (errMsg && (errMsg.includes('IncorrectProgramId') || errMsg.includes('IncorrectProgramId'))) {
+        if (this.executor?.poolStateCache && pos.poolAddress) {
+          this.executor.poolStateCache.markDead(pos.poolAddress);
+          console.warn(
+            `[PositionManager] ğŸª¦ Pool marked dead (IncorrectProgramId): ${pos.poolAddress.slice(0, 8)}.. for ${symbol || mint.slice(0, 6)} â€” likely migrated to Raydium`,
+          );
+        }
+      }
+
+      // v3.26: BUY_CHAIN_FAILED â†’ 24h å†·å´ï¼Œé˜²æ­¢åŒå¸åå¤ä¹°å…¥å¤±è´¥
+      if (this.signalEngine && this.signalEngine._exitCooldowns) {
+        const buyFailedCooldownMs = parseInt(process.env.BUY_FAILED_REBUY_COOLDOWN_MS || '86400000', 10);
+        this.signalEngine._exitCooldowns.set(mint, Date.now() + buyFailedCooldownMs);
+        console.log(
+          `[PositionManager] ğŸ”’ BUY_CHAIN_FAILED cooldown ${symbol || mint.slice(0, 6)} for ${Math.round(buyFailedCooldownMs / 3600000)}h (no rebuy)`,
+        );
+      }
+      // v3.17.42: å¹¿æ’­å…³é—­äº‹ä»¶ç»™å‰ç«¯ï¼Œå¦åˆ™å‰ç«¯ä¸çŸ¥é“ä»“ä½å·²å…³é—­
+      this.emit('closed', {
+        positionId,
+        mint,
+        symbol: pos.symbol,
+        exitReason: 'BUY_CHAIN_FAILED',
+        pnlSol: -feeSol,
+        pnlPct: -100,
+      });
+      return;
+    }
+
+    // ============ åˆ†æ”¯ B: BUY é“¾ä¸ŠæˆåŠŸï¼Œä½†è§£æå¤±è´¥ ============
+    // v3.17.14: ä¸‰è·¯ race æ—¶ Slipstream è¿”å›çš„ sig å¯èƒ½ä¸æ˜¯é“¾ä¸Š sig
+    // å¦‚æœ fetchTxSwapResult å¤±è´¥ï¼Œå…ˆç”¨é’±åŒ…ä½™é¢åˆ¤æ–­æ˜¯å¦çœŸçš„ä¹°åˆ°äº†
+    const swap = await this.executor.fetchTxSwapResult(signature, mint);
+    if (!swap || !swap.success) {
+      // äºŒæ¬¡éªŒè¯ï¼šé’±åŒ…é‡Œæœ‰ token å°±è¯´æ˜ä¹°å…¥æˆåŠŸï¼Œåªæ˜¯ sig ä¸å¯¹
+      const walletBalance = await this.executor.getWalletTokenBalance(mint);
+      if (walletBalance > 0) {
+        console.log(
+          `[PositionManager] âš ï¸ tx parse failed but wallet has ${walletBalance} tokens ` +
+            `â†’ treating as BUY success (sig likely from Slipstream internal ID)`,
+        );
+        // ä¸å…³é—­ positionï¼Œä¿æŒå¼€æ”¾è®©åç»­æ­¢ç›ˆ/æ­¢æŸé€»è¾‘æ­£å¸¸å·¥ä½œ
+        // ç”¨ä¼°ç®—å€¼ reconcile
+        pos.reconciled = true;
+        pos.reconciledAt = Date.now();
+        monitor.inc('PositionManager.buyReconcileFallback', 1, 'PositionManager');
+        if (pos._reconcileWatchdog) {
+          clearTimeout(pos._reconcileWatchdog);
+          pos._reconcileWatchdog = null;
+        }
+        return;
+      }
+
+      // é’±åŒ…ä¹Ÿæ²¡ token â†’ çœŸçš„å¤±è´¥äº†
+      monitor.inc('PositionManager.buyReconcileFetchFail', 1, 'PositionManager');
+      console.error(
+        `[PositionManager] âš ï¸ BUY confirmed but tx parse failed: ${pos.symbol || mint.slice(0, 6)} ` +
+          `sig=${signature.slice(0, 8)}..`,
+      );
+      // åŒæ ·æŒ‰é“¾ä¸Šå¤±è´¥å¤„ç†ï¼ˆä¿é™©èµ·è§ï¼‰
+      const feeSol = ((pos.buyFeeLamports || 0) + 5000) / 1e9;
+      this.tradeLogger.closePosition(positionId, {
+        closedAt: Date.now(),
+        exitPrice: pos.entryPrice,
+        exitSol: 0,
+        pnlSol: -feeSol,
+        pnlPct: -100,
+        exitReason: 'BUY_PARSE_FAILED',
+        sellSignature: null,
+      });
+      this.positions.delete(positionId);
+      this._removeByMint(mint, positionId);
+      // v3.17.21: BUY å¤±è´¥ â†’ ä» hotMints ç§»é™¤
+      if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(mint);
+      monitor.inc('PositionManager.buyFailedClosed', 1, 'PositionManager');
+      monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+      // v3.17.9: æ¸… watchdog
+      if (pos._reconcileWatchdog) {
+        clearTimeout(pos._reconcileWatchdog);
+        pos._reconcileWatchdog = null;
+      }
+      return;
+    }
+
+    // ============ åˆ†æ”¯ C: BUY æˆåŠŸï¼Œå›å†™çœŸå®æ•°æ® ============
+    // realSolDelta æ˜¯è´Ÿæ•°ï¼ˆå‡ºè´¦ï¼‰ã€‚priority fee + base fee ä¹Ÿå«åœ¨å†…
+    const realSolSpent = -swap.realSolDelta;
+    const realTokenReceived = swap.realTokenDelta;
+
+    if (realSolSpent <= 0 || realTokenReceived <= 0) {
+      monitor.recordError('PositionManager', new Error('reconcile: invalid swap deltas'), {
+        signature,
+        realSolSpent,
+        realTokenReceived,
+      });
+      return;
+    }
+
+    const oldEntrySol = pos.entrySol;
+    const oldEntryPrice = pos.entryPrice;
+    const oldTokenAmount = pos.tokenAmount;
+
+    // ä¿®æ­£ï¼šæ‰£æ‰ priority fee + base feeï¼Œå‰©ä¸‹çš„æ‰æ˜¯çœŸæ­£èŠ±åœ¨ swap ä¸Š
+    // ä½†å¯¹ç­–ç•¥åˆ¤æ–­æ¥è¯´ï¼Œ"æˆ‘äºäº†å¤šå°‘ SOL" ç”¨ realSolSpent å…¨å£å¾„æ¯”è¾ƒåˆç†
+    pos.entrySol = realSolSpent;
+    pos.tokenAmount = realTokenReceived;
+    pos.entryPrice = realSolSpent / realTokenReceived;
+    // realSolSpent å·²å« priority fee ä¸ base feeï¼›ä¸ºé¿å…åŒé‡æ‰£å‡ï¼ŒæŠŠ buyFeeLamports æ¸…é›¶
+    pos.buyFeeLamports = 0;
+
+    // v3.17.6 å…³é”®ä¿®å¤ï¼ˆåŸºäºå®æˆ˜æ•°æ®ä¸‰ä¸ª bug çš„æ ¹æ²»æ–¹æ¡ˆï¼‰ï¼š
+    //
+    // Bug #1 ä¿®å¤ï¼šOPEN æ—¶ highWaterMark = ä¼°ç®— entryPriceï¼ˆé«˜ä¼° 5-15%ï¼‰
+    //              reconcile åçœŸå® entryPrice æ›´ä½ â†’ æ—§ HWM å˜æˆ"è™šå‡é«˜ç‚¹"
+    //              â†’ ç´§æ¥ç€çš„çœŸå®ä»·æ ¼è¢«è¯¯åˆ¤ä¸º"ä» peak å¤§å¹…å›æ’¤" â†’ trailing è¯¯æ€
+    //              ä¿®å¤ï¼šreconcile å®Œæˆæ—¶é‡ç½® HWM åˆ°çœŸå® entryPrice
+    //
+    // Bug #3 ä¿®å¤ï¼šreconcile å®Œæˆé‚£ä¸€åˆ»ï¼Œç ¸ç›˜åä»·æ ¼è¿˜åœ¨å‰§çƒˆæ³¢åŠ¨ + æˆ‘ä»¬è‡ªä¹°å…¥
+    //              æ¨é«˜äº† AMM æ± å­ä»·æ ¼ 5-10%ã€‚ç¬¬ä¸€ä¸ª priceTick æ‹¿åˆ°çš„å°±æ˜¯è¿™ä¸ª
+    //              è™šé«˜ç¬æ€å€¼ â†’ trailing ç«‹åˆ» armed â†’ çœŸå®ä»·æ ¼å›å½’è¢«è¯¯åˆ¤ä¸º
+    //              "å›æ’¤" â†’ trailing è¯¯æ€
+    //              ä¿®å¤ï¼šè¿›å…¥ stabilization æœŸï¼ˆé»˜è®¤ 5 ç§’ï¼‰ï¼ŒæœŸé—´ï¼š
+    //                - ä¸æ›´æ–° highWaterMarkï¼ˆè®© _checkExit è·³è¿‡ trailing æµç¨‹ï¼‰
+    //                - æ”¶é›†æ‰€æœ‰ priceTick åˆ° _stabilizeSamples
+    //                - emergency_stop æ­£å¸¸å·¥ä½œï¼ˆæ•‘å‘½è·¯å¾„ä¸èƒ½å±è”½ï¼‰
+    //              stabilization æœŸç»“æŸæ—¶ï¼Œå–ä¸­ä½æ•°ä½œä¸º stabilizedBaselineï¼Œ
+    //              ä½œä¸º trailing çš„æ–°èµ·ç‚¹ã€‚
+    pos.highWaterMark = pos.entryPrice;
+    pos.highWaterMarkTs = Date.now();
+    pos.trailingArmed = false;
+    pos._tpConfirmCount = 0;
+    pos._tpFirstTriggerTs = null;
+
+    // v3.17.13: reconcile å drift æ£€æŸ¥ â€” é˜²æ­¢ RUG åç»§ç»­æŒæœ‰
+    //   drift å¿…é¡»åœ¨è¿™é‡Œå…ˆç®—ï¼ˆåŸæ¥åœ¨åé¢ console.log é‚£è¡Œå®šä¹‰çš„ï¼‰
+    const drift = ((realSolSpent - oldEntrySol) / oldEntrySol) * 100;
+    const maxReconcileDriftPct = parseFloat(process.env.MAX_RECONCILE_DRIFT_PCT || '-40');
+    if (maxReconcileDriftPct < 0 && drift < maxReconcileDriftPct) {
+      console.warn(
+        `[PositionManager] ğŸš¨ RECONCILE_RUG ${pos.symbol || mint.slice(0, 6)}: ` +
+          `drift=${drift.toFixed(2)}% < ${maxReconcileDriftPct}%, ` +
+          `entrySol ${oldEntrySol.toFixed(4)}â†’${realSolSpent.toFixed(4)}, ` +
+          `immediate sell`,
+      );
+      monitor.inc('PositionManager.reconcileRug', 1, 'PositionManager');
+      // ä¸è¿›å…¥ stabilizationï¼Œç›´æ¥å–å‡º
+      pos.reconciled = true;
+      pos.reconciledAt = Date.now();
+      this._exitForCondition(pos, pos.entryPrice, 'RECONCILE_RUG');
+      return;
+    }
+
+    // è¿›å…¥ stabilization æœŸ
+    pos.reconciledAt = Date.now();
+    pos.stabilizing = true;
+    pos._stabilizeSamples = []; // æœŸé—´æ”¶åˆ°çš„æ‰€æœ‰ä»·æ ¼
+
+    // v3.12: æ ‡è®° reconciledï¼Œè§£é™¤ _checkExit çš„"å®Œå…¨è·³è¿‡"é”å®š
+    //        è¿›å…¥ stabilization æ¨¡å¼ï¼ˆ_checkExit å†…éƒ¨åˆ¤æ–­ stabilizing æ—¶åªè·‘ emergencyï¼‰
+    pos.reconciled = true;
+
+    // v3.17.9: reconcile æ­£å¸¸å®Œæˆ,æ¸…æ‰ watchdog é¿å… 60s åè¯¯è§¦å‘
+    if (pos._reconcileWatchdog) {
+      clearTimeout(pos._reconcileWatchdog);
+      pos._reconcileWatchdog = null;
+    }
+
+    // v3.17.20-fix: ç”¨ confirmTx è¿”å›çš„çœŸå®è½é“¾ slot æ›´æ–° buySlot
+    //    ä¹‹å‰ buySlot = BUY æäº¤å‰ TickStream.latestSlot â‰ˆ dumpSlotï¼ˆåå°ï¼‰
+    //    å®é™… BUY tx è½é“¾é€šå¸¸æ™š 1-2 slotï¼Œresult.slot æ‰æ˜¯çœŸå®å€¼
+    if (result.slot && result.slot > 0) {
+      pos.buySlot = result.slot;
+      const realLag = result.slot - pos.dumpSlot;
+      console.log(
+        `[PositionManager] ğŸ”§ buySlot corrected: ${pos.symbol || mint.slice(0, 6)} ` +
+          `dump_slot=${pos.dumpSlot} buy_slot=${result.slot} lag=${realLag} slot${realLag <= 1 ? ' âš¡' : ''}`,
+      );
+    }
+
+    // åŒæ­¥åˆ° DB
+    this.tradeLogger.updatePositionEntry(positionId, {
+      entrySol: pos.entrySol,
+      entryPrice: pos.entryPrice,
+      tokenAmount: pos.tokenAmount,
+      buyFeeLamports: 0,
+      buySlot: pos.buySlot,
+      dumpSlot: pos.dumpSlot,
+    });
+
+    monitor.inc('PositionManager.buyReconciled', 1, 'PositionManager');
+    console.log(
+      `[PositionManager] ğŸ”§ BUY reconciled ${pos.symbol || mint.slice(0, 6)}: ` +
+        `entrySol ${oldEntrySol.toFixed(4)}â†’${realSolSpent.toFixed(4)} (${drift.toFixed(2)}%), ` +
+        `tokens ${oldTokenAmount.toFixed(2)}â†’${realTokenReceived.toFixed(2)}, ` +
+        `entryPrice ${oldEntryPrice.toExponential(4)}â†’${pos.entryPrice.toExponential(4)}`,
+    );
+
+    // v3.9: ç›‘æ§çœŸå® CU æ¶ˆè€—ï¼Œé€¼è¿‘ limit æ—¶å‘Šè­¦
+    const cuConsumed = swap.computeUnitsConsumed || 0;
+    const cuLimit = this.executor.computeUnitLimit || 200000;
+    if (cuConsumed > 0) {
+      monitor.set('PositionManager.lastBuyCuConsumed', cuConsumed, 'PositionManager');
+      const cuUtilPct = (cuConsumed / cuLimit) * 100;
+      monitor.set('PositionManager.lastBuyCuUtilPct', Math.round(cuUtilPct), 'PositionManager');
+
+      if (cuUtilPct >= 90) {
+        monitor.inc('PositionManager.cuNearLimit', 1, 'PositionManager');
+        console.warn(
+          `[PositionManager] âš ï¸ ${pos.symbol || mint.slice(0, 6)} CU æ¶ˆè€— ${cuConsumed} / ${cuLimit} ` +
+            `(${cuUtilPct.toFixed(0)}%) â€” æ¥è¿‘ä¸Šé™ï¼Œå»ºè®®è°ƒé«˜ COMPUTE_UNIT_LIMIT æˆ–è§‚å¯Ÿæ˜¯å¦æœ‰ BUY_CHAIN_FAILED`,
+        );
+      }
+    }
+  }
+
+  _tick() {
+    const now = Date.now();
+
+    for (const pos of this.positions.values()) {
+      if (pos.exiting) continue;
+
+      this._fillPreVolFallback(pos);
+      const age = now - pos.openedAt;
+      // v3.19: peak æ„ŸçŸ¥æ¢¯åº¦è¶…æ—¶ â€” æ›¿ä»£å›ºå®š maxHoldMs
+      // peak<=0 â†’ 5min, peak 0-5% â†’ 10min, peak 5-8% â†’ 25min, peak>=8% â†’ maxHoldMs
+      const peakPnlForTimeout = (pos.highWaterMark && pos.entryPrice > 0)
+        ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100
+        : 0;
+      const timeoutMs = this.getPeakAwareTimeoutMs(peakPnlForTimeout, pos.preVol5m, pos.mint);
+      if (timeoutMs > 0 && age >= timeoutMs) {
+        const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
+        console.log(
+          `[PositionManager] â±ï¸ TIMEOUT (peak-aware) ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `peak=${peakPnlForTimeout.toFixed(1)}% timeout=${(timeoutMs/1000).toFixed(0)}s age=${(age/1000).toFixed(0)}s`,
+        );
+        // v3.19: exit_reason å¸¦ timeout æ—¶é•¿ï¼ŒåŒºåˆ†ä¸åŒæ¢¯åº¦
+        const timeoutMin = Math.round(timeoutMs / 60000);
+        this._exitForCondition(pos, lastPrice, `TIMEOUT_${timeoutMin}M`);
+      }
+
+      // v3.18: EARLY_LOW_PEAK_CUT â€” æ­»å¸æ—©ç ,è¿ç»­æ—¶é—´è¦†ç›–
+      // v3.32b: å¯é€šè¿‡ EARLY_LOW_PEAK_CUT_ENABLED=0 ç¦ç”¨
+      if (process.env.EARLY_LOW_PEAK_CUT_ENABLED === '1') {
+      // ä¾æ®:6/2 LOW_PEAK_TIMEOUT æ¼ç½‘ 132 ç¬”æ­»å¸æ‰› 18-20min äº -8~-11%
+      // peak<1% 124ç¬” æ‰›18.3min -11.5% -> 2min è¯¥åˆ‡
+      // peak 1-2% 34ç¬” æ‰›19.4min -8.2% -> 3min è¯¥åˆ‡
+      // peak 2-3% 24ç¬” æ‰›20.3min -4.5% -> 5min è¯¥åˆ‡
+      // å…³é”®:peak<1% ä¸è¦æ±‚ PnL æ¡ä»¶(æ—§ Phase1 è¦æ±‚ PnL<-5% æ¼äº†ä¸€æ‰¹)
+      // è¾¹ç•Œ:peak<3 ä¸¥æ ¼å°äºå½’æ­»å¸æ—©ç , peak>=3 å½’ trailing, ä¸é‡ä¸æ¼
+      {
+        const peakPnlPct = (pos.highWaterMark && pos.entryPrice > 0)
+          ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100
+          : 0;
+        const ageMin = age / 60000;
+
+        let shouldCut = false;
+        if (ageMin >= 4 && peakPnlPct < 1) shouldCut = true;       // peak<1% æ­»é€,4min åˆ‡
+        else if (ageMin >= 6 && peakPnlPct < 2) shouldCut = true;   // 6min åˆ‡
+        else if (ageMin >= 10 && peakPnlPct < 1) shouldCut = true;   // 10min åˆ‡ peak<1% å…œåº•
+
+        if (shouldCut) {
+          const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
+          console.log(
+            '[PositionManager] EARLY_LOW_PEAK_CUT ' + (pos.symbol || pos.mint.slice(0, 6)) +
+            ' peak=' + peakPnlPct.toFixed(1) + '% age=' + ageMin.toFixed(1) + 'min'
+          );
+          monitor.inc('PositionManager.earlyLowPeakCut', 1, 'PositionManager');
+          this._exitForCondition(pos, lastPrice, 'EARLY_LOW_PEAK_CUT');
+          continue;
+        }
+      } // end EARLY_LOW_PEAK_CUT
+      }
+      // v3.17.13: stabilization è¶…æ—¶
+      //   å®æˆ˜ï¼šBABYELON reconcile watchdog æ¢å¤åè¿›å…¥ stabilizationï¼Œ
+      //   ä½† PriceTracker ä¸å†æ¨ä»·æ ¼ï¼ˆä»£å¸äº¤æ˜“å†·æ¸…ï¼‰ï¼Œstabilization æ°¸è¿œç»“æŸä¸äº†
+      if (pos.stabilizing && pos.reconciledAt) {
+        const stabElapsed = now - pos.reconciledAt;
+        if (stabElapsed >= config.strategy.stabilizationMs) {
+          const samples = pos._stabilizeSamples ? pos._stabilizeSamples.slice().sort((a, b) => a - b) : [];
+          let baseline;
+          if (samples.length === 0) {
+            // æ²¡æœ‰ tick æ•°æ®ï¼Œç”¨ PoolStateCache æˆ– entryPrice
+            const poolPrice = this._getPoolPrice(pos.mint);
+            baseline = poolPrice || pos.entryPrice;
+          } else {
+            const mid = Math.floor(samples.length / 2);
+            baseline = samples.length % 2 === 0
+              ? (samples[mid - 1] + samples[mid]) / 2
+              : samples[mid];
+          }
+          // v3.17.26: HWM = max(baseline, entryPrice)
+          //   å¦‚æœ baseline < entryPriceï¼ˆä¹°å…¥åä»·æ ¼å›è½ï¼‰ï¼ŒHWM ä¸åº”ä½äº entryPrice
+          //   å¦åˆ™ trailing arm ä» entryPrice ç®— peakPnl æ—¶ï¼Œéœ€è¦ä» baseline å¤šæ¶¨å‡ % æ‰èƒ½åˆ°è¾¾ entryPrice*1.08
+          //   å®æµ‹ï¼šbaseline æ¯” entryPrice ä½ 2-5% æ—¶ï¼Œå®é™…éœ€è¦æ¶¨ 10-13% æ‰è§¦å‘ 8% arm
+          pos.highWaterMark = Math.max(baseline, pos.entryPrice);
+          pos.highWaterMarkTs = Date.now();
+          pos.stabilizing = false;
+          pos._stabilizeSamples = null;
+          pos.baselinePrice = baseline; // v3.17.15: è®°å½•ç¨³å®šæœŸç»“æŸæ—¶çš„å®é™…ä»·æ ¼
+          // v3.17.27: stabilization ç»“æŸæ—¶ç«‹å³æŒä¹…åŒ– peak_price
+          //   é¿å…é‡å¯å stabilization é‡æ¥ + HWM è¢«é‡ç½®
+          const stabPeakPnlPct = ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100;
+          try {
+            this.tradeLogger.stmts.updatePeak.run({
+              positionId: pos.positionId,
+              peakPrice: pos.highWaterMark,
+              peakTs: pos.highWaterMarkTs,
+              peakPnlPct: stabPeakPnlPct,
+            });
+            pos._lastPeakFlush = Date.now();
+          } catch (_) { /* best effort */ }
+          const baselinePnlPct = ((baseline - pos.entryPrice) / pos.entryPrice) * 100;
+          console.log(
+            `[PositionManager] âœ… stabilization done (tick-timeout) ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+              `samples=${samples.length}, baseline=${baseline.toExponential(4)} (${baselinePnlPct.toFixed(2)}%), ` +
+              `HWM set to ${pos.highWaterMark.toExponential(4)}`,
+          );
+        }
+      }
+    }
+
+    // v3.26: æŒä»“ä»·æ ¼ä¸»åŠ¨æ£€æŸ¥
+    // é—®é¢˜: _checkExit åªåœ¨ priceTracker.on('update') æ—¶è§¦å‘
+    // å¦‚æœ DumpDetector æ²¡æœ‰æ–° priceTick â†’ ä»·æ ¼ä¸æ›´æ–° â†’ æ­¢ç›ˆ/æ­¢æŸä¸æ£€æŸ¥
+    // ä¿®å¤: æ¯500msç”¨ priceTracker å½“å‰ä»·æ ¼ä¸»åŠ¨è°ƒç”¨ _checkExit
+    // åŒæ—¶ä» PoolStateCache è·å–å®æ—¶ä»·æ ¼ï¼ˆæ¯” priceTracker æ›´å¯é ï¼‰
+    this._tickCount++;
+    if (this._tickCount % 5 === 0) { // æ¯500ms
+      for (const pos of this.positions.values()) {
+        if (pos.exiting || pos.status === 'stuck') continue;
+
+        // ä¼˜å…ˆç”¨ PoolStateCache çš„å®æ—¶ä»·æ ¼
+        let price = 0;
+        if (this.executor?.poolStateCache && this.tokenRegistry) {
+          const tokenInfo = this.tokenRegistry.getToken(pos.mint);
+          if (tokenInfo?.pool_address) {
+            const poolState = this.executor.poolStateCache.get(tokenInfo.pool_address);
+            if (poolState) {
+              const baseAmt = Number(poolState.poolBaseAmount?.toString() || 0);
+              const quoteAmt = Number(poolState.poolQuoteAmount?.toString() || 0);
+              if (baseAmt > 0 && quoteAmt > 0) {
+                // PoolStateCache çš„ baseAmt/quoteAmt æ˜¯é“¾ä¸ŠåŸå§‹å•ä½(lamports)
+                // éœ€è¦è½¬æ¢: price = (quoteAmt/1e9) / (baseAmt/10^decimals) SOL/token
+                const decimals = tokenInfo.decimals ?? 6; // Pump.fun = 6
+                price = (quoteAmt / 1e9) / (baseAmt / Math.pow(10, decimals));
+              }
+            }
+          }
+        }
+
+        // fallback: ç”¨ priceTracker çš„å½“å‰ä»·æ ¼
+        if (!price || !Number.isFinite(price) || price <= 0) {
+          price = this.priceTracker?.getPrice(pos.mint) || 0;
+        }
+
+        if (price > 0 && Number.isFinite(price)) {
+          // åŒæ­¥ priceTrackerï¼ˆè®© dashboard æ˜¾ç¤ºæ­£ç¡®ä»·æ ¼ï¼‰
+          const trackerPrice = this.priceTracker?.getPrice(pos.mint) || 0;
+          if (Math.abs(price - trackerPrice) / (trackerPrice || price) > 0.005) {
+            this.priceTracker?.forceSet(pos.mint, price);
+          }
+          // ä¸»åŠ¨æ£€æŸ¥é€€å‡ºæ¡ä»¶
+          this._checkExit(pos.positionId, price);
+        }
+      }
+    }
+  }
+
+  // v3.27: æ³¢åŠ¨ç‡æ„ŸçŸ¥ + æ–°è€å¸å·®å¼‚åŒ– trailing drawdown
+  getTrailingDrawdownPct(peakPnlPct, preVol5m, mint) {
+    return config.strategy.trailingDrawdownPct;
+  }
+
+  // v3.20: æ³¢åŠ¨ç‡æ„ŸçŸ¥ trailing activate
+  getTrailingActivatePct(preVol5m, mint) {
+    return config.strategy.trailingActivatePct;
+  }
+
+  // v3.22: æ³¢åŠ¨ç‡æ„ŸçŸ¥ take profit â€” ä¸‰æ³¢æ®µ
+  getTakeProfitPct(preVol5m, mint) {
+    return config.strategy.takeProfitPct;
+    // v3.27: æ–°è€å¸å·®å¼‚åŒ–
+    const newCoinTakeProfit = parseFloat(process.env.NEW_COIN_TAKE_PROFIT_PCT || '15');
+    const oldCoinTakeProfit = parseFloat(process.env.OLD_COIN_TAKE_PROFIT_PCT || '25');
+    const newCoinThresholdMs = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
+    if (newCoinThresholdMs <= 0) return config.strategy.takeProfitPct;
+
+    if (mint) {
+      const tokenInfo = this.tokenRegistry?.getToken(mint);
+      if (newCoinThresholdMs > 0 && tokenInfo && tokenInfo.added_at) {
+        const tokenAgeMs = Date.now() - tokenInfo.added_at;
+        if (tokenAgeMs >= newCoinThresholdMs) {
+          return oldCoinTakeProfit;
+        } else {
+          return newCoinTakeProfit;
+        }
+      }
+    }
+
+    // fallback: tokenRegistryæŸ¥ä¸åˆ° â†’ ç”¨æ—§æ³¢åŠ¨ç‡é€»è¾‘ï¼Œ
+    // ä½†ä½æ³¢åŠ¨/ä¸­æ³¢åŠ¨TPä¹Ÿåº”èµ°OLD_COINå€¼ï¼ˆ20/25ï¼‰ï¼Œé¿å…è€å¸è¢«ä½TP(15%)è¯¯æ€
+    if (preVol5m != null && preVol5m >= 0) {
+      const lowThreshold = parseFloat(process.env.VOL_LOW_THRESHOLD || '10');
+      const highThreshold = parseFloat(process.env.VOL_HIGH_THRESHOLD || '15');
+      if (preVol5m < lowThreshold) {
+        return parseFloat(process.env.VOL_LOW_TAKE_PROFIT_PCT || '20');
+      }
+      if (preVol5m >= highThreshold) {
+        return parseFloat(process.env.VOL_HIGH_TAKE_PROFIT_PCT || '25');
+      }
+      return parseFloat(process.env.VOL_MID_TAKE_PROFIT_PCT || oldCoinTakeProfit);
+    }
+    // å®Œå…¨æ— æ•°æ®æ—¶ï¼Œé»˜è®¤ç”¨è€å¸TP(25%) â€” å®å¯å¤šæ‹¿ä¹Ÿä¸å°‘æ‹¿
+    return oldCoinTakeProfit;
+  }
+
+  // v3.20: æ³¢åŠ¨ç‡æ„ŸçŸ¥è¶…æ—¶ â€” æ›¿ä»£çº¯peakæ„ŸçŸ¥æ¢¯åº¦
+  // ä½æ³¢åŠ¨å¸(pre_vol<10%): ä¸è®¾TIMEOUT â€” ç«å¯¹æ•°æ®è¯æ˜ä½æ³¢å¸æ­»æ‰›84%èƒ½å¼¹å›
+  // é«˜æ³¢åŠ¨å¸(pre_vol>=15%): 60min â€” ç»™é«˜æ³¢å¸æ›´å¤šæ—¶é—´å¼¹å›
+  // é»˜è®¤(10-15%): ä¿ç•™peakæ„ŸçŸ¥æ¢¯åº¦è¶…æ—¶
+  getPeakAwareTimeoutMs(peakPnlPct, preVol5m, mint) {
+    // v3.27: è€å¸å…³é—­è¶…æ—¶(ç«å¯¹avg hold 398min, æˆ‘ä»¬TIMEOUTæ˜¯æœ€å¤§äºæŸæº)
+    // æ–°å¸ä¿æŒæ³¢åŠ¨ç‡æ„ŸçŸ¥è¶…æ—¶
+    const newCoinThresholdMs = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
+    const oldCoinTimeoutMs = parseInt(process.env.OLD_COIN_TIMEOUT_MS || '0'); // 0=ä¸è¶…æ—¶
+    if (newCoinThresholdMs <= 0) return config.strategy.maxHoldMs;
+
+    if (mint) {
+      const tokenInfo = this.tokenRegistry?.getToken(mint);
+      if (newCoinThresholdMs > 0 && tokenInfo && tokenInfo.added_at) {
+        const tokenAgeMs = Date.now() - tokenInfo.added_at;
+        if (tokenAgeMs >= newCoinThresholdMs) {
+          // è€å¸: ç”¨ OLD_COIN_TIMEOUT_MS
+          return oldCoinTimeoutMs;
+        }
+      }
+    }
+
+    // æ–°å¸: æ³¢åŠ¨ç‡æ„ŸçŸ¥è¶…æ—¶
+    const lowThreshold = parseFloat(process.env.VOL_LOW_THRESHOLD || '10');
+    const highThreshold = parseFloat(process.env.VOL_HIGH_THRESHOLD || '15');
+    if (preVol5m != null && preVol5m >= 0) {
+      if (preVol5m < lowThreshold) {
+        return parseInt(process.env.VOL_LOW_TIMEOUT_MS || '0'); // 0=ä¸è¶…æ—¶(æ­»æ‰›)
+      }
+      if (preVol5m >= highThreshold) {
+        return parseInt(process.env.VOL_HIGH_TIMEOUT_MS || '0');
+      }
+      return parseInt(process.env.VOL_MID_TIMEOUT_MS || '0');
+    }
+    // preVol5mä¸ºnull â†’ ä¸­æ³¢å¤„ç†
+    return parseInt(process.env.VOL_MID_TIMEOUT_MS || '0');
+  }
+
+  // v3.17.42: åŒæ­¥ç‰ˆæœ¬ â€” ç›´æ¥æŸ¥ DBï¼Œé¿å…å¼‚æ­¥ç«æ€å¯¼è‡´æ³¢åŠ¨ç‡å†™ä¸¢å¤±
+  // ä¹‹å‰ async ç‰ˆæœ¬åœ¨å¿«é€Ÿå–å‡ºåœºæ™¯ä¸‹ï¼Œposition å¯èƒ½åœ¨å›è°ƒå‰å·²å…³é—­
+  _computePreVol5mSync(pid, mint, openedAt) {
+    try {
+      const db = this.tradeLogger?.db;
+      if (!db) return;
+      const startTs = openedAt - 300000;
+      const rows = db.prepare(
+        'SELECT price FROM price_samples WHERE mint = ? AND ts >= ? AND ts < ? ORDER BY ts'
+      ).all(mint, startTs, openedAt);
+      if (rows.length >= 2) {
+        const prices = rows.map(r => r.price).filter(p => p > 0);
+        if (prices.length >= 2) {
+          const high = Math.max(...prices);
+          const low = Math.min(...prices);
+          const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+          if (avg > 0) {
+            const vol5m = +((high - low) / avg * 100).toFixed(2);
+            const pos = this.positions.get(pid);
+            if (pos) {
+              pos.preVol5m = vol5m;
+              console.log(
+                `[PositionManager] ğŸ“Š pre_vol_5m=${vol5m.toFixed(1)}% ${pos.symbol || pos.mint.slice(0,6)} ` +
+                `${vol5m < 10 ? 'ğŸŸ¢ä½æ³¢åŠ¨(æ­»æ‰›+é«˜æ­¢ç›ˆ)' : vol5m >= 15 ? 'ğŸ”´é«˜æ³¢åŠ¨(å®½trailing+é•¿timeout)' : 'ğŸŸ¡ä¸­æ³¢åŠ¨'}`
+              );
+              try {
+                db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(vol5m, pid);
+              } catch (_) {}
+            }
+            return;
+          }
+        }
+      }
+      // ä¹°å…¥å‰æ²¡æ•°æ®ï¼Œå°è¯•ç”¨ä¹°å…¥å5minæ•°æ®(ç»™ _fillPreVolFallback ç”¨)
+    } catch (err) {
+      // non-critical
+    }
+  }
+
+  // v3.20: å¼‚æ­¥è®¡ç®—ä¹°å…¥å‰5åˆ†é’Ÿæ³¢åŠ¨ç‡ (ä¿ç•™ä½œ fallback)
+  // v3.23: compute pre-buy 5min range support line
+  _computeRangeSupport(pid, mint, openedAt) {
+    try {
+      const db = this.tradeLogger?.db;
+      if (!db) return;
+      const startTs = openedAt - 300000;
+      const rows = db.prepare(
+        'SELECT price FROM price_samples WHERE mint = ? AND ts >= ? AND ts < ? ORDER BY ts'
+      ).all(mint, startTs, openedAt);
+      if (rows.length >= 3) {
+        const prices = rows.map(r => r.price).filter(p => p > 0);
+        if (prices.length >= 3) {
+          const rangeLow = Math.min(...prices);
+          const pos = this.positions.get(pid);
+          if (pos) {
+            pos.rangeSupport = rangeLow;
+            console.log(
+              '[PositionManager] rangeSupport=' + rangeLow.toExponential(3) + ' ' + (pos.symbol || pos.mint.slice(0,6))
+            );
+            try {
+              db.prepare('UPDATE positions SET range_support = ? WHERE position_id = ?').run(rangeLow, pid);
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (err) {
+      // non-critical
+    }
+  }
+
+  // ä» price_samples è¡¨å–ä¹°å…¥å‰5minä»·æ ¼åºåˆ—,è®¡ç®— (max-min)/avg*100
+  async _computePreVol5m(pid, mint, openedAt) {
+    try {
+      const db = this.tradeLogger?.db;
+      if (!db) return;
+      const startTs = openedAt - 300000; // 5min
+      const rows = db.prepare(
+        'SELECT price FROM price_samples WHERE mint = ? AND ts >= ? AND ts < ? ORDER BY ts'
+      ).all(mint, startTs, openedAt);
+      if (rows.length >= 2) {
+        const prices = rows.map(r => r.price).filter(p => p > 0);
+        if (prices.length >= 2) {
+          const high = Math.max(...prices);
+          const low = Math.min(...prices);
+          const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+          if (avg > 0) {
+            const vol5m = +((high - low) / avg * 100).toFixed(2);
+            const pos = this.positions.get(pid);
+            if (pos) {
+              pos.preVol5m = vol5m;
+              console.log(
+                `[PositionManager] ğŸ“Š pre_vol_5m=${vol5m.toFixed(1)}% ${pos.symbol || pos.mint.slice(0,6)} ` +
+                `${vol5m < 10 ? 'ğŸŸ¢ä½æ³¢åŠ¨(æ­»æ‰›+é«˜æ­¢ç›ˆ)' : vol5m >= 15 ? 'ğŸ”´é«˜æ³¢åŠ¨(å®½trailing+é•¿timeout)' : 'ğŸŸ¡ä¸­æ³¢åŠ¨'}`
+              );
+              // å†™å…¥DB
+              try {
+                db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(vol5m, pid);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // non-critical but log for debugging
+      console.error(`[PositionManager] âŒ _computePreVol5m error for ${mint.slice(0,8)}:`, err.message);
+    }
+  }
+
+  // v3.21: å½“ preVol5m ä¸º null æ—¶ï¼Œç”¨æŒä»“å†…å®æ—¶æ³¢åŠ¨ç‡ fallback
+  _fillPreVolFallback(pos) {
+    if (pos.preVol5m != null) return;
+    const age = Date.now() - pos.openedAt;
+    if (age < 30000) return;
+
+    // æ–¹æ³•1: stabilization æ ·æœ¬
+    if (pos._stabilizeSamples && pos._stabilizeSamples.length >= 5) {
+      const prices = pos._stabilizeSamples.map(s => s.price).filter(p => p > 0);
+      if (prices.length >= 5) {
+        const high = Math.max(...prices);
+        const low = Math.min(...prices);
+        const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+        if (avg > 0) {
+          const vol = +((high - low) / avg * 100).toFixed(2);
+          pos.preVol5m = vol;
+          console.log('[PositionManager] pre_vol FALLBACK(stab)=' + vol.toFixed(1) + '% ' + (pos.symbol || pos.mint.slice(0,6)) + ' ' + (vol < 10 ? 'LOW' : vol >= 15 ? 'HIGH' : 'MID'));
+          try { const db = this.tradeLogger?.db; if (db) db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(vol, pos.positionId); } catch (_) {}
+          return;
+        }
+      }
+    }
+
+    // æ–¹æ³•2: å½“å‰ä»·æ ¼åå·®ä¼°ç®—
+    const currentPrice = this.priceTracker?.getPrice(pos.mint);
+    if (currentPrice && pos.entryPrice > 0) {
+      const instantVol = Math.abs(currentPrice - pos.entryPrice) / pos.entryPrice * 100;
+      const estimatedVol = +(instantVol * 2.5).toFixed(2);
+      const vol = Math.max(estimatedVol, 1.0);
+      pos.preVol5m = vol;
+      console.log('[PositionManager] pre_vol FALLBACK(instant)=' + vol.toFixed(1) + '% ' + (pos.symbol || pos.mint.slice(0,6)) + ' ' + (vol < 10 ? 'LOW' : vol >= 15 ? 'HIGH' : 'MID'));
+      try { const db = this.tradeLogger?.db; if (db) db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(vol, pos.positionId); } catch (_) {}
+      return;
+    }
+
+    // æ–¹æ³•3: DB price_samples æŸ¥ä¹°å…¥å5minæ³¢åŠ¨ç‡
+    if (age >= 300000) {
+      try {
+        const db = this.tradeLogger?.db;
+        if (db) {
+          const rows = db.prepare('SELECT price FROM price_samples WHERE mint = ? AND ts >= ? AND ts < ? ORDER BY ts').all(pos.mint, pos.openedAt, pos.openedAt + 300000);
+          if (rows.length >= 3) {
+            const prices = rows.map(r => r.price).filter(p => p > 0);
+            if (prices.length >= 3) {
+              const high = Math.max(...prices);
+              const low = Math.min(...prices);
+              const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+              if (avg > 0) {
+                const vol = +((high - low) / avg * 100).toFixed(2);
+                pos.preVol5m = vol;
+                console.log('[PositionManager] pre_vol FALLBACK(db5m)=' + vol.toFixed(1) + '% ' + (pos.symbol || pos.mint.slice(0,6)) + ' ' + (vol < 10 ? 'LOW' : vol >= 15 ? 'HIGH' : 'MID'));
+                db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(vol, pos.positionId);
+                return;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+      pos.preVol5m = 12;
+      console.log('[PositionManager] pre_vol FALLBACK(default)=12% ' + (pos.symbol || pos.mint.slice(0,6)) + ' MID');
+      try { const db = this.tradeLogger?.db; if (db) db.prepare('UPDATE positions SET pre_vol_5m_pct = ? WHERE position_id = ?').run(12, pos.positionId); } catch (_) {}
+    }
+  }
+
+  _checkExit(positionId, price) {
+    const pos = this.positions.get(positionId);
+    if (!pos || pos.exiting) return;
+
+    // v3.26: stuck ä»“ä½ä¸å†è§¦å‘é€€å‡ºé€»è¾‘ï¼ˆpoolå·²æ­»ï¼Œå–å‡ºä¼šå¾ªç¯å¤±è´¥ï¼‰
+    if (pos.status === 'stuck') return;
+
+    // v3.20: è·å–æ­¤ä»“ä½çš„ä¹°å…¥å‰æ³¢åŠ¨ç‡
+    const preVol5m = pos.preVol5m;
+
+    // v3.17.21: è®¡æ•°æ¯ä¸ª position æ”¶åˆ°çš„ price tick æ•°ï¼ˆå¹³ä»“æ—¶å†™å…¥ DBï¼Œ
+    //   ç”¨äºåˆ¤æ–­å³°å€¼æ•°æ®å¯ä¿¡åº¦ï¼štick å¤š â†’ å³°å€¼å¯é ï¼Œtick å°‘ â†’ å¯èƒ½æ˜¯å™ªéŸ³ï¼‰
+    pos.tickCount = (pos.tickCount || 0) + 1;
+
+    // v3.17.27 DEBUG: æ¯ä¸ª price tick éƒ½æ‰“å°ï¼ˆä¸´æ—¶ï¼ŒéªŒè¯ååˆ é™¤ï¼‰
+    if (pos.tickCount <= 5 || pos.tickCount % 20 === 0 || price > pos.highWaterMark) {
+      const pnl = ((price - pos.entryPrice) / pos.entryPrice * 100).toFixed(2);
+      console.log(
+        `[PositionManager] ğŸ“Š tick #${pos.tickCount} ${pos.symbol || pos.mint.slice(0,6)} ` +
+        `price=${price.toExponential(4)} hwm=${pos.highWaterMark.toExponential(4)} pnl=${pnl}% ` +
+        `${price > pos.highWaterMark ? 'ğŸ“ˆ NEW HWM' : ''}`,
+      );
+    }
+
+    // v3.17.13: ä»·æ ¼åˆç†æ€§æ£€æŸ¥ â€” é˜²æ­¢å‡ä»·æ ¼æ±¡æŸ“ HWM å’Œè§¦å‘é”™è¯¯å–å‡º
+    //   å®æˆ˜ï¼šSTICKO å‡ºç°ä»·æ ¼ä» 8e-7 çªå˜åˆ° ~1.0 (ratio > 1M)ï¼Œ
+    //   å¯¼è‡´ HWM è¢«è®¾æˆ 1.0ï¼Œtrailing åœ¨ -99.9% æ—¶è§¦å‘
+    //   ä¿®å¤ï¼šå¦‚æœä»·æ ¼ç›¸å¯¹ HWM æ¶¨è¶… 10x æˆ–è·Œè¶… 90%ï¼Œå¿½ç•¥è¿™ä¸ª tick
+    if (pos.highWaterMark > 0 && price > 0) {
+      const priceRatio = price / pos.highWaterMark;
+      if (priceRatio > 10 || priceRatio < 0.1) {
+        // æç«¯è·³å˜ï¼Œå¿½ç•¥
+        return;
+      }
+    }
+    // å¯¹ entryPrice ä¹Ÿåšç±»ä¼¼æ£€æŸ¥ï¼ˆstabilization æœŸé—´ HWM=entryPriceï¼‰
+    if (pos.entryPrice > 0 && price > 0) {
+      const entryRatio = price / pos.entryPrice;
+      if (entryRatio > 10 || entryRatio < 0.1) {
+        return;
+      }
+    }
+
+    // v3.12: reconcile å®Œæˆå‰å®Œå…¨è·³è¿‡ï¼ˆentryPrice æ˜¯ä¼°ç®—å€¼ï¼Œæ‰€æœ‰ exit æ£€æŸ¥éƒ½ä¸å¯é ï¼‰
+    //        ä¾‹å¤–ï¼šMAX_HOLD_MS è¶…æ—¶ç”± _tick é‚£æ¡è·¯å¾„è§¦å‘
+    if (!pos.reconciled && !pos.dryRun) {
+      return;
+    }
+
+    // v3.17.42: è®°å½•æœ€æ–°tickä»·æ ¼ï¼Œä¾›å‰ç«¯APIä½¿ç”¨(priceTrackerå¯èƒ½æ²¡è¿½è¸ªè¯¥mint)
+    pos._lastTickPrice = price;
+    const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
+
+    // Absolute loss cap: no stabilization or legacy emergency-stop grace delay.
+    const fixedStopPct = config.strategy.fixedStopLossPct;
+    if (fixedStopPct < 0 && pnlPct <= fixedStopPct) {
+      console.warn(
+        `[PositionManager] FIXED_STOP_LOSS ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `pnl=${pnlPct.toFixed(2)}% threshold=${fixedStopPct}%`,
+      );
+      this._exitForCondition(pos, price, 'FIXED_STOP_LOSS');
+      return;
+    }
+
+    // ============ v3.17.7 stabilization æœŸå¤„ç† ============
+    // æœŸé—´åªæ”¶é›†ä»·æ ¼æ ·æœ¬ï¼Œä¸æ›´æ–° HWMï¼Œä¸æ­¦è£… trailingï¼Œä¸æ£€æŸ¥ TP
+    // æœŸæ»¡æ—¶å–æ ·æœ¬ä¸­ä½æ•°ä½œä¸º stabilizedBaselineï¼Œè¿‡æ»¤ç ¸ç›˜ç¬æ€ + è‡ªä¹°å…¥æ¨é«˜
+    if (pos.stabilizing) {
+      // v3.17.13: stabilization æ ·æœ¬ä¹Ÿè¿‡æ»¤æç«¯ä»·æ ¼
+      if (pos.entryPrice > 0 && price > 0) {
+        const sr = price / pos.entryPrice;
+        if (sr < 0.1 || sr > 10) {
+          // å¿½ç•¥æç«¯æ ·æœ¬
+        } else {
+          pos._stabilizeSamples.push(price);
+        }
+      } else {
+        pos._stabilizeSamples.push(price);
+      }
+
+      // ============ stabilization æœŸå†…çš„ç´§æ€¥æ­¢æŸ ============
+      //
+      // è®¾è®¡åŠ¨æœºï¼š
+      //   å®æˆ˜å‘ç° stabilization æœŸå†…ç›´æ¥ç”¨"ç›¸å¯¹ entryPrice"çš„ -15% é˜ˆå€¼ä¼šè¯¯æ€ã€‚
+      //   æ ¹å› ï¼š3 SOL ä¹°å…¥æ¨é«˜ 30 SOL æ± å­ ~10%ï¼Œç„¶åä»·æ ¼å›å½’ï¼Œç¬¬ä¸€ä¸ª tick å°±æ˜¯
+      //         "ç›¸å¯¹ entryPrice -15%" çš„å‡ä¿¡å·ã€‚ä½†è¿™æ˜¯è‡ªä¹°å…¥é€ æˆçš„è™šé«˜å›å½’ï¼Œ
+      //         ä¸æ˜¯å¸‚åœºç¾éš¾ã€‚
+      //
+      //   openclaw çš„ä¿®å¤ï¼šstabilization æœŸ emergency é˜ˆå€¼æ”¾å®½åˆ° -30%
+      //     é—®é¢˜ï¼šæ‹è„‘è¢‹çš„æ•°å­—ã€‚å¦‚æœçœŸçš„æš´è·Œ -25%ï¼Œä¼šè¢«æ”¾è¿‡ 5 ç§’ã€‚
+      //
+      //   æˆ‘çš„æ–¹æ¡ˆï¼šstabilization æœŸæ”¹ç”¨"ç›¸å¯¹æ ·æœ¬æœ€é«˜ä»·çš„å›æ’¤"åˆ¤æ–­ emergency
+      //     - max(samples) â‰ˆ è‡ªä¹°å…¥æ¨é«˜çš„å³°å€¼
+      //     - ä»è¿™ä¸ªå³°å€¼çœŸçš„è·Œ stabilizationEmergencyDrawdownPct%ï¼ˆé»˜è®¤ 20%ï¼‰æ‰è®¤ä½œç¾éš¾
+      //     - è¿™æ ·èƒ½åŒºåˆ†"AMM è‡ªç„¶å›å½’" vs "çœŸå®å¤§è·Œ"
+      //     - ä¾‹ï¼šentryPrice ä¼°ç®— 8.2e-6ï¼Œbuy åæ ·æœ¬ [7.5, 7.3, 7.1]ï¼Œmax=7.5
+      //           å½“å‰ 6.8 â†’ å›æ’¤ 9.3%ï¼Œä¸è§¦å‘ï¼ˆè¿™æ­£æ˜¯ openclaw æƒ³é¿å…çš„è¯¯æ€åœºæ™¯ï¼‰
+      //           è‹¥å½“å‰ 5.8 â†’ å›æ’¤ 22.7%ï¼Œè§¦å‘ emergencyï¼ˆçœŸç¾éš¾ï¼‰
+      const sampleMax = pos._stabilizeSamples.reduce(
+        (m, p) => (p > m ? p : m),
+        pos.entryPrice,
+      );
+      const drawdownFromMax = ((sampleMax - price) / sampleMax) * 100;
+      const stabEmergencyDD = config.strategy.stabilizationEmergencyDrawdownPct;
+      // v3.17.13: stabilization emergency ä¹Ÿå— EMERGENCY_STOP_LOSS_PCT=0 æ§åˆ¶
+      //   å¦‚æœç”¨æˆ·å…³é—­äº†ç´§æ€¥æ­¢æŸï¼Œstabilization æœŸå†…ä¹Ÿä¸åº”è§¦å‘
+      const emergencyEnabled = config.strategy.emergencyStopLossPct !== 0;
+      // v3.17.16: stabilization æœŸå†…çš„ emergency ä¸å†åŠ é¢å¤– grace
+      //   stabilization æœŸæœ¬èº«å°±æ˜¯ä¿æŠ¤(åªç”¨ç›¸å¯¹å³°å€¼å›æ’¤åˆ¤æ–­,ä¸ç”¨ entryPrice PnL),
+      //   å†åŠ  5 åˆ†é’Ÿ grace ç­‰äº"å‰ 5 åˆ†é’Ÿå³ä½¿ä»ç¨³å®šæœŸå³°å€¼è·Œ 50% ä¹Ÿä¸å–"ã€‚
+      //   è¿™è·Ÿ"åå¼¹å°±å–"çš„ç­–ç•¥å®Œå…¨çŸ›ç›¾ã€‚stabEmergencyDD=20% å·²ç»è¶³å¤Ÿå®½å®¹ã€‚
+      if (emergencyEnabled && stabEmergencyDD > 0 && drawdownFromMax >= stabEmergencyDD) {
+        console.warn(
+          `[PositionManager] ğŸš¨ EMERGENCY_STOP (stabilization) ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `drawdown ${drawdownFromMax.toFixed(2)}% from stabilization peak ` +
+            `(sampleMax=${sampleMax.toExponential(3)}, current=${price.toExponential(3)}, pnl=${pnlPct.toFixed(2)}%)`,
+        );
+        this._exitForCondition(pos, price, 'EMERGENCY_STOP');
+        return;
+      }
+
+      const elapsed = Date.now() - pos.reconciledAt;
+      const stabilizeMs = config.strategy.stabilizationMs;
+      if (elapsed >= stabilizeMs) {
+        // stabilization ç»“æŸ â€” è®¡ç®—ä¸­ä½æ•° baseline
+        const samples = pos._stabilizeSamples.slice().sort((a, b) => a - b);
+        let baseline;
+        if (samples.length === 0) {
+          baseline = pos.entryPrice; // æœŸå†…æ²¡æ”¶åˆ°ä»»ä½• tickï¼ˆç½•è§ï¼‰
+        } else {
+          const mid = Math.floor(samples.length / 2);
+          baseline = samples.length % 2 === 0
+            ? (samples[mid - 1] + samples[mid]) / 2
+            : samples[mid];
+        }
+        // v3.17.26: HWM = max(baseline, entryPrice) â€” åŒä¸Š tick-timeout åˆ†æ”¯çš„ä¿®å¤
+        pos.highWaterMark = Math.max(baseline, pos.entryPrice);
+        pos.highWaterMarkTs = Date.now();
+        pos.stabilizing = false;
+        pos._stabilizeSamples = null; // é‡Šæ”¾å†…å­˜
+        pos.baselinePrice = baseline; // v3.17.15: è®°å½•ç¨³å®šæœŸç»“æŸæ—¶çš„å®é™…ä»·æ ¼
+        // v3.17.27: stabilization ç»“æŸæ—¶ç«‹å³æŒä¹…åŒ– peak_price
+        const stabPeakPnlPct = ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100;
+        try {
+          this.tradeLogger.stmts.updatePeak.run({
+            positionId: pos.positionId,
+            peakPrice: pos.highWaterMark,
+            peakTs: pos.highWaterMarkTs,
+            peakPnlPct: stabPeakPnlPct,
+          });
+          pos._lastPeakFlush = Date.now();
+        } catch (_) { /* best effort */ }
+
+        const baselinePnlPct = ((baseline - pos.entryPrice) / pos.entryPrice) * 100;
+        console.log(
+          `[PositionManager] âœ… stabilization done ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+            `samples=${samples.length}, baseline=${baseline.toExponential(4)} (${baselinePnlPct.toFixed(2)}%), ` +
+            `HWM set to ${pos.highWaterMark.toExponential(4)}`,
+        );
+        monitor.inc('PositionManager.stabilizationDone', 1, 'PositionManager');
+        monitor.set('PositionManager.lastStabilizeSamples', samples.length, 'PositionManager');
+      }
+      // stabilizing æœŸå†…ä¸è¿›å…¥ TP / trailing æµç¨‹
+      return;
+    }
+
+    // ============ 1. ç´§æ€¥æ­¢æŸï¼šæ•‘å‘½è·¯å¾„ï¼Œæœ€é«˜ä¼˜å…ˆçº§ ============
+    //    v3.17.16: grace ä» 5min é™åˆ° 30sï¼ˆé»˜è®¤ï¼‰ã€‚
+    //
+    //    åŸ 5min çš„è®¾è®¡æ˜¯ä¸ºäº†é¿å¼€"åˆšä¹°å…¥æ—¶æ»‘ç‚¹+è‡ªä¹°å…¥æ¨é«˜é€ æˆçš„å‡äºæŸ PnL"ã€‚
+    //    ä½† stabilization æœŸ(é»˜è®¤ 5s)å·²ç»ç”¨"ç›¸å¯¹å³°å€¼å›æ’¤"æ¨¡å¼åšäº†åŒæ ·ä¿æŠ¤,
+    //    stabilization ç»“æŸå entryPrice å·²ç»æ˜¯çœŸå®æˆäº¤ä»·ã€HWM å·²ç»æ˜¯ç¨³å®šæœŸ baseline,
+    //    pnlPct æ˜¯å¯é çš„ã€‚å†åŠ  5min grace ç­‰äº"å‰ 5 åˆ†é’Ÿè·Œ 30%ã€50% éƒ½ä¸å–",
+    //    è·Ÿ"åå¼¹å°±å–"çš„ç­–ç•¥çŸ›ç›¾ã€‚
+    //
+    //    æ–°é»˜è®¤ 30s ç»™ä¸€ä¸ªå°ç¼“å†²(stabilization 5s + ä¸€ç‚¹åå¼¹è§‚å¯ŸæœŸ),
+    //    ä¹‹å -15% å¿…é¡»ç«‹å³å‡ºåœºã€‚å¦‚æœæƒ³æ¢å¤æ—§è¡Œä¸º,è®¾ EMERGENCY_STOP_GRACE_MS=300000ã€‚
+    const emergencyPct = config.strategy.emergencyStopLossPct;
+    const emergencyGraceMs = parseInt(process.env.EMERGENCY_STOP_GRACE_MS || '30000', 10); // v3.17.16: 30ç§’
+    const posAge = Date.now() - (pos.openedAt || pos.ts);
+    if (emergencyPct < 0 && pnlPct <= emergencyPct && posAge >= emergencyGraceMs) {
+      console.warn(
+        `[PositionManager] ğŸš¨ EMERGENCY_STOP ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `pnl=${pnlPct.toFixed(2)}% (age=${(posAge/1000).toFixed(0)}s)`,
+      );
+      this._exitForCondition(pos, price, 'EMERGENCY_STOP');
+      return;
+    }
+
+    // ============ 1.5 v3.17.42: æ™ºèƒ½æ­¢æŸï¼ˆåˆ†æ³¢åŠ¨ç‡ï¼‰ ============
+    // æ¯”ç®€å•å›ºå®šæ­¢æŸæ›´èªæ˜ï¼štrailingå·²armedæ—¶ä¸è§¦å‘ï¼Œåªæ•‘trailingæ°¸è¿œä¸armedçš„æ­»æ‰›ä»“ä½
+    //
+    // æ•°æ®æ”¯æ’‘(2026-06-08å›æµ‹):
+    //   ç®€å•æ­¢æŸ-15%åœ¨é«˜æ³¢è¯¯æ€12ç¬”å·²æ­¢ç›ˆå¸ï¼Œæ™ºèƒ½æ­¢æŸä»…è¯¯æ€1ç¬”
+    //   å› ä¸ºæ‰€æœ‰è¯¯æ€å¸éƒ½æ˜¯"å…ˆæ¶¨åè·Œå†æ¶¨å›æ¥"â€”â€”trailingå·²armedï¼Œå›æ’¤æ—¶trailingå…ˆè§¦å‘
+    //
+    // è§„åˆ™ï¼š
+    //   1. trailingå·²armed â†’ ä¸è§¦å‘ï¼ˆtrailingè‡ªè¡Œå¤„ç†å›æ’¤ï¼‰
+    //   2. æŒä»“ < smartStopGraceMs â†’ ä¸è§¦å‘ï¼ˆé¿å…åˆšä¹°å…¥å°±æ­¢æŸï¼‰
+    //   3. stabilizationæœŸå†… â†’ ä¸è§¦å‘ï¼ˆä¸Šé¢å·²ç»returnäº†ï¼Œè¿™é‡Œä¹Ÿä¸ä¼šåˆ°ï¼‰
+    //   4. PnLè·Œç ´æ³¢åŠ¨ç‡å¯¹åº”é˜ˆå€¼ â†’ è§¦å‘æ­¢æŸ
+    //   v3.26: æ–°å¸(<24h) SMART_STOP æ”¶è‡³ -25%ï¼Œè€å¸ä¿æŒ -50%
+    //     7å¤©æ•°æ®å›æµ‹ï¼šæ–°å¸ SMART_STOP 22ç¬”äº -16.88 SOLï¼Œæ”¶è‡³ -25% å¯çœ ~8 SOL
+    {
+      let volStopPct = 0;
+      const lowThreshold = parseFloat(process.env.VOL_LOW_THRESHOLD || '10');
+      const highThreshold = parseFloat(process.env.VOL_HIGH_THRESHOLD || '15');
+      if (preVol5m != null && preVol5m >= 0) {
+        if (preVol5m < lowThreshold) {
+          volStopPct = config.strategy.volLowEmergencyStopPct;
+        } else if (preVol5m >= highThreshold) {
+          volStopPct = config.strategy.volHighEmergencyStopPct;
+        } else {
+          volStopPct = config.strategy.volMidEmergencyStopPct;
+        }
+      }
+
+      // v3.27: æ–°è€å¸å·®å¼‚åŒ– SMART_STOP
+      // æ–°å¸: ç”¨æ›´ç´§çš„æ­¢æŸ(ç«å¯¹avg loss -1.43 SOLç›¸å¯¹å°,æˆ‘ä»¬stopä¸èƒ½å¤ªå®½)
+      // è€å¸: æ”¾å®½æ­¢æŸ(ç«å¯¹avg hold 398min,peak 21%åªæ‹¿åˆ°8%è¯´æ˜æˆ‘ä»¬æ€å¾—å¤ªæ—©)
+      const newCoinSmartStopPct = parseFloat(process.env.NEW_COIN_SMART_STOP_PCT || '0');
+      const oldCoinSmartStopPct = parseFloat(process.env.OLD_COIN_SMART_STOP_PCT || '0');
+      const newCoinThresholdMs = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
+
+      if (volStopPct < 0 && newCoinSmartStopPct < 0) {
+        const tokenInfo = this.tokenRegistry?.getToken(pos.mint);
+        if (tokenInfo && tokenInfo.added_at) {
+          const tokenAgeMs = Date.now() - tokenInfo.added_at;
+          if (newCoinThresholdMs > 0 && tokenAgeMs < newCoinThresholdMs) {
+            // æ–°å¸
+            if (volStopPct < newCoinSmartStopPct) {
+              volStopPct = newCoinSmartStopPct;
+            }
+          } else {
+            // è€å¸: ç”¨æ›´å®½æ¾çš„æ­¢æŸ
+            if (oldCoinSmartStopPct < 0 && volStopPct < oldCoinSmartStopPct) {
+              volStopPct = oldCoinSmartStopPct;
+            }
+          }
+        }
+      }
+
+      // v3.27: æ–°è€å¸å·®å¼‚åŒ– grace â€” æ–°å¸æ— grace(ç«‹å³æ­¢æŸ), è€å¸5min grace
+      const newCoinSmartStopGraceMs = parseInt(process.env.NEW_COIN_SMART_STOP_GRACE_MS || '0');
+      const oldCoinSmartStopGraceMs = config.strategy.smartStopGraceMs;
+      let effectiveGraceMs = oldCoinSmartStopGraceMs;
+      if (newCoinSmartStopGraceMs < oldCoinSmartStopGraceMs) {
+        const tokenInfo = this.tokenRegistry?.getToken(pos.mint);
+        if (tokenInfo && tokenInfo.added_at) {
+          const tokenAgeMs = Date.now() - tokenInfo.added_at;
+          const newCoinThresholdMs2 = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
+          if (newCoinThresholdMs2 > 0 && tokenAgeMs < newCoinThresholdMs2) {
+            effectiveGraceMs = newCoinSmartStopGraceMs;
+          }
+        }
+      }
+
+      if (volStopPct < 0 && !pos.trailingArmed && posAge >= effectiveGraceMs) {
+        if (pnlPct <= volStopPct) {
+          const volLabel = preVol5m < lowThreshold ? 'ä½æ³¢' : preVol5m >= highThreshold ? 'é«˜æ³¢' : 'ä¸­æ³¢';
+          console.warn(
+            `[PositionManager] ğŸ›¡ï¸ SMART_STOP ${pos.symbol || pos.mint.slice(0, 6)} ` +
+              `pnl=${pnlPct.toFixed(2)}% <= ${volStopPct}% (${volLabel}, vol=${preVol5m?.toFixed(1) || '?'}%) ` +
+              `trailingArmed=false, age=${(posAge/1000).toFixed(0)}s`,
+          );
+          monitor.inc('PositionManager.smartStop', 1, 'PositionManager');
+          this._exitForCondition(pos, price, 'SMART_STOP');
+          return;
+        }
+      }
+    }
+
+    // ============ 1.6 v3.23: RANGE_STOP (interval-based stop-loss) ============
+    // Buy price broke below pre-buy 5min range support + PnL < -10% + trailing not armed
+    // v3.24: disabled via RANGE_STOP_ENABLED=0
+    {
+      const rangeStopEnabled = parseInt(process.env.RANGE_STOP_ENABLED || '0', 10);
+      const rangeSupportPct = parseFloat(process.env.RANGE_STOP_SUPPORT_TOLERANCE_PCT || '3');
+      const rangeStopPnlThreshold = parseFloat(process.env.RANGE_STOP_PNL_THRESHOLD_PCT || '-10');
+      if (rangeStopEnabled && pos.rangeSupport && pos.rangeSupport > 0 && !pos.trailingArmed &&
+          posAge >= config.strategy.smartStopGraceMs && pnlPct <= rangeStopPnlThreshold) {
+        const supportLine = pos.rangeSupport * (1 - rangeSupportPct / 100);
+        if (price < supportLine) {
+          const breakPct = ((price - pos.rangeSupport) / pos.rangeSupport * 100).toFixed(1);
+          console.warn(
+            '[PositionManager] RANGE_STOP ' + (pos.symbol || pos.mint.slice(0, 6)) +
+              ' pnl=' + pnlPct.toFixed(2) + '% support=' + pos.rangeSupport.toExponential(3) +
+              ' price=' + price.toExponential(3) + ' break=' + breakPct + '% trailingArmed=false age=' + (posAge/1000).toFixed(0) + 's',
+          );
+          monitor.inc('PositionManager.rangeStop', 1, 'PositionManager');
+          this._exitForCondition(pos, price, 'RANGE_STOP');
+          return;
+        }
+      }
+    }
+
+    // ============ 1.7 v3.24: TREND_STOP (real-time trend break stop-loss) ============
+    // Price breaks below 5-minute moving average + PnL < threshold + trailing not armed
+    // Data: break+PnL<-8% saves avg 0.7% vs holding, 66% of broken-trend trades continue falling
+    {
+      const trendStopEnabled = process.env.TREND_STOP_ENABLED === '1';
+      const trendStopPnlThreshold = parseFloat(process.env.TREND_STOP_PNL_THRESHOLD_PCT || '-8');
+      const trendStopMaWindow = parseInt(process.env.TREND_STOP_MA_WINDOW_SEC || '300') * 1000; // default 5min
+      const trendStopMinAge = parseInt(process.env.TREND_STOP_MIN_AGE_SEC || '120') * 1000; // default 2min
+      const trendStopBreakPct = parseFloat(process.env.TREND_STOP_BREAK_PCT || '1'); // price < MA*(1-breakPct/100)
+      if (trendStopEnabled && !pos.trailingArmed && pnlPct <= trendStopPnlThreshold &&
+          posAge >= trendStopMinAge) {
+        // Compute 5-minute moving average from price_samples
+        const now = Date.now();
+        const maStart = now - trendStopMaWindow;
+        const _db = this.tradeLogger?.db;
+        if (!_db) return;
+        const maRows = _db.prepare('SELECT price FROM price_samples WHERE mint = ? AND ts >= ? AND ts < ? AND price > 0 ORDER BY ts')
+          .all(pos.mint, maStart, now);
+        if (maRows.length >= 5) {
+          const ma = maRows.reduce((a, r) => a + r.price, 0) / maRows.length;
+          const breakLine = ma * (1 - trendStopBreakPct / 100);
+          if (price < breakLine) {
+            const breakPctFromMa = ((price - ma) / ma * 100).toFixed(1);
+            console.warn(
+              '[PositionManager] TREND_STOP ' + (pos.symbol || pos.mint.slice(0, 6)) +
+                ' pnl=' + pnlPct.toFixed(2) + '% MA=' + ma.toExponential(3) +
+                ' price=' + price.toExponential(3) + ' break=' + breakPctFromMa + '% belowMA' +
+                ' trailingArmed=false age=' + (posAge/1000).toFixed(0) + 's samples=' + maRows.length,
+            );
+            monitor.inc('PositionManager.trendStop', 1, 'PositionManager');
+            this._exitForCondition(pos, price, 'TREND_STOP');
+            return;
+          }
+        }
+      }
+    }
+
+    // ============ 1.8 v3.24: TIMED_TAKE_PROFIT (é˜¶æ¢¯å®šæ—¶æ­¢ç›ˆ) ============
+    // åœ¨ç‰¹å®šæŒä»“æ—¶é—´çª—å£å†…ï¼Œå¦‚æœPnLè¾¾åˆ°é˜ˆå€¼å°±æ­¢ç›ˆ
+    // ç›®çš„ï¼šæ•è·5-10%çš„"è„‰å†²åå›æ’¤"è¡Œæƒ…ï¼Œé˜²æ­¢æ¶¨äº†ä¸åˆ°10%å°±è·Œå›æ¥
+    // ä¸åœ¨çª—å£å†…æˆ–æ¶¨å¹…è¶…è¿‡10%çš„äº¤ç»™trailing stopå¤„ç†
+    {
+      const timedTpEnabled = process.env.TIMED_TP_ENABLED === '1';
+      if (timedTpEnabled && !pos.trailingArmed) {
+        // é˜¶æ¢¯é˜ˆå€¼ï¼šè¶Šæ™šæŒä»“æ—¶é—´ï¼Œé˜ˆå€¼è¶Šé«˜ï¼ˆç»™æ‹‰ç›˜æ›´å¤šç©ºé—´è§¦å‘trailingï¼‰
+        const windows = [
+          { startMs: 180000, endMs: 300000, pnlPct: 5 },   // 3-5min: 5%
+          { startMs: 480000, endMs: 600000, pnlPct: 7 },   // 8-10min: 7%
+          { startMs: 1080000, endMs: 1200000, pnlPct: 8 }, // 18-20min: 8%
+          { startMs: 1680000, endMs: 1800000, pnlPct: 8 }, // 28-30min: 8%
+        ];
+        for (const w of windows) {
+          if (posAge >= w.startMs && posAge <= w.endMs && pnlPct >= w.pnlPct) {
+            console.warn(
+              '[PositionManager] TIMED_TP ' + (pos.symbol || pos.mint.slice(0, 6)) +
+                ' pnl=' + pnlPct.toFixed(2) + '% age=' + (posAge/1000).toFixed(0) + 's' +
+                ' window=' + (w.startMs/60000).toFixed(0) + '-' + (w.endMs/60000).toFixed(0) + 'min' +
+                ' threshold=' + w.pnlPct + '% trailingArmed=false',
+            );
+            monitor.inc('PositionManager.timedTp', 1, 'PositionManager');
+            this._exitForCondition(pos, price, 'TIMED_TP');
+            return;
+          }
+        }
+      }
+    }
+
+    // ============ 2. å§‹ç»ˆæ›´æ–° HWM å’Œ trailing çŠ¶æ€ ============
+    //    v3.17.27: HWM 2-tick ç¡®è®¤æœºåˆ¶
+    //    æ ¹å› (PP420): ç«äº‰å¯¹æ‰‹å¤§å•ä¹°å…¥æ¨é«˜æ± å­ mid price â†’ _pollPoolPrices
+    //    è¯»åˆ°è™šå‡é«˜ä»· â†’ å• tick å°±æ›´æ–° HWM â†’ trailing armed â†’ ä»·æ ¼å›è½ â†’ äºæŸå–å‡ºã€‚
+    //    ä¿®å¤ï¼šæ–° HWM éœ€è¦è¿ç»­ 2 ä¸ª tick ç¡®è®¤æ‰èƒ½ç”Ÿæ•ˆï¼Œå• tick spike è‡ªåŠ¨ä¸¢å¼ƒã€‚
+    //    pendingHwm: å¾…ç¡®è®¤çš„æ–°é«˜ä»·æ ¼
+    //    pendingHwmTicks: å·²è¿ç»­ >= pendingHwm çš„ tick æ•°
+    if (price > pos.highWaterMark) {
+      // v3.17.28: HWM 2-tick ç¡®è®¤ â€” ä¿ç•™æœ€é«˜ pendingï¼Œä¸å› æ¬¡é«˜ä»·è¦†ç›–
+      //   æ—§ bugï¼šprice > HWM ä½† < pendingHwm æ—¶é‡ç½® pending ä¸ºæ›´ä½å€¼ï¼Œ
+      //   å¯¼è‡´çœŸå®å³°å€¼ï¼ˆå¦‚ +10.71%ï¼‰åªå‡ºç° 1 tick å°±è¢«æ¬¡é«˜ä»·è¦†ç›–ï¼Œ
+      //   æœ€ç»ˆç¡®è®¤çš„ HWM åªæœ‰ +7.80%ï¼Œå·® 0.2% æ²¡åˆ° trailing æ¿€æ´»çº¿ â†’ æ­»æ‰›äºæŸã€‚
+      //   ä¿®å¤ï¼špendingHwm åªå‡ä¸é™ã€‚price >= pendingHwm æ—¶åˆ·æ–° pending + ç´¯è®¡ ticksï¼›
+      //   price åœ¨ HWM~pendingHwm ä¹‹é—´æ—¶åªç´¯è®¡ tickï¼ˆè§†ä¸ºä»·æ ¼åœ¨é«˜ä½åŒºé—´å»¶ç»­ï¼‰ï¼Œ
+      //   ä¸è¦†ç›– pendingHwmï¼Œä¹Ÿä¸é‡ç½® ticksã€‚
+      if (!pos._pendingHwm || price >= pos._pendingHwm) {
+        // æ–°çš„é«˜ç‚¹ â†’ åˆ·æ–° pending + ç´¯è®¡ ticks
+        pos._pendingHwm = price;
+        pos._pendingHwmTicks = (pos._pendingHwmTicks || 0) + 1;
+      } else {
+        // price > HWM ä½† < pendingHwm â†’ é«˜ä½å»¶ç»­ï¼Œåªç´¯è®¡ tick ä¸è¦†ç›– pending
+        pos._pendingHwmTicks = (pos._pendingHwmTicks || 0) + 1;
+      }
+      if (pos._pendingHwmTicks >= 2) {
+        // è¿ç»­ 2 ä¸ª tick ç¡®è®¤ â†’ æ­£å¼æ›´æ–° HWM
+        pos.highWaterMark = pos._pendingHwm;
+        pos.highWaterMarkTs = Date.now();
+        pos._pendingHwm = null;
+        pos._pendingHwmTicks = 0;
+      }
+    } else {
+      // price <= HWM â†’ æ¸…é™¤ pendingï¼ˆé«˜ç‚¹æ²¡å»¶ç»­ï¼‰
+      if (pos._pendingHwm) {
+        pos._pendingHwm = null;
+        pos._pendingHwmTicks = 0;
+      }
+    }
+    // v3.17.27: æŒä¹…åŒ– peak_price â€” èŠ‚æµ5ç§’ï¼Œä¸ç®¡æ˜¯å¦åˆ›æ–°é«˜éƒ½å†™
+    //   ä¹‹å‰åªåœ¨ price > HWM æ—¶å†™ï¼Œå¯¼è‡´æ²¡æ¶¨è¿‡çš„ä»“ peak_price æ°¸è¿œ null â†’ é‡å¯ HWM ä¸¢å¤±
+    //   ç°åœ¨æ¯æ¬¡ _checkExit éƒ½æ£€æŸ¥æ˜¯å¦è¯¥ flushï¼Œç¡®ä¿ peak_price ä¸è½åå¤ªå¤š
+    if (!pos._lastPeakFlush || Date.now() - pos._lastPeakFlush > 5000) {
+      const peakPnlPct = ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100;
+      try {
+        this.tradeLogger.stmts.updatePeak.run({
+          positionId: pos.positionId,
+          peakPrice: pos.highWaterMark,
+          peakTs: pos.highWaterMarkTs || Date.now(),
+          peakPnlPct,
+        });
+        pos._lastPeakFlush = Date.now();
+      } catch (_) { /* best effort */ }
+    }
+
+    // v3.17.20 (MILHOUSE bug fix):
+    //   æ—§é€»è¾‘ peakPnlPct ç”¨ baselinePriceï¼ˆç¨³å®šæœŸä»·æ ¼ï¼Œé€šå¸¸ < entryPriceï¼‰ç®—ï¼Œ
+    //   å¯¼è‡´"ç›¸å¯¹ baseline æ¶¨ 8%"å°±æ­¦è£… trailing â€” ä½†ç›¸å¯¹çœŸå®ä¹°å…¥ä»· entryPrice
+    //   å¯èƒ½è¿˜åœ¨äºæŸã€‚å®æˆ˜ MILHOUSEï¼šentryPrice=2.777e-6ï¼Œbaselineâ‰ˆ2.5e-6ï¼Œ
+    //   ä»·æ ¼æ¶¨åˆ° 2.7e-6 â†’ ç›¸å¯¹ baseline +8% æ­¦è£… trailingï¼Œä½†ç›¸å¯¹ entryPrice ä» -2.8%ï¼Œ
+    //   å†å›æ’¤ 3% â†’ TRAILING_STOP åœ¨ -10.12% äºæŸå–å‡ºã€‚
+    //   25% çš„ç§»åŠ¨æ­¢ç›ˆ(11/44)éƒ½æ˜¯è¿™ä¸ª bug é€ æˆçš„äºæŸå–å‡ºã€‚
+    //   ä¿®å¤ï¼štrailing æ­¦è£… + TP ä¸€å¾‹ä»¥ entryPrice ä¸ºåŸºå‡†ï¼ˆçœŸå®ä¹°å…¥ä»·ï¼‰ï¼Œ
+    //         åªæœ‰çœŸæ­£èµšåˆ° TRAILING_ACTIVATE_PCT% æ‰æ­¦è£…ï¼Œä¸ä¼šå†"äºç€å–ä½†å†™ç§»åŠ¨æ­¢ç›ˆ"ã€‚
+    const peakPnlPct = ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100;
+
+    const trailingActivatePct = this.getTrailingActivatePct(preVol5m, pos.mint);
+    const trailingDrawdownPct = this.getTrailingDrawdownPct(peakPnlPct, preVol5m, pos.mint);
+    const trailingMinHwmAgeMs = config.strategy.trailingMinHwmAgeMs;
+    const tpPct = this.getTakeProfitPct(preVol5m, pos.mint);
+
+    // trailing armed çŠ¶æ€å§‹ç»ˆæ›´æ–°ï¼ˆåŸºäº entryPrice çš„ peakPnlï¼‰
+    // v3.17.28: armed æ—¶é”å®š _armedHwmï¼Œdrawdown ä»é”å®šå€¼ç®—
+    //   æ—§ bugï¼štrailing armed å HWM ä»è¢«çŸ­æš‚åå¼¹åˆ·æ–° â†’ hwmAge é‡ç½® â†’
+    //   trailing æ­¢ç›ˆæ°¸è¿œç­‰ä¸åˆ° minHwmAge â†’ ä»ç›ˆåˆ©æ‹–åˆ°äºæŸæ‰è§¦å‘ã€‚
+    //   ä¿®å¤ï¼šarmed ç¬é—´é”å®šå½“å‰ HWM ä¸º _armedHwmï¼Œåç»­ HWM æ­£å¸¸æ›´æ–°
+    //   ï¼ˆæ•æ‰æ›´é«˜å³°å€¼ï¼‰ï¼Œä½† drawdown å§‹ç»ˆä» _armedHwm ç®—ï¼Œä¸å—åç»­åˆ·æ–°å½±å“ã€‚
+    if (trailingActivatePct > 0 && trailingDrawdownPct > 0) {
+      if (!pos.trailingArmed && peakPnlPct >= trailingActivatePct) {
+        pos.trailingArmed = true;
+        pos._armedHwm = pos.highWaterMark;
+        pos._armedHwmTs = pos.highWaterMarkTs || Date.now();
+        console.log(
+          `[PositionManager] ğŸ¯ TRAILING_ARMED ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `peakPnl=${peakPnlPct.toFixed(2)}% (vs entryPrice), ` +
+            `armedHwm=${pos._armedHwm.toExponential(4)}, currentHwm=${pos.highWaterMark.toExponential(4)}`,
+        );
+        monitor.inc('PositionManager.trailingArmed', 1, 'PositionManager');
+      } else if (pos.trailingArmed && pos.highWaterMark > (pos._armedHwm || 0)) {
+        // HWM æ¶¨è¶… armedHwm â†’ æ›´æ–°é”å®šå€¼ï¼ˆæ•æ‰æ›´é«˜å³°å€¼ï¼Œè¿™å¯¹ trailing æ˜¯å¥½äº‹ï¼‰
+        pos._armedHwm = pos.highWaterMark;
+        // v3.17.35: ä¸å†é‡ç½® armedHwmTsï¼bugæ ¹å› ï¼šHWMåå¤è§¦æ‘¸é«˜ç‚¹ â†’ armedHwmTsåå¤é‡ç½® â†’ hwmAgeæ°¸è¿œ<5s â†’ trailingå–ä¸å‡ºå»
+        // pos._armedHwmTs = pos.highWaterMarkTs || Date.now();  // å·²åˆ é™¤
+      }
+    }
+
+    // ============ 3. è¯„ä¼°é€€å‡ºæ¡ä»¶ ============
+    //    v3.17.20 ç­–ç•¥æ”¹é€ ï¼ˆç”¨æˆ·éœ€æ±‚ï¼‰ï¼š
+    //      ä¼˜å…ˆçº§ï¼šTP(å›ºå®šæ­¢ç›ˆ) > trailing(ç§»åŠ¨æ­¢ç›ˆ)
+    //      - æ¶¨åˆ° TRAILING_ACTIVATE_PCT æ¿€æ´» trailing
+    //      - æ¶¨åˆ° TAKE_PROFIT_PCT â†’ ç«‹å³ TP å–å‡ºï¼Œä¸ç­‰åŒç¡®è®¤
+    //      - trailing æ¿€æ´»åä»é«˜ç‚¹å›æ’¤ TRAILING_DRAWDOWN_PCT â†’ trailing å–å‡º
+    //    æ‰€ä»¥å…ˆæ£€æŸ¥ TPï¼Œå†æ£€æŸ¥ trailingï¼Œä¸¤è€…ä¸å†²çªã€‚
+
+    // å„ä»“ç‹¬ç«‹è®¡ç®—æ¡ä»¶ï¼›ä»»ä¸€ä»“è§¦å‘åï¼ŒåŒå¸å…¨éƒ¨ä»“ä½è¿›å…¥ä¸²è¡Œå–å‡ºé˜Ÿåˆ—ã€‚
+
+    // 3a. å›ºå®šæ­¢ç›ˆï¼šåˆ° TAKE_PROFIT_PCT ç«‹å³å–
+    //   v3.17.40: åŠ ä»·æ ¼ç¡®è®¤ â€” å¦‚æœ pnlPct å• tick æš´æ¶¨è¶…è¿‡ TP é˜ˆå€¼ 15% ä»¥ä¸Šï¼Œ
+    //   å¯èƒ½æ˜¯ä»·æ ¼æ±¡æŸ“/å‡ä¿¡å·ï¼Œéœ€è¦ä¸‹ä¸€ä¸ª tick ç¡®è®¤
+    if (tpPct > 0 && pnlPct >= tpPct) {
+      const prevPnl = pos._prevTickPnl ?? 0;
+      const pnlJump = pnlPct - prevPnl;
+      // å¦‚æœ pnl å• tick è·³äº† > 15%ï¼ˆå¯èƒ½æ˜¯è™šå‡é«˜ä»·ï¼‰ï¼Œç­‰ä¸‹ä¸€ä¸ª tick ç¡®è®¤
+      if (pnlJump > 15 && !pos._tpConfirmPending) {
+        pos._tpConfirmPending = true;
+        console.warn(
+          `[PositionManager] âš ï¸ TP pending confirmation ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+          `pnl=${pnlPct.toFixed(2)}% >= ${tpPct}%, but jump=${pnlJump.toFixed(2)}% from prev ${prevPnl.toFixed(2)}% â€” waiting next tick`,
+        );
+      } else {
+        // ç¡®è®¤é€šè¿‡ï¼ˆæ­£å¸¸åˆ°è¾¾æˆ–å·²ç­‰äº†ä¸€ä¸ª tickï¼‰
+        console.log(
+          `[PositionManager] âœ… TAKE_PROFIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `pnl=${pnlPct.toFixed(2)}% >= ${tpPct}% (jump=${pnlJump.toFixed(2)}%${pos._tpConfirmPending ? ', confirmed' : ''})`,
+        );
+        this._exitForCondition(pos, price, 'TAKE_PROFIT');
+        return;
+      }
+    } else {
+      // pnlPct ä¸æ»¡è¶³ TP æ—¶æ¸…é™¤ pending çŠ¶æ€
+      pos._tpConfirmPending = false;
+    }
+    // è®°å½•å½“å‰ tick çš„ pnlPct ä¾›ä¸‹æ¬¡æ¯”è¾ƒ
+    pos._prevTickPnl = pnlPct;
+
+    // 3b. ç§»åŠ¨æ­¢ç›ˆï¼šarmed åä» _armedHwm å›æ’¤ TRAILING_DRAWDOWN_PCT% å–å‡º
+    //   v3.17.28: drawdown ä» _armedHwm ç®—ï¼ˆä¸å—åç»­ HWM åˆ·æ–°å½±å“ï¼‰ï¼Œ
+    //   hwmAge ä¹Ÿä» _armedHwmTs ç®—ï¼ˆä¸å—åç»­ HWM æ—¶é—´æˆ³é‡ç½®å½±å“ï¼‰ã€‚
+    //   æ—§ bugï¼šä¸‹è·Œé€”ä¸­çŸ­æš‚ 2-tick åå¼¹åˆ·æ–° HWM â†’ hwmAge å½’é›¶ â†’ trailing æ°¸è¿œç­‰ä¸åˆ°
+    if (trailingActivatePct > 0 && trailingDrawdownPct > 0 && pos.trailingArmed) {
+      const armedHwm = pos._armedHwm || pos.highWaterMark;
+      const armedHwmTs = pos._armedHwmTs || pos.highWaterMarkTs || Date.now();
+      const drawdownPct = ((armedHwm - price) / armedHwm) * 100;
+      const dynamicDrawdown = this.getTrailingDrawdownPct(peakPnlPct, preVol5m, pos.mint);
+      const hwmAge = Date.now() - armedHwmTs;
+      if (drawdownPct >= dynamicDrawdown && hwmAge >= trailingMinHwmAgeMs) {
+        console.log(
+          `[PositionManager] ğŸ“‰ TRAILING_STOP ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `peakPnl=${peakPnlPct.toFixed(2)}% â†’ currentPnl=${pnlPct.toFixed(2)}% ` +
+            `(drawdown ${drawdownPct.toFixed(2)}% from armedHwm, hwmAge=${hwmAge}ms)`,
+        );
+        this._exitForCondition(pos, price, 'TRAILING_STOP');
+        return;
+      }
+    }
+// ============ 3c. v3.17.33: é˜²å¾¡æ¨¡å¼ â€” åˆ©æ¶¦æ¿€æ´»çš„ç§»åŠ¨æ­¢æŸ ============
+    //
+    //   PnL >= defenseProfitActivatePct(3%) æ—¶æ¿€æ´»é˜²å¾¡trailing
+    //   DEFENSE_STOP_LOSS å·²ç¦ç”¨ (defenseStopLossPct=0)
+    //   æ¿€æ´»åä»é«˜ç‚¹å›æ’¤ defenseTrailingDrawdownPct(3%) å–å‡º
+    //
+    //   ä¼˜å…ˆçº§: TP > åŸtrailing > é˜²å¾¡trailing > MAX_HOLD
+    //
+    const defenseProfitActivatePct = config.strategy.defenseProfitActivatePct || 0;
+    const defenseStopLossPct = config.strategy.defenseStopLossPct;
+    const defenseDrawdownPct = config.strategy.defenseTrailingDrawdownPct;
+    const defenseActivateMs = config.strategy.defenseActivateMs || 0;
+
+    if (defenseDrawdownPct > 0) {
+      // 3c-1. é˜²å¾¡æ­¢æŸ: å·²ç¦ç”¨ (defenseStopLossPct=0)
+      if (defenseStopLossPct < 0 && pnlPct <= defenseStopLossPct) {
+        console.log(
+          `[PositionManager] ğŸ›¡ï¸ DEFENSE_STOP_LOSS ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `pnl=${pnlPct.toFixed(2)}% <= ${defenseStopLossPct}%`,
+        );
+        this._exitForCondition(pos, price, 'DEFENSE_STOP_LOSS');
+        return;
+      }
+
+      // 3c-2. é˜²å¾¡ trailing: æŒä»“æ»¡ defenseActivateMs(20min) åï¼ŒPnL >= defenseProfitActivatePct(3%) æ—¶æ¿€æ´»
+      //   v3.17.35: å¿…é¡»æ»¡20åˆ†é’Ÿæ‰æ¿€æ´»é˜²å¾¡ï¼Œ20åˆ†é’Ÿå‰åªèµ°ä¸» trailing å‚æ•°
+      if (!pos._defenseArmed) {
+        const posAgeForDefense = Date.now() - (pos.openedAt || pos.ts);
+        if (posAgeForDefense >= defenseActivateMs && defenseProfitActivatePct > 0 && pnlPct >= defenseProfitActivatePct) {
+          pos._defenseArmed = true;
+          pos._defenseHwm = price;
+          pos._defenseHwmTs = Date.now();
+          const posAgeMs = Date.now() - (pos.openedAt || pos.ts);
+          console.log(
+            `[PositionManager] ğŸ›¡ï¸ DEFENSE_ARMED ${pos.symbol || pos.mint.slice(0, 6)} ` +
+              `pnl=${pnlPct.toFixed(2)}% >= ${defenseProfitActivatePct}%, defenseHwm=${price.toExponential(4)} (held ${(posAgeMs/60000).toFixed(1)}min)`,
+          );
+          monitor.inc('PositionManager.defenseArmed', 1, 'PositionManager');
+        }
+      } else {
+        if (price > pos._defenseHwm) {
+          pos._defenseHwm = price;
+          pos._defenseHwmTs = Date.now();
+        }
+        const defenseDrawdown = ((pos._defenseHwm - price) / pos._defenseHwm) * 100;
+        const defenseHwmAge = Date.now() - pos._defenseHwmTs;
+        const posAgeMs = Date.now() - (pos.openedAt || pos.ts);
+        if (defenseDrawdown >= defenseDrawdownPct && defenseHwmAge >= 2000) {
+          console.log(
+            `[PositionManager] ğŸ›¡ï¸ DEFENSE_TRAILING_STOP ${pos.symbol || pos.mint.slice(0, 6)} ` +
+              `pnl=${pnlPct.toFixed(2)}%, drawdown=${defenseDrawdown.toFixed(2)}% from defenseHwm ` +
+              `(held ${(posAgeMs/60000).toFixed(1)}min)`,
+          );
+          this._exitForCondition(pos, price, 'DEFENSE_TRAILING_STOP');
+          return;
+        }
+      }
+
+      // 3c-3. v3.17.35: é˜²å¾¡åˆ°æœŸ â€” æŒä»“æ»¡ defenseActivateMs(20min) æ—¶ï¼Œç›ˆåˆ©>0 ç«‹å³å–å‡º
+      //   åªåœ¨æ»¡20åˆ†é’Ÿé‚£ä¸€åˆ»è§¦å‘ä¸€æ¬¡ï¼ˆ_defenseTimeoutChecked æ ‡è®°é˜²æ­¢é‡å¤ï¼‰
+      //   ç›ˆåˆ©â‰¤0 åˆ™ä¸å–ï¼Œç»§ç»­èµ°é˜²å¾¡trailingæˆ–å…¶ä»–ç­–ç•¥
+      if (defenseActivateMs > 0 && !pos._defenseTimeoutChecked) {
+        const posAgeMs = Date.now() - (pos.openedAt || pos.ts);
+        if (posAgeMs >= defenseActivateMs) {
+          pos._defenseTimeoutChecked = true;
+          if (pnlPct > 0) {
+            console.log(
+              `[PositionManager] ğŸ›¡ï¸ DEFENSE_TIMEOUT_PROFIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
+                `pnl=${pnlPct.toFixed(2)}% > 0 at ${(posAgeMs/60000).toFixed(1)}min â†’ immediate sell`,
+            );
+            this._exitForCondition(pos, price, 'DEFENSE_TIMEOUT_PROFIT');
+            return;
+          } else {
+            console.log(
+              `[PositionManager] ğŸ›¡ï¸ DEFENSE_TIMEOUT_SKIP ${pos.symbol || pos.mint.slice(0, 6)} ` +
+                `pnl=${pnlPct.toFixed(2)}% â‰¤ 0 at ${(posAgeMs/60000).toFixed(1)}min â†’ continue defense trailing`,
+            );
+          }
+        }
+      }
+    }
+
+  }
+
+
+  /**
+   * Exit a position â€” sell tokens and close.
+   */
+  async _exit(pos, exitPrice, reason) {
+    if (pos.exiting) return;
+    pos.exiting = true;
+    pos.exitReason = reason;
+
+    // v3.17.41: same-mint daily blacklist on bad exits
+    // LOW_PEAK / EARLY_LOW_PEAK / EMERGENCY_STOP = blacklisted 24h
+    const blacklistReasons = ['LOW_PEAK_TIMEOUT', 'EARLY_LOW_PEAK_CUT', 'EMERGENCY_STOP', 'RANGE_STOP'];
+    if (blacklistReasons.includes(reason) && this.signalEngine) {
+      const blacklistMs = 24 * 3600 * 1000; // 24h
+      // v3.18: blacklist disabled â€” skip blacklistMint call
+      console.log(
+        `[PositionManager] ğŸ”’ BLACKLIST ${pos.symbol || pos.mint.slice(0, 6)} for 24h (reason=${reason})`,
+      );
+    }
+
+    // v3.24: set rebuy cooldown on this mint after any exit
+    // v3.26: SMART_STOP é€€å‡º â†’ 24h å†·å´ï¼Œé˜²æ­¢åŒå¸åå¤æ­¢æŸ
+    // v3.27: è€å¸(>=24h) SMART_STOP â†’ ä»ç›‘æ§åˆ—è¡¨ç§»é™¤24hï¼ŒèŠ‚çœèµ„æº
+    if (this.signalEngine && this.signalEngine._exitCooldowns) {
+      const isSmartStop = reason === 'SMART_STOP';
+      const isTimeout = reason.startsWith('TIMEOUT');
+      let rebuyCooldownMs;
+      if (isSmartStop) {
+        rebuyCooldownMs = parseInt(process.env.SMART_STOP_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
+      } else if (isTimeout) {
+        rebuyCooldownMs = parseInt(process.env.TIMEOUT_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
+      } else {
+        rebuyCooldownMs = config.strategy.rebuyCooldownMs;
+      }
+      if (rebuyCooldownMs > 0) {
+        this.signalEngine._exitCooldowns.set(pos.mint, Date.now() + rebuyCooldownMs);
+      }
+      if (isSmartStop) {
+        console.log(
+          `[PositionManager] ğŸ”’ SMART_STOP cooldown ${pos.symbol || pos.mint.slice(0, 6)} for ${Math.round(rebuyCooldownMs / 3600000)}h (no rebuy until cooldown expires)`,
+        );
+        // v3.27: è€å¸SMART_STOPåä»ç›‘æ§åˆ—è¡¨ç§»é™¤24h
+        const newCoinThresholdMs = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
+        const tokenInfo = this.tokenRegistry?.getToken(pos.mint);
+        if (tokenInfo && tokenInfo.added_at) {
+          const tokenAgeMs = Date.now() - tokenInfo.added_at;
+          if (newCoinThresholdMs > 0 && tokenAgeMs >= newCoinThresholdMs) {
+            // è€å¸: ç§»é™¤ç›‘æ§ï¼Œ24håWatchdogä¸ä¼šå†æ£€æŸ¥å›æ¥(å› ä¸ºå·²è¢«ç§»é™¤)
+            // è®¾ç½®å®šæ—¶å™¨24håæ¢å¤
+            const oldCoinSmartStopRemoveMs = parseInt(process.env.OLD_COIN_SMART_STOP_REMOVE_MS || '86400000');
+            this.tokenRegistry.removeToken(pos.mint);
+            console.log(
+              `[PositionManager] ğŸ”’ OLD_COIN SMART_STOP remove from watchlist: ${pos.symbol || pos.mint.slice(0, 6)} for ${Math.round(oldCoinSmartStopRemoveMs / 3600000)}h`,
+            );
+            // 24håæ¢å¤ç›‘æ§
+            setTimeout(() => {
+              this.tokenRegistry.addToken(pos.mint, {
+                symbol: pos.symbol,
+                pool_address: tokenInfo.pool_address,
+                pool_base_vault: tokenInfo.pool_base_vault,
+                pool_quote_vault: tokenInfo.pool_quote_vault,
+                source: 'smart_stop_restore',
+              }).catch(err => {
+                console.log(`[PositionManager] âš ï¸ SMART_STOP restore failed for ${pos.symbol}: ${err.message}`);
+              });
+              console.log(
+                `[PositionManager] ğŸ”“ OLD_COIN SMART_STOP restore to watchlist: ${pos.symbol || pos.mint.slice(0, 6)}`,
+              );
+            }, oldCoinSmartStopRemoveMs);
+          }
+        }
+      }
+    }
+
+    monitor.inc(`PositionManager.exitsBy_${reason}`, 1, 'PositionManager');
+
+    console.log(
+      `[PositionManager] ğŸ“‰ EXIT ${pos.symbol || pos.mint.slice(0, 6)} reason=${reason} ` +
+        `triggerPnl=${(((exitPrice - pos.entryPrice) / pos.entryPrice) * 100).toFixed(2)}%`,
+    );
+
+    // v3.17.13: åŒå¸å–å‡ºæ’é˜Ÿ â€” é˜²æ­¢å¤šä»“å¹¶å‘å–å‡ºå¯¼è‡´æ»‘ç‚¹ä¸å¤Ÿå…¨éƒ¨å¤±è´¥
+    const mint = pos.mint;
+    if (!this._sellQueues.has(mint)) {
+      this._sellQueues.set(mint, []);
+    }
+    this._sellQueues.get(mint).push({ pos, exitPrice });
+    this._processSellQueue(mint);
+  }
+
+  /**
+   * v3.17.13: å¤„ç†åŒå¸å–å‡ºé˜Ÿåˆ— â€” ä¸²è¡Œå–å‡ºï¼Œä¸Šä¸€ç¬”å®Œæˆåå†å–ä¸‹ä¸€ç¬”
+   */
+  _processSellQueue(mint) {
+    if (this._sellInProgress.has(mint)) return; // ä¸Šä¸€ç¬”è¿˜åœ¨å–
+    const queue = this._sellQueues.get(mint);
+    if (!queue || queue.length === 0) return;
+
+    const { pos, exitPrice } = queue.shift();
+    if (queue.length === 0) this._sellQueues.delete(mint);
+
+    this._sellInProgress.add(mint);
+    this._attemptSell(pos, exitPrice).finally(() => {
+      this._sellInProgress.delete(mint);
+      // æ£€æŸ¥æ˜¯å¦è¿˜æœ‰æ’é˜Ÿ
+      this._processSellQueue(mint);
+    });
+  }
+
+  async _attemptSell(pos, triggerPrice) {
+    const tokenInfo = this.tokenRegistry.getToken(pos.mint);
+
+    // v3.17.40: å–å‡ºæ—¶ç”¨æœ€æ–°å®æ—¶ä»·æ ¼ï¼Œä¸ç”¨è§¦å‘æ—¶çš„ä»·æ ¼
+    //   è§¦å‘åˆ°æ‰§è¡Œä¹‹é—´ä»·æ ¼å¯èƒ½å·²æš´è·Œï¼Œç”¨æ—§ä»·æ ¼ä¼šå¯¼è‡´ slippage è®¡ç®—ä¸å‡†
+    const latestPrice = this.priceTracker.getPrice(pos.mint) || triggerPrice;
+    if (latestPrice !== triggerPrice) {
+      const latestPnl = ((latestPrice - pos.entryPrice) / pos.entryPrice) * 100;
+      const triggerPnl = ((triggerPrice - pos.entryPrice) / pos.entryPrice) * 100;
+      console.log(
+        `[PositionManager] ğŸ“Š sell price update ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+        `triggerPnl=${triggerPnl.toFixed(2)}% â†’ latestPnl=${latestPnl.toFixed(2)}% ` +
+        `(trigger=${triggerPrice.toExponential(4)} â†’ latest=${latestPrice.toExponential(4)})`,
+      );
+    }
+
+    let sellResult;
+    try {
+      sellResult = await this.executor.sell({
+        mint: pos.mint,
+        symbol: pos.symbol,
+        poolAddress: tokenInfo?.pool_address,
+        poolBaseVault: tokenInfo?.pool_base_vault,
+        poolQuoteVault: tokenInfo?.pool_quote_vault,
+        tokenAmount: pos.tokenAmount,
+        baseDecimals: tokenInfo?.decimals ?? 6,
+        currentPrice: latestPrice,
+      });
+    } catch (err) {
+      monitor.recordError('PositionManager', err, {
+        phase: 'sell_throw',
+        mint: pos.mint,
+        symbol: pos.symbol,
+      });
+      sellResult = { success: false, error: err.message, latencyMs: 0 };
+    }
+
+    pos.sellAttempts = (pos.sellAttempts || 0) + 1;
+
+    const realSolOut = sellResult.solOut ?? null;
+    const realExitPrice = sellResult.price ?? triggerPrice;
+    // v3.17.40c: å®é™…å–å‡ºçš„ä»£å¸æ•°ï¼ˆé“¾ä¸Šä½™é¢å¯èƒ½ < pos.tokenAmountï¼‰
+    const actualSellAmount = sellResult.sellAmount ?? pos.tokenAmount;
+
+    // v3.4: ç´¯åŠ æ¯æ¬¡ sell å°è¯•çš„ priority feeï¼ˆå«å¤±è´¥çš„ï¼Œå› ä¸ºå¤±è´¥ä¹Ÿæ¶ˆè€—äº† feeï¼‰
+    if (sellResult.priorityFeeLamports) {
+      pos.sellFeeLamports = (pos.sellFeeLamports || 0) + sellResult.priorityFeeLamports;
+    }
+
+    // è®°å½• trade æäº¤äº‹ä»¶ï¼ˆæˆåŠŸ/å¤±è´¥éƒ½è®°ï¼‰
+    this.tradeLogger.logTrade({
+      positionId: pos.positionId,
+      ts: Date.now(),
+      mint: pos.mint,
+      symbol: pos.symbol,
+      side: 'SELL',
+      solAmount: realSolOut,
+      tokenAmount: pos.tokenAmount,
+      price: realExitPrice,
+      signature: sellResult.signature,
+      success: sellResult.success,
+      dryRun: pos.dryRun,
+      reason: pos.exitReason + (pos.sellAttempts > 1 ? `_retry_${pos.sellAttempts}` : ''),
+      latencyMs: sellResult.latencyMs,
+      error: sellResult.error,
+    });
+
+    // ============ åˆ†æ”¯ Aï¼šæäº¤æœ¬èº«å¤±è´¥ï¼ˆæ‹¿ä¸åˆ° signatureï¼‰ ============
+    if (!sellResult.success) {
+      monitor.inc('PositionManager.sellSubmitFail', 1, 'PositionManager');
+      this.tradeLogger.recordSellAttempt(pos.positionId, sellResult.error);
+
+      if (pos.dryRun) {
+        monitor.recordError('PositionManager', new Error('DRY_RUN sell unexpectedly failed'), {
+          mint: pos.mint,
+          symbol: pos.symbol,
+          error: sellResult.error,
+        });
+        console.error(
+          `[PositionManager] DRY_RUN sell unexpectedly failed for ${pos.mint}; abandoning`,
+        );
+        this.tradeLogger.closePosition(pos.positionId, {
+          closedAt: Date.now(),
+          exitPrice: triggerPrice,
+          exitSol: 0,
+          pnlSol: -pos.entrySol,
+          pnlPct: -100,
+          exitReason: pos.exitReason + '_FAILED',
+          sellSignature: null,
+        });
+        this.positions.delete(pos.positionId);
+        this._removeByMint(pos.mint, pos.positionId);
+        // v3.17.21: SELL å¤±è´¥å¼ºå…³ â†’ ä» hotMints ç§»é™¤
+        if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(pos.mint);
+        monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+        return;
+      }
+
+      this._scheduleRetryOrStuck(pos, triggerPrice, sellResult.error);
+      return;
+    }
+
+    // ============ åˆ†æ”¯ Bï¼šæäº¤æˆåŠŸï¼Œä½†è¿˜éœ€ç­‰é“¾ä¸Šç¡®è®¤ ============
+    // v3.17.40: å¦‚æœå–å‡º SOL â‰ˆ 0ï¼Œè¯´æ˜ä»£å¸å·²è¢«å…¶ä»–ä»“ä½å–å…‰ï¼Œç›´æ¥å…³é—­
+    if (realSolOut !== null && realSolOut < 0.0001) {
+      monitor.inc('PositionManager.sellAbandoned_zeroOut', 1, 'PositionManager');
+      console.warn(
+        `[PositionManager] ğŸš« SELL zero-out ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+        `solOut=${realSolOut?.toExponential(3)} â€” token already sold, force closing`,
+      );
+      this.tradeLogger.closePosition(pos.positionId, {
+        closedAt: Date.now(),
+        exitPrice: realExitPrice,
+        exitSol: 0,
+        pnlSol: -pos.entrySol,
+        pnlPct: -100,
+        exitReason: pos.exitReason + '_ZERO_OUT',
+        sellSignature: sellResult.signature,
+      });
+      this.positions.delete(pos.positionId);
+      this._removeByMint(pos.mint, pos.positionId);
+      if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(pos.mint);
+      monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+      return;
+    }
+
+    // æ­¤æ—¶ âš ï¸ ä¸èƒ½ç«‹å³ closePositionï¼tx å¯èƒ½åœ¨ mempool è¢«ä¸¢ã€æ»‘ç‚¹è¶…é™è¢« reject
+    // æ ‡è®° sell_confirming çŠ¶æ€ï¼Œå¯åŠ¨åå°ç¡®è®¤
+    this.tradeLogger.markSellPending(pos.positionId, sellResult.signature, pos.exitReason);
+    pos._lastSellSignature = sellResult.signature;
+
+    if (pos.dryRun) {
+      // DRY_RUN ç›´æ¥å½“æˆåŠŸ
+      this._finalizeSuccess(pos, realExitPrice, realSolOut, sellResult.signature, actualSellAmount);
+      return;
+    }
+
+    // å¼‚æ­¥ç¡®è®¤ï¼ˆä¸ awaitï¼Œé¿å…é˜»å¡ä¸‹ä¸€ç¬”æ“ä½œï¼›å¤±è´¥ä¼šè‡ªå·±è§¦å‘ retryï¼‰
+    this._confirmSellAsync(pos, sellResult.signature, realExitPrice, realSolOut, triggerPrice, actualSellAmount).catch(
+      (err) => {
+        monitor.recordError('PositionManager', err, {
+          phase: 'confirm_async_crash',
+          mint: pos.mint,
+          signature: sellResult.signature,
+        });
+      },
+    );
+  }
+
+  /**
+   * å¼‚æ­¥ç­‰å¾… sell tx è½é“¾ç¡®è®¤ã€‚
+   * ä¸‰ç§ç»“æœï¼š
+   *   1. é“¾ä¸Šç¡®è®¤æ—  err  â†’ fetchTxSwapResult æ‹‰çœŸå® solOut â†’ finalizeSuccess
+   *   2. é“¾ä¸Š tx æŠ¥é”™      â†’ scheduleRetry
+   *   3. è¶…æ—¶æœªæ‰¾åˆ° tx    â†’ scheduleRetryï¼ˆmempool ä¸¢å¼ƒï¼‰
+   *
+   * v3.17.6 ä¿®å¤ï¼šSELL ä¹Ÿç”¨é“¾ä¸ŠçœŸå®å€¼æ›¿ä»£ SDK ä¼°ç®—
+   *   - ä¹‹å‰ exitPrice/solOut æ˜¯ _attemptSell é‡Œ SDK æŠ¥ä»·çš„ expectedSolOut
+   *   - SDK ä¼°ç®—å¯èƒ½åä½ 3-10%ï¼ˆä¸å« priority fee æ‰£å‡ã€æ± å­çŠ¶æ€ç•¥æ»åï¼‰
+   *   - å®æµ‹ï¼šDB è®°å½• -0.012 SOL äºæŸï¼Œé“¾ä¸ŠçœŸå® +0.091 SOL ç›ˆåˆ©
+   *   - ä¿®å¤ï¼šè½é“¾ç¡®è®¤åï¼Œè°ƒ fetchTxSwapResult æ‹¿çœŸå® realSolDeltaï¼Œè¦†ç›– SDK ä¼°ç®—
+   */
+  async _confirmSellAsync(pos, signature, exitPrice, solOut, triggerPrice, actualSellAmount) {
+    const result = await this.executor.confirmTx(signature, { timeoutMs: 15_000 });
+
+    if (!this.positions.has(pos.positionId)) return; // æœŸé—´è¢«å…¶ä»–æµç¨‹å…³æ‰
+
+    if (result.confirmed) {
+      monitor.inc('PositionManager.sellConfirmed', 1, 'PositionManager');
+
+      // v3.17.6: æ‹‰é“¾ä¸ŠçœŸå® SOL å¢é‡
+      let realExitPrice = exitPrice;
+      let realSolOut = solOut;
+      try {
+        const swap = await this.executor.fetchTxSwapResult(signature, pos.mint);
+        // SELL çš„ realSolDelta æ˜¯æ­£æ•°ï¼ˆé’±åŒ… SOL å¢åŠ ï¼‰
+        if (swap && swap.realSolDelta > 0 && pos.tokenAmount > 0) {
+          realSolOut = swap.realSolDelta;
+          // v3.17.40c: ç”¨å®é™…å–å‡ºçš„ä»£å¸æ•°ç®—ä»·æ ¼ï¼ˆé“¾ä¸Šä½™é¢å¯èƒ½ < pos.tokenAmountï¼‰
+          const sellAmt = actualSellAmount || pos.tokenAmount;
+          realExitPrice = realSolOut / sellAmt;
+          monitor.inc('PositionManager.sellReconciled', 1, 'PositionManager');
+          const drift = solOut ? ((realSolOut - solOut) / solOut) * 100 : 0;
+          console.log(
+            `[PositionManager] ğŸ”§ SELL reconciled ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+              `SDK est ${(solOut ?? 0).toFixed(4)} â†’ real ${realSolOut.toFixed(4)} SOL (${drift.toFixed(2)}%)`,
+          );
+        } else {
+          // fetchTxSwapResult å¤±è´¥ï¼šä¿ç•™ SDK ä¼°ç®—ï¼ˆæ—§è¡Œä¸ºï¼‰
+          monitor.inc('PositionManager.sellReconcileFallback', 1, 'PositionManager');
+          console.warn(
+            `[PositionManager] SELL reconcile fallback to SDK estimate: ${pos.symbol || pos.mint.slice(0, 6)} ` +
+              `sig=${signature.slice(0, 8)}.. (fetch returned no realSolDelta)`,
+          );
+        }
+      } catch (err) {
+        monitor.recordError('PositionManager', err, {
+          phase: 'sell_reconcile_fetch',
+          mint: pos.mint,
+          signature,
+        });
+        // å¼‚å¸¸æ—¶ä¹Ÿ fallback åˆ° SDK ä¼°ç®—
+      }
+
+      this._finalizeSuccess(pos, realExitPrice, realSolOut, signature, actualSellAmount);
+      return;
+    }
+
+    monitor.inc('PositionManager.sellNotLanded', 1, 'PositionManager');
+    const errMsg = `tx ${signature.slice(0, 8)}.. ${result.error || 'not_landed'}`;
+    console.warn(
+      `[PositionManager] SELL submitted but not confirmed: ${pos.symbol || pos.mint.slice(0, 6)}: ${errMsg}`,
+    );
+
+    // v3.17.8: åŒä¿é™© â€” confirmTx è¶…æ—¶(15s)ä¸ç­‰äºäº¤æ˜“å¤±è´¥
+    //   å®æˆ˜å‘ç°:10 ç¬” stuck position é“¾ä¸Š SELL å…¶å®éƒ½æˆåŠŸäº†,åªæ˜¯ confirmTx æ²¡ç­‰åˆ°
+    //   åŸå› :ç½‘ç»œæŠ–åŠ¨ / RPC subscribeSignature é”™è¿‡é€šçŸ¥ / tx å®é™…åœ¨ 18-30s åæ‰ç¡®è®¤
+    //   ä¿®å¤:confirm å¤±è´¥åå†ç›´æ¥æ‹‰ä¸€æ¬¡é“¾ä¸Š tx,å¦‚æœ fetchTxSwapResult æˆåŠŸ â†’ èµ° success è·¯å¾„
+    //   ä¸èƒ½å®Œå…¨ä¾èµ–è¿™æ¡è·¯å¾„ â€” å®ƒå¯èƒ½ä¹Ÿå¤±è´¥(tx çœŸçš„æ²¡è½é“¾),æ‰€ä»¥å¤±è´¥æ—¶ä»èµ° retry
+    try {
+      const swap = await this.executor.fetchTxSwapResult(signature, pos.mint);
+      if (swap && swap.realSolDelta > 0 && pos.tokenAmount > 0) {
+        const realSolOut = swap.realSolDelta;
+        // v3.17.40c: ç”¨ actualSellAmount ç®—æ­£ç¡®çš„ exitPrice
+        const sellAmt5b = actualSellAmount || pos.tokenAmount;
+        const realExitPrice = realSolOut / sellAmt5b;
+        monitor.inc('PositionManager.sellRecoveredFromTimeout', 1, 'PositionManager');
+        console.log(
+          `[PositionManager] âœ… SELL actually landed (recovered from confirm timeout) ` +
+            `${pos.symbol || pos.mint.slice(0, 6)}: realSol=${realSolOut.toFixed(4)}`,
+        );
+        this._finalizeSuccess(pos, realExitPrice, realSolOut, signature, actualSellAmount);
+        return;
+      }
+    } catch (err) {
+      // fetchTxSwapResult ä¹Ÿå¤±è´¥ â†’ çœŸçš„æ²¡è½é“¾æˆ–é“¾ä¸Š tx å¤±è´¥,ç»§ç»­ retry æµç¨‹
+      monitor.recordError('PositionManager', err, {
+        phase: 'sell_recovery_fetch',
+        mint: pos.mint,
+        signature,
+      });
+    }
+
+    this._scheduleRetryOrStuck(pos, triggerPrice, errMsg);
+  }
+
+  _finalizeSuccess(pos, exitPrice, solOut, signature, actualSellAmount) {
+    // v3.17.40c: ç”¨å®é™…å–å‡ºçš„ä»£å¸æ•°ç®— exitSol
+    // å¦‚æœé“¾ä¸Šä½™é¢ä¸è¶³ï¼ˆå…¶ä»–ä»“ä½å…ˆå–äº†ï¼‰ï¼ŒactualSellAmount < pos.tokenAmount
+    const sellAmt = actualSellAmount != null ? actualSellAmount : pos.tokenAmount;
+    const exitSol = solOut ?? sellAmt * exitPrice;
+
+    // v3.17.14: PnL è®¡ç®—ä¿®å¤
+    //   - entrySol: BUY reconcile åçš„çœŸå® SOL å‡ºè´¦ï¼ˆå·²å« buy priority fee + base feeï¼‰
+    //   - exitSol: SELL reconcile åçš„çœŸå® SOL å…¥è´¦ï¼ˆå·²å« sell priority fee + base feeï¼‰
+    //   - ä¸¤è€…éƒ½æ˜¯é’±åŒ…å‡€å˜åŒ–ï¼Œæ‰€ä»¥ PnL = exitSol - entrySolï¼Œä¸éœ€è¦å†æ‰£ fee
+    //   - å¦‚æœ exitSol è¿˜æ˜¯ SDK ä¼°ç®—å€¼ï¼ˆreconcile å¤±è´¥ï¼‰ï¼Œä¹Ÿç›´æ¥ç”¨ï¼Œå› ä¸º SDK ä¼°ç®—ä¸å« fee
+    //     å¯¼è‡´ PnL åé«˜ä¸€ç‚¹ï¼Œä½†æ¯”åŒé‡æ‰£ fee å‡†ç¡®
+    const grossPnl = exitSol - pos.entrySol;
+    const pnlSol = grossPnl;
+    const pnlPct = (pnlSol / pos.entrySol) * 100;
+    const feeSol = ((pos.buyFeeLamports || 0) + (pos.sellFeeLamports || 0)) / 1e9;
+
+    // v3.17.15: æ ¡æ­£ exitReason â€” å¦‚æœå®é™…äºæŸä½† reason æ˜¯ TAKE_PROFITï¼Œä¿®æ­£ä¸º TAKE_PROFIT_LOSS
+    //   é˜²æ­¢ä»·æ ¼æ±¡æŸ“è§¦å‘å‡æ­¢ç›ˆï¼Œå®é™…å–å‡ºäºæŸä½†è®°å½•æ˜¾ç¤º"æ­¢ç›ˆ"çš„è¯¯å¯¼
+    let finalReason = pos.exitReason;
+    if (pnlSol < 0 && finalReason === 'TAKE_PROFIT') {
+      finalReason = finalReason + '_LOSS';
+      console.log(
+        `[PositionManager] âš ï¸ exitReason corrected: ${pos.exitReason} â†’ ${finalReason} ` +
+        `(trigger said profit but actual PnL=${pnlSol.toFixed(4)} SOL / ${pnlPct.toFixed(2)}%)`,
+      );
+    }
+
+    // v3.17.21: è®°å½•æŒä»“æœŸé—´çš„å³°å€¼æ•°æ®ï¼ˆhighWaterMark å·²åœ¨ _checkExit ä¸­å®æ—¶ç»´æŠ¤ï¼‰
+    const peakPnlPct = pos.entryPrice > 0
+      ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100
+      : null;
+    const peakPrice = pos.highWaterMark ?? null;
+    const peakTs = pos.highWaterMarkTs ?? null;
+    const timeToPeakMs = (pos.highWaterMarkTs && pos.openedAt)
+      ? pos.highWaterMarkTs - pos.openedAt
+      : null;
+
+    this.tradeLogger.closePosition(pos.positionId, {
+      closedAt: Date.now(),
+      exitPrice,
+      exitSol,
+      pnlSol,
+      pnlPct,
+      exitReason: finalReason,
+      sellSignature: signature,
+      peakPnlPct,
+      peakPrice,
+      peakTs,
+      timeToPeakMs,
+      priceTickCount: pos.tickCount || 0,   // v3.17.21: æŒä»“æœŸé—´ price tick æ•°
+    });
+
+    // v3.17.31: å¯åŠ¨å¹³ä»“å 5 åˆ†é’Ÿä»·æ ¼è¿½è¸ª(æ—è·¯,ä¸å½±å“ä¸»è·¯å¾„)
+    if (this.postExitTracker && exitPrice > 0) {
+      try {
+        this.postExitTracker.startTracking(
+          pos.positionId,
+          pos.mint,
+          exitPrice,
+          Date.now(),
+        );
+      } catch (err) {
+        // å³ä½¿ tracker æŒ‚äº†ä¹Ÿä¸èƒ½å½±å“å¹³ä»“æµç¨‹
+        console.warn(`[PositionManager] postExitTracker.startTracking failed: ${err.message}`);
+      }
+    }
+
+    this.positions.delete(pos.positionId);
+    this._removeByMint(pos.mint, pos.positionId);
+
+    // v3.30: æ·»åŠ åˆ° _recentlyClosed ç¼“å­˜ï¼ˆcooldown ç”¨ï¼‰
+    this._recentlyClosed.push({ mint: pos.mint, closed_at: Date.now() });
+    // åªä¿ç•™æœ€è¿‘ 100 æ¡ï¼Œé¿å…å†…å­˜æ³„æ¼
+    if (this._recentlyClosed.length > 100) {
+      this._recentlyClosed = this._recentlyClosed.slice(-50);
+    }
+
+    // v3.26: å¹³ä»“åå–æ¶ˆæŒä»“ä»£å¸æ ‡è®° â€” PriceTracker æ¢å¤ä¸¥æ ¼è·³å˜è¿‡æ»¤
+    if (!this.hasOpenPosition(pos.mint) && this.priceTracker) {
+      this.priceTracker.markPosition(pos.mint, false);
+    }
+
+    // v3.17.21: å¹³ä»“å®Œæˆ â†’ ä» hotMints ç§»é™¤ï¼ˆä¸å†é«˜é¢‘åˆ·æ­¤å¸ï¼‰
+    //   å¦‚æœåŒ mint è¿˜æœ‰å…¶ä»–æŒä»“ï¼Œä¸æ€¥ç§»é™¤ï¼ˆä¸‹æ¬¡ _finalizeSuccess ä¼šå†æ£€æŸ¥ï¼‰
+    if (!this.hasOpenPosition(pos.mint) && this.executor?.poolStateCache) {
+      this.executor.poolStateCache.removeHot(pos.mint);
+    }
+
+    monitor.inc('PositionManager.closed', 1, 'PositionManager');
+    monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+    if (pnlSol > 0) monitor.inc('PositionManager.winners', 1, 'PositionManager');
+    else monitor.inc('PositionManager.losers', 1, 'PositionManager');
+
+    console.log(
+      `[PositionManager] ğŸ CLOSED ${pos.symbol || pos.mint.slice(0, 6)} ` +
+        `gross=${grossPnl.toFixed(4)} fee=${feeSol.toFixed(4)} net=${pnlSol.toFixed(4)} SOL (${pnlPct.toFixed(2)}%)`,
+    );
+
+    this.emit('closed', {
+      ...pos,
+      exitPrice,
+      exitSol,
+      pnlSol,
+      pnlPct,
+      exitReason: finalReason,
+      grossPnlSol: grossPnl,
+      feeSol,
+    });
+
+    // åŒå¸åŠ ä»“ä»“ä½åœ¨è§¦å‘é˜¶æ®µå·²ç»ç»Ÿä¸€è¿›å…¥ä¸²è¡Œå–å‡ºé˜Ÿåˆ—ï¼Œè¿™é‡Œåªå®Œæˆå½“å‰ä»“ä½ç»“ç®—ã€‚
+  }
+
+  _scheduleRetryOrStuck(pos, triggerPrice, errMsg) {
+    monitor.inc('PositionManager.sellRetries', 1, 'PositionManager');
+
+    // v3.17.40: å¦‚æœé”™è¯¯æ˜¯ Custom:6053 æˆ– Custom:1 (Insufficient tokens)ï¼Œè¯´æ˜ä»£å¸å·²è¢«å…¶ä»–ä»“ä½å–å…‰
+    //   ä¸å† retryï¼Œç›´æ¥å…³é—­é¿å…ç©ºè½¬ 12 æ¬¡
+    // v3.17.40 + hotfix: JSON error format is {"Custom":1} not Custom:1
+    //   Must match both JSON-quoted "Custom":1 and plain Custom:1
+    const hasTokenGone6053 = errMsg && (errMsg.includes('Custom:6053') || errMsg.includes('Custom":6053'));
+    const hasTokenGone1 = errMsg && (errMsg.includes('Custom:1}') || errMsg.includes('Custom":1}'));
+    if (hasTokenGone6053 || hasTokenGone1) {
+      monitor.inc('PositionManager.sellAbandoned_tokenGone', 1, 'PositionManager');
+      const errType = hasTokenGone6053 ? 'Custom:6053' : 'Custom:1';
+      console.warn(
+        `[PositionManager] ğŸš« SELL abandoned ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+        `${errType} (token balance 0) â€” likely sold by another position, force closing`,
+      );
+      this.tradeLogger.closePosition(pos.positionId, {
+        closedAt: Date.now(),
+        exitPrice: triggerPrice,
+        exitSol: 0,
+        pnlSol: -pos.entrySol,
+        pnlPct: -100,
+        exitReason: pos.exitReason + '_TOKEN_GONE',
+        sellSignature: pos._lastSellSignature || null,
+      });
+      // v3.26: TOKEN_GONE (rug) å 24h å†·å´ï¼Œé˜²æ­¢ç»§ç»­ä¹°å…¥å½’é›¶å¸
+      if (this.signalEngine && this.signalEngine._exitCooldowns) {
+        const rugCooldownMs = parseInt(process.env.RUG_REBUY_COOLDOWN_MS || '86400000', 10);
+        this.signalEngine._exitCooldowns.set(pos.mint, Date.now() + rugCooldownMs);
+        console.log(
+          `[PositionManager] ğŸ”’ RUG cooldown ${pos.symbol || pos.mint.slice(0, 6)} for ${Math.round(rugCooldownMs / 3600000)}h (token gone, no rebuy)`,
+        );
+      }
+      this.positions.delete(pos.positionId);
+      this._removeByMint(pos.mint, pos.positionId);
+      if (this.executor?.poolStateCache) this.executor.poolStateCache.removeHot(pos.mint);
+      monitor.set('PositionManager.openCount', this.positions.size, 'PositionManager');
+      return;
+    }
+
+    // é‡è¯•ä¸Šé™ï¼šé»˜è®¤ 12 æ¬¡ï¼ˆSELL_RETRY_DELAYS_MS Ã— 2ï¼‰ã€‚è¶…è¿‡æ ‡ stuck
+    const MAX_RETRIES = SELL_RETRY_DELAYS_MS.length * 2;
+    if (pos.sellAttempts >= MAX_RETRIES) {
+      monitor.inc('PositionManager.sellStuck', 1, 'PositionManager');
+      this.tradeLogger.markStuck(
+        pos.positionId,
+        `gave up after ${pos.sellAttempts} attempts: ${errMsg}`,
+      );
+      console.error(
+        `[PositionManager] âš ï¸ STUCK ${pos.symbol || pos.mint.slice(0, 6)}: ` +
+          `${pos.sellAttempts} æ¬¡é‡è¯•å‡å¤±è´¥ â€” token ç•™åœ¨é’±åŒ…ä¸­ï¼Œéœ€äººå·¥å¹²é¢„`,
+      );
+      // å…³é”®ï¼šä¿æŒ exiting=true é˜²æ­¢ tick/priceUpdate å†æ¬¡è§¦å‘ _exit è¿›å…¥æ— é™å¾ªç¯
+      // ä¹Ÿä¸ä» this.positions åˆ é™¤ï¼šä¿ç•™ä»¥ä¾¿ reconciler ç›‘æ§ã€dashboard æ˜¾ç¤ºè­¦å‘Š
+      pos.exiting = true;
+      pos.status = 'stuck';
+      return;
+    }
+
+    const delayIdx = Math.min(pos.sellAttempts - 1, SELL_RETRY_DELAYS_MS.length - 1);
+    const delay = SELL_RETRY_DELAYS_MS[delayIdx] || 30_000;
+    const nextRetryAt = Date.now() + delay;
+
+    // æŒä¹…åŒ–ä¸‹æ¬¡é‡è¯•æ—¶é—´ï¼Œé‡å¯å reconciler ä¼šæŒ‰æ—¶å”¤é†’
+    this.tradeLogger.markSellFailedPendingRetry(
+      pos.positionId,
+      nextRetryAt,
+      errMsg,
+      pos.exitReason,
+    );
+
+    console.warn(
+      `[PositionManager] SELL retry scheduled: ${pos.symbol || pos.mint.slice(0, 6)} ` +
+        `(attempt ${pos.sellAttempts}/${MAX_RETRIES}) in ${delay}ms â€” ${errMsg}`,
+    );
+
+    setTimeout(() => {
+      if (!this.positions.has(pos.positionId)) return;
+      const latestPrice = this.priceTracker.getPrice(pos.mint) || triggerPrice;
+      this._attemptSell(pos, latestPrice).catch((err) => {
+        monitor.recordError('PositionManager', err, {
+          phase: 'sell_retry_crash',
+          mint: pos.mint,
+        });
+      });
+    }, delay);
+  }
+
+  /**
+   * v3.3 é‡è¯• reconciler
+   * ====================
+   * æ¯ 5 ç§’æ‰«ä¸€é DBï¼Œæ‰¾å‡ºæ‰€æœ‰ status='sell_pending' ä¸” next_retry_at <= now çš„ position
+   * è¿™è¦†ç›–ä¸¤ç§åœºæ™¯ï¼š
+   *   1. é‡å¯å setTimeout ä¸¢å¤± â†’ æ‰¾å›æ‰€æœ‰è¿‡æœŸçš„ retry
+   *   2. confirm_async å¤±è´¥ä½† setTimeout ä¹Ÿæœªè§¦å‘ï¼ˆedge caseï¼‰
+   *
+   * åŒæ—¶æ£€æŸ¥ sell_confirming çŠ¶æ€ï¼šå¦‚æœæœ€åä¸€æ¬¡æäº¤è¶…è¿‡ 30s è¿˜åœ¨ sell_confirmingï¼Œ
+   * ä¸»åŠ¨è°ƒä¸€æ¬¡ confirmTxï¼Œæ²¡ç¡®è®¤å°±è§¦å‘é‡è¯•ã€‚
+   */
+  /**
+   * v3.4 ä¸»åŠ¨è½®è¯¢æŒä»“ token çš„ pool stateï¼Œç®—å‡ºå½“å‰å®æ—¶ä»·æ ¼ã€‚
+   * ä¿®å¤ TIMEOUT ä¸»å¯¼é—®é¢˜ï¼šå¾®ç›˜å¸ 15s å†…å¯èƒ½æ²¡æœ‰ä»»ä½•å¤–éƒ¨ swap â†’ PriceTracker æ°¸è¿œä¸æ›´æ–°
+   * â†’ æ°¸è¿œä¸è§¦å‘æ­¢ç›ˆæ­¢æŸ â†’ å…¨éƒ¨å¼ºå¹³ã€‚
+   *
+   * å®ç°ï¼šç”¨ Executor çš„ onlineSdk ç›´æ¥æ‹‰ pool stateï¼Œä» reserves ç®— mid priceã€‚
+   * é¢‘ç‡ï¼šæ¯ poolPollIntervalMs (é»˜è®¤ 500ms)
+   * ä»…æŒä»“æœŸé—´è½®è¯¢ï¼ˆæŒä»“ä¸ºç©ºæ—¶ä¸å‘ RPCï¼‰
+   */
+  async _pollPoolPrices() {
+    if (this.positions.size === 0) return;
+    if (this._polling) return; // é˜²æ­¢ä¸Šä¸€è½®è¿˜æ²¡è·‘å®Œ
+    this._polling = true;
+    try {
+      // æ”¶é›†æ‰€æœ‰éœ€è¦æŸ¥çš„ (mint, poolAddress) ç»„åˆ
+      const queries = [];
+      for (const pos of this.positions.values()) {
+        if (pos.exiting) continue; // æ­£åœ¨å–çš„ä¸éœ€è¦å†è½®è¯¢
+        const tokenInfo = this.tokenRegistry.getToken(pos.mint);
+        if (!tokenInfo?.pool_address) {
+          // v3.17.27: å‘Šè­¦â€”â€”æ²¡æœ‰ pool_address çš„æŒä»“æ˜¯"çä»“"ï¼Œä¸¤æ¡ä»·æ ¼é“¾è·¯éƒ½å–‚ä¸äº†
+          if (!pos._noPoolWarned) {
+            console.warn(
+              `[PositionManager] âš ï¸ position ${pos.symbol || pos.mint.slice(0, 6)} has no pool_address, ` +
+              `skipping price poll â€” trailing stop will NOT work for this position!`,
+            );
+            pos._noPoolWarned = true;
+          }
+          continue;
+        }
+        queries.push({ mint: pos.mint, poolAddress: tokenInfo.pool_address, decimals: tokenInfo.decimals ?? 6 });
+      }
+      if (queries.length === 0) return;
+
+      const MAX_CACHE_AGE_MS = 1000; // ç¼“å­˜è¶…è¿‡ 1 ç§’è§†ä¸ºè¿‡æœŸï¼Œfallback åˆ° RPC
+
+      // å¹¶è¡Œæ‹‰ï¼Œä¸é˜»å¡
+      await Promise.all(
+        queries.map(async (q) => {
+          try {
+            // v3.17.27: ä¼˜å…ˆä» PoolStateCache è¯»ç¼“å­˜ï¼ˆçœ ~92% RPCï¼‰
+            //   ä¿æŠ¤1: cache miss â†’ fallback åˆ°ç°æŸ¥ RPCï¼ˆä¿ä½å¯¹æœªè¿› hotMints æŒä»“çš„å…œåº•ï¼‰
+            //   ä¿æŠ¤2: ç¼“å­˜å¤ªæ—§(>1s) â†’ fallback åˆ°ç°æŸ¥ RPCï¼ˆé¿å…è¿‡æœŸæ•°æ®å½±å“ trailingï¼‰
+            let price = null;
+            const cache = this.executor?.poolStateCache;
+            if (cache) {
+              const cachedState = cache.get(q.poolAddress);
+              const cacheAge = cache.getAge(q.poolAddress);
+              if (cachedState && cacheAge !== null && cacheAge <= MAX_CACHE_AGE_MS) {
+                price = this._priceFromState(cachedState, q.decimals);
+                monitor.inc('PositionManager.poolPollCacheHit', 1, 'PositionManager');
+              }
+            }
+            // fallback: cache miss æˆ–ç¼“å­˜å¤ªæ—§ â†’ èµ° RPC
+            if (!price) {
+              price = await this._fetchPoolMidPrice(q.poolAddress, q.decimals);
+              monitor.inc('PositionManager.poolPollRpcFallback', 1, 'PositionManager');
+            }
+            if (price && price > 0) {
+              this.priceTracker.update(q.mint, price, Date.now(), q.poolAddress);
+              monitor.inc('PositionManager.poolPollOk', 1, 'PositionManager');
+              // ç›´æ¥æ£€æŸ¥é€€å‡ºï¼Œä¸ç­‰ priceTracker äº‹ä»¶ â€” å‡å°‘å»¶è¿Ÿ
+              const pids = this.byMint.get(q.mint);
+              if (pids) {
+                for (const pid of pids) {
+                  this._checkExit(pid, price);
+                }
+              }
+            }
+          } catch (err) {
+            monitor.inc('PositionManager.poolPollFail', 1, 'PositionManager');
+          }
+        }),
+      );
+    } finally {
+      this._polling = false;
+    }
+  }
+
+  /**
+   * v3.17.27: ä» PoolStateCache çš„ state ç®—ä»·æ ¼ï¼ˆçº¯å†…å­˜ï¼Œé›¶ RPCï¼‰
+   */
+  _priceFromState(state, baseDecimals) {
+    if (!state?.poolBaseAmount || !state?.poolQuoteAmount) return null;
+    const baseRaw = typeof state.poolBaseAmount === 'object' && state.poolBaseAmount.toString
+      ? Number(state.poolBaseAmount.toString()) : Number(state.poolBaseAmount);
+    const quoteRaw = typeof state.poolQuoteAmount === 'object' && state.poolQuoteAmount.toString
+      ? Number(state.poolQuoteAmount.toString()) : Number(state.poolQuoteAmount);
+    if (baseRaw <= 0 || quoteRaw <= 0) return null;
+    return (quoteRaw / 1e9) / (baseRaw / Math.pow(10, baseDecimals));
+  }
+
+  /**
+   * ä» pool çš„ reserves ç®— mid price = quoteReserve / baseReserveï¼ˆæŒ‰ decimals è°ƒæ•´ï¼‰
+   * ç”¨ Executor å·²åŠ è½½çš„ onlineSdkï¼ˆfallback: ä»… cache miss æ—¶è°ƒç”¨ï¼‰
+   */
+  async _fetchPoolMidPrice(poolAddress, baseDecimals) {
+    if (!this.executor.onlineSdk || !this.executor.keypair) return null;
+    const { PublicKey } = require('@solana/web3.js');
+    const poolKey = new PublicKey(poolAddress);
+    const state = await this.executor.onlineSdk.swapSolanaState(poolKey, this.executor.keypair.publicKey);
+    if (!state || !state.poolBaseAmount || !state.poolQuoteAmount) return null;
+
+    // Number ç²¾åº¦å¯¹å°ä»·æ ¼å¤Ÿç”¨ï¼ˆsmall floatsï¼‰ï¼Œä¸ç”¨ BigInt é™¤
+    const baseRaw = Number(state.poolBaseAmount.toString());
+    const quoteRaw = Number(state.poolQuoteAmount.toString());
+    if (baseRaw <= 0 || quoteRaw <= 0) return null;
+
+    // mid_price = (quote / 1e9) / (base / 10^baseDecimals)
+    //          = quote * 10^baseDecimals / (base * 1e9)
+    const price = (quoteRaw / 1e9) / (baseRaw / Math.pow(10, baseDecimals));
+    return price;
+  }
+
+  async _reconcileRetries() {
+    if (this._reconciling) return; // é˜²æ­¢ä¸Šä¸€è½®è¿˜æ²¡è·‘å®Œï¼Œæ–°è½®å°±å¯åŠ¨
+    this._reconciling = true;
+    try {
+      await this._reconcileRetriesInner();
+    } finally {
+      this._reconciling = false;
+    }
+  }
+
+  async _reconcileRetriesInner() {
+    const now = Date.now();
+    const due = this.tradeLogger.getDuePendingRetries(now);
+
+    for (const row of due) {
+      const pos = this.positions.get(row.position_id);
+      if (!pos) continue; // å·²è¢«åˆ é™¤
+
+      // è·³è¿‡ stuck çš„ï¼ˆä¸å†è‡ªåŠ¨é‡è¯•ï¼Œç­‰äººå·¥å¹²é¢„ï¼‰
+      if (row.status === 'stuck' || pos.status === 'stuck') continue;
+
+      // sell_confirmingï¼šè¿˜åœ¨ç­‰é“¾ä¸Šç¡®è®¤ï¼›åªæœ‰ last_retry_at å·²ç»è¶…è¿‡ 30s æ‰ä¸»åŠ¨é‡è¯•
+      if (row.status === 'sell_confirming') {
+        const lastRetry = row.last_retry_at || 0;
+        if (now - lastRetry < 30_000) continue;
+
+        // å·²ç» 30s+ æ²¡åŠ¨é™ï¼Œä¸»åŠ¨ confirmTx ä¸€æ¬¡
+        const sig = row.pending_sell_signature || pos._lastSellSignature;
+        if (sig) {
+          const result = await this.executor.confirmTx(sig, { timeoutMs: 3000, pollIntervalMs: 500 });
+          if (result.confirmed) {
+            monitor.inc('PositionManager.reconcilerConfirmed', 1, 'PositionManager');
+
+            // v3.17 ä¿®å¤ PnL bugï¼š
+            // ä¹‹å‰ç”¨ pos.entryPrice ä½œä¸º exitPrice å ä½ â†’ _finalizeSuccess é‡Œ exitSol
+            // é€€åŒ–ä¸º tokenAmount * entryPrice = entrySol â†’ å‡€ PnL â‰ˆ -feeSolï¼ˆè¯¯æ˜¾ç¤ºäºæŸï¼‰ã€‚
+            // ç°åœ¨ä»é“¾ä¸Š fetch çœŸå® SOL æ”¶å…¥ï¼ŒæŒ‰çœŸå®æˆäº¤ä»·å›å†™ã€‚
+            let exitPrice = pos.entryPrice;
+            let solOut = null;
+            try {
+              const swap = await this.executor.fetchTxSwapResult(sig, pos.mint);
+              // SELL çš„ realSolDelta æ˜¯æ­£æ•°ï¼ˆé’±åŒ… SOL å¢åŠ ï¼‰ï¼Œéœ€ > 0 æ‰æœ‰æ•ˆ
+              if (swap && swap.realSolDelta > 0 && pos.tokenAmount > 0) {
+                solOut = swap.realSolDelta;
+                exitPrice = solOut / pos.tokenAmount;
+                // åŒæ—¶ç´¯åŠ  SELL tx çš„ base feeï¼ˆpriority fee å·²åŒ…å«åœ¨ realSolDelta é‡Œï¼‰
+                if (swap.fee && !pos._reconcilerSellFeeAccounted) {
+                  // realSolDelta å·²ç»æ‰£è¿‡ priority fee + base feeï¼›è¿™é‡Œä¸å†å åŠ 
+                  // ï¼ˆé¿å…åŒé‡æ‰£å‡ï¼‰
+                  pos._reconcilerSellFeeAccounted = true;
+                }
+                console.log(
+                  `[PositionManager] ğŸ”„ reconciler found landed sell: ${pos.symbol || pos.mint.slice(0, 6)}, ` +
+                    `solOut=${solOut.toFixed(4)} SOL, exitPrice=${exitPrice.toExponential(4)}`,
+                );
+              } else {
+                console.warn(
+                  `[PositionManager] ğŸ”„ reconciler found landed sell: ${pos.symbol || pos.mint.slice(0, 6)}, ` +
+                    `ä½† fetchTxSwapResult æ‹¿ä¸åˆ° realSolDelta â€” fallback ç”¨ entryPrice å ä½ï¼ˆPnL å°†ä¸å‡†ï¼‰`,
+                );
+              }
+            } catch (err) {
+              monitor.recordError('PositionManager', err, {
+                phase: 'reconciler_fetch_swap',
+                mint: pos.mint,
+                signature: sig,
+              });
+            }
+
+            this._finalizeSuccess(pos, exitPrice, solOut, sig, null);  // v3.17.40c: reconciler path, no actualSellAmount
+            continue;
+          }
+        }
+        // æ²¡ç¡®è®¤ï¼Œè§¦å‘é‡è¯•
+        monitor.inc('PositionManager.reconcilerRetried', 1, 'PositionManager');
+      }
+
+      // sell_pendingï¼ˆæ˜ç¡®ç­‰å¾…é‡è¯•ï¼‰ï¼šç›´æ¥è§¦å‘
+      const latestPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
+      console.log(
+        `[PositionManager] ğŸ”„ reconciler retrying ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `(status=${row.status}, attempts=${pos.sellAttempts})`,
+      );
+      // ä¸ awaitï¼Œè®©å¤šä¸ª retry å¹¶è¡Œï¼ˆä½†åŒä¸€ pos ä¸ä¼šå¹¶å‘ï¼Œå› ä¸º status å­—æ®µ + lockï¼‰
+      this._attemptSell(pos, latestPrice).catch((err) => {
+        monitor.recordError('PositionManager', err, {
+          phase: 'reconciler_retry',
+          mint: pos.mint,
+        });
+      });
+    }
+  }
+}
+
+module.exports = PositionManager;

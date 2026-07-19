@@ -171,6 +171,19 @@
   .pill.live { background: rgba(38, 166, 154, 0.2); color: var(--green); }
   .pill.success { background: rgba(38, 166, 154, 0.2); color: var(--green); }
   .pill.fail { background: rgba(239, 83, 80, 0.2); color: var(--red); }
+  .pill.monitoring { background: rgba(139, 148, 170, 0.14); color: var(--text-dim); }
+  .pill.ready, .pill.armed { background: rgba(245, 176, 65, 0.2); color: var(--yellow); }
+  .pill.confirming { background: rgba(41, 182, 246, 0.2); color: var(--accent); }
+  .pill.signaled { background: rgba(38, 166, 154, 0.24); color: var(--green); }
+  .pill.cancelled { background: rgba(239, 83, 80, 0.14); color: #ff8a87; }
+  .strategy-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-dim); font-size: 11px; margin-bottom: 8px; }
+  .strategy-meta b { color: var(--text); font-family: "SF Mono", Consolas, monospace; }
+  .strategy-table { min-width: 1720px; }
+  .condition { font-family: "SF Mono", Consolas, monospace; font-size: 11px; }
+  .condition::before { content: '·'; display: inline-block; width: 12px; color: var(--text-dim); }
+  .condition.pass { color: var(--green); }
+  .condition.pass::before { content: '✓'; color: var(--green); }
+  .condition.pending { color: var(--text-dim); }
 
   .toast {
     position: fixed;
@@ -257,7 +270,7 @@
 <body>
 
 <div class="header">
-  <h1>🎯 Dump Sniper <span class="v">v3.16</span></h1>
+  <h1>🎯 Dump Sniper <span class="v">Strategy V5</span></h1>
   <div class="badges">
     <a href="/reports.html" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;margin-right:8px;">📅 报告</a>
     <span id="modeBadge" class="badge dry">DRY_RUN</span>
@@ -274,8 +287,8 @@
       <div class="status-grid">
         <div class="status-item"><div class="label">监控代币</div><div class="value" id="stat-watched">-</div></div>
         <div class="status-item"><div class="label">当前持仓</div><div class="value" id="stat-open">-</div></div>
-        <div class="status-item"><div class="label">触发卖单SOL</div><div class="value" id="stat-minSell">-</div></div>
-        <div class="status-item"><div class="label">触发跌幅</div><div class="value" id="stat-impact">-</div></div>
+        <div class="status-item"><div class="label">1m 成交量</div><div class="value" id="stat-volume1m">-</div></div>
+        <div class="status-item"><div class="label">1m 交易数</div><div class="value" id="stat-trades1m">-</div></div>
         <div class="status-item"><div class="label">每笔仓位</div><div class="value" id="stat-size">-</div></div>
         <div class="status-item"><div class="label">止盈</div><div class="value" id="stat-tp">-</div></div>
         <div class="status-item"><div class="label">最大持仓</div><div class="value" id="stat-hold">-</div></div>
@@ -327,7 +340,7 @@
     <div class="panel-head"><h2>📜 实时日志</h2></div>
     <div class="tabs">
       <div class="tab active" data-tab="positions">持仓 / 平仓</div>
-      <div class="tab" data-tab="signals">信号</div>
+      <div class="tab" data-tab="signals">V5 信号</div>
       <div class="tab" data-tab="trades">交易</div>
     </div>
     <div class="panel-body">
@@ -372,10 +385,11 @@
       </div>
       <!-- Signals -->
       <div class="tab-pane" id="pane-signals">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>时间</th><th>Symbol</th><th>CA</th><th>类型</th><th>卖出SOL</th><th>跌幅%</th><th>状态</th><th>原因/备注</th></tr></thead>
-            <tbody id="signalsTbody"><tr><td colspan="8" class="empty">尚无信号</td></tr></tbody>
+        <div id="strategySignalMeta" class="strategy-meta"><span>等待实时数据</span></div>
+        <div class="table-wrap" style="overflow:auto;">
+          <table class="strategy-table">
+            <thead><tr><th>更新</th><th>Symbol</th><th>CA</th><th>1m 成交量</th><th>1m 笔数</th><th>1m 钱包</th><th>最大单买</th><th>1m 波动</th><th>5s 净流</th><th>资金加速</th><th>成交加速</th><th>5s 成交量</th><th>5s 笔数</th><th>5s 买家</th><th>5s 振幅</th><th>10s 涨幅</th><th>阶段</th></tr></thead>
+            <tbody id="signalsTbody"><tr><td colspan="17" class="empty">暂无活跃成交</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -472,8 +486,8 @@ async function refreshStatus() {
   $('modeBadge').className = 'badge ' + (r.dryRun ? 'dry' : 'live');
   $('stat-watched').textContent = r.watchedTokens;
   $('stat-open').textContent = r.openPositions;
-  $('stat-minSell').textContent = r.config.minSellSol + ' SOL';
-  $('stat-impact').textContent = '-' + r.config.minPriceImpactPct + '%';
+  $('stat-volume1m').textContent = fmtMoney(r.config.activityVolume1mUsd);
+  $('stat-trades1m').textContent = r.config.activityTrades1m;
   $('stat-size').textContent = r.config.positionSizeSol + ' SOL';
   $('stat-tp').textContent = '+' + r.config.takeProfitPct + '%';
   $('stat-hold').textContent = r.config.maxHoldMs / 1000 + 's';
@@ -693,31 +707,88 @@ function renderClosedPage() {
   }
 }
 
-function _signalNote(s) {
-    if (!s.accepted) {
-      const reason = s.reject_reason || s.notes || '';
-      if (!reason || reason === 'detected but rejected') return '<span style="color:var(--text-dim)">-</span>';
-      return '<span style="color:#ff6b6b;font-size:11px">' + escapeHtml(reason) + '</span>';
-    }
-    return '<span style="color:var(--green);font-size:11px">' + escapeHtml(s.notes || '✓') + '</span>';
-  }
+function _strategyCondition(value, passed, title = '') {
+  const tooltip = title ? ` title="${escapeHtml(title)}"` : '';
+  return `<span class="condition ${passed ? 'pass' : 'pending'}"${tooltip}>${escapeHtml(value)}</span>`;
+}
+
+function _strategyNumber(value, digits = 2) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : '-';
+}
+
+function _strategyStage(candidate, now) {
+  const labels = {
+    monitoring: '扫描',
+    cancelled: '已取消',
+    ready: '待激活',
+    armed: '已激活',
+    confirming: '确认 1/2',
+    signaled: '买入信号',
+  };
+  const stage = candidate.stage || 'monitoring';
+  const remaining = candidate.armedUntil
+    ? ` ${Math.max(0, Math.ceil((candidate.armedUntil - now) / 1000))}s`
+    : '';
+  const title = candidate.cancelReason || '';
+  return `<span class="pill ${stage}" title="${escapeHtml(title)}">${labels[stage] || escapeHtml(stage)}${remaining}</span>`;
+}
 
 async function refreshSignals() {
-  const r = await api('/api/signals?limit=200');
-  if (!r.ok) return;
+  const r = await api('/api/strategy-signals?limit=100');
+  const meta = $('strategySignalMeta');
   const tbody = $('signalsTbody');
-  if (r.signals.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="empty">尚无信号</td></tr>'; return; }
-  tbody.innerHTML = r.signals.map(s => `
-    <tr>
-      <td class="mono">${fmtTime(s.ts)}</td>
-      <td><b>${escapeHtml(s.symbol || (s.mint || '').slice(0,6))}</b></td>
-      ${caCell(s.mint)}
-      <td>${s.kind}</td>
-      <td class="mono">${(s.sell_sol || 0).toFixed(2)}</td>
-      <td class="mono ${(s.price_impact_pct||0) > 0 ? 'neg' : ''}">${(s.price_impact_pct||0).toFixed(2)}</td>
-      <td><span class="pill ${s.accepted ? 'success' : 'fail'}">${s.accepted ? '接受' : '拒绝'}</span></td>
-      <td style="white-space:normal;word-break:break-word;max-width:280px;" title="${escapeHtml((s.accepted ? s.notes : (s.reject_reason || s.notes)) || '')}">${_signalNote(s)}</td>
-    </tr>`).join('');
+  if (!r.ok) {
+    meta.innerHTML = `<span class="neg">${escapeHtml(r.error || 'V5 实时数据不可用')}</span>`;
+    tbody.innerHTML = '<tr><td colspan="17" class="empty">等待 Strategy V5 数据</td></tr>';
+    return;
+  }
+
+  const summary = r.summary || {};
+  const thresholds = r.thresholds || {};
+  const rows = r.candidates || [];
+  meta.innerHTML = [
+    `<span>模式 <b>${escapeHtml(r.mode || '-')}</b></span>`,
+    `<span>活跃 <b>${summary.active || 0}</b></span>`,
+    `<span>1m量达标 <b>${summary.volumeReady || 0}</b></span>`,
+    `<span>预备 <b>${summary.armReady || 0}</b></span>`,
+    `<span>激活 <b>${summary.armed || 0}</b></span>`,
+    `<span>确认 <b>${summary.confirming || 0}</b></span>`,
+    `<span>信号 <b>${summary.signaled || 0}</b></span>`,
+  ].join('');
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="17" class="empty">暂无活跃成交</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(candidate => {
+    const conditions = candidate.conditions || {};
+    const minute = candidate.s60 || {};
+    const tenSeconds = candidate.s10 || {};
+    const fiveSeconds = candidate.s5 || {};
+    const trigger = candidate.trigger || {};
+    return `
+      <tr>
+        <td class="mono">${fmtTime(candidate.updatedAt)}</td>
+        <td><b>${escapeHtml(candidate.symbol || (candidate.mint || '').slice(0,6))}</b></td>
+        ${caCell(candidate.mint)}
+        <td>${_strategyCondition(`${fmtMoney(minute.volumeUsd)} / ${fmtMoney(thresholds.volume1mUsd)}`, conditions.volume1m)}</td>
+        <td>${_strategyCondition(`${minute.tradeCount || 0} / ${thresholds.trades1m || 0}`, conditions.trades1m)}</td>
+        <td>${_strategyCondition(`${minute.uniqueTraders || 0} / ${thresholds.wallets1m || 0}`, conditions.wallets1m)}</td>
+        <td>${_strategyCondition(`${_strategyNumber((minute.largestBuyShare || 0) * 100, 1)}%`, conditions.largestBuy1m, `上限 ${_strategyNumber((thresholds.largestBuyShare1m || 0) * 100, 0)}%`)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(minute.volatilityPct)}%`, conditions.volatility1m, `门槛 ${_strategyNumber(thresholds.volatility1mPct, 1)}%`)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(trigger.previousNet5s)}→${_strategyNumber(trigger.currentNet5s)} SOL`, conditions.netTurn5s)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(trigger.flowAcceleration5s)} SOL`, conditions.flowAcceleration5s)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(trigger.txAcceleration5s, 0)}`, conditions.txAcceleration5s, `门槛 ${thresholds.txAcceleration5s || 0}`)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(fiveSeconds.volumeSol)} / ${_strategyNumber(thresholds.volume5sSol, 1)} SOL`, conditions.volume5s)}</td>
+        <td>${_strategyCondition(`${fiveSeconds.tradeCount || 0} / ${thresholds.trades5s || 0}`, conditions.trades5s)}</td>
+        <td>${_strategyCondition(`${fiveSeconds.uniqueBuyers || 0} / ${thresholds.buyers5s || 0}`, conditions.buyers5s)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(fiveSeconds.rangePct)}%`, conditions.range5s, `门槛 ${_strategyNumber(thresholds.range5sPct, 1)}%`)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(tenSeconds.priceChangePct)}%`, conditions.price10s, `${thresholds.priceChange10sMinPct || 0}%～${thresholds.priceChange10sMaxPct || 0}%`)}</td>
+        <td>${_strategyStage(candidate, r.now || Date.now())}</td>
+      </tr>`;
+  }).join('');
 }
 
 async function refreshTrades() {

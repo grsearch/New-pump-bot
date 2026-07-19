@@ -49,6 +49,7 @@ class OrderFlowTracker extends EventEmitter {
     super();
     const flowConfig = config.activityFlow || {};
     this.tokenRegistry = opts.tokenRegistry || null;
+    this.solPriceUsd = opts.solPriceUsd ?? numEnv('SOL_PRICE_USD', 72);
 
     this.enabled =
       opts.enabled ?? flowConfig.enabled ?? boolEnv('ACTIVITY_FLOW_ENABLED', boolEnv('ORDER_FLOW_ENABLED', true));
@@ -288,6 +289,145 @@ class OrderFlowTracker extends EventEmitter {
     state.lastDumpSignal = signal;
   }
 
+  getStrategyCandidates(limit = 100, now = Date.now()) {
+    const safeLimit = Math.max(1, Math.min(200, Number(limit) || 100));
+    const candidates = [];
+    const summary = {
+      active: 0,
+      volumeReady: 0,
+      armReady: 0,
+      armed: 0,
+      confirming: 0,
+      signaled: 0,
+    };
+
+    for (const [mint, state] of this.states) {
+      const latest = state.events[state.events.length - 1];
+      if (!latest) continue;
+
+      const s5 = this._stats(state, now, this.window5Ms);
+      const s10 = this._stats(state, now, this.window10Ms);
+      const s60 = this._stats(state, now, this.window60Ms);
+      if (s60.tradeCount === 0) continue;
+
+      const previousNet5s = s10.netFlow - s5.netFlow;
+      const flowAcceleration5s = s5.netFlow - previousNet5s;
+      const txAcceleration5s = (2 * s5.tradeCount) - s10.tradeCount;
+      const conditions = {
+        volume1m: s60.volumeSol >= this.minVolume1mSol,
+        trades1m: s60.tradeCount >= this.minTrades1m,
+        wallets1m: s60.uniqueTraders >= this.armMinUniqueTraders1m,
+        largestBuy1m: s60.largestBuyShare <= this.armMaxLargestBuyShare1m,
+        volatility1m: s60.volatilityPct >= this.armMinVolatility1mPct,
+        netTurn5s: previousNet5s <= 0 && s5.netFlow > 0,
+        flowAcceleration5s: flowAcceleration5s > 0,
+        txAcceleration5s: txAcceleration5s >= this.triggerMinTxAcceleration5s,
+        volume5s: s5.volumeSol >= this.triggerMinVolume5sSol,
+        trades5s: s5.tradeCount >= this.triggerMinTrades5s,
+        buyers5s: s5.uniqueBuyers >= this.triggerMinUniqueBuyers5s,
+        range5s: s5.rangePct >= this.triggerMinRange5sPct,
+        price10s:
+          s10.priceChangePct >= this.triggerMinPriceChange10sPct &&
+          s10.priceChangePct <= this.triggerMaxPriceChange10sPct,
+      };
+      const armReady = [
+        conditions.volume1m,
+        conditions.trades1m,
+        conditions.wallets1m,
+        conditions.largestBuy1m,
+        conditions.volatility1m,
+        s10.priceChangePct <= this.triggerMaxPriceChange10sPct,
+      ].every(Boolean);
+      const triggerReady = [
+        conditions.netTurn5s,
+        conditions.flowAcceleration5s,
+        conditions.txAcceleration5s,
+        conditions.volume5s,
+        conditions.trades5s,
+        conditions.buyers5s,
+        conditions.range5s,
+        conditions.price10s,
+      ].every(Boolean);
+      const armed = state.armedAt != null && state.armedUntil != null && state.armedUntil >= now;
+      const recentlySignaled = state.lastV5SignalTs != null && now - state.lastV5SignalTs <= this.window60Ms;
+      const recentlyCancelled =
+        state.lastArmCancelTs != null && now - state.lastArmCancelTs <= this.window15Ms;
+
+      let stage = 'monitoring';
+      if (recentlySignaled) stage = 'signaled';
+      else if (armed && state.triggerConfirmFirstTs != null && triggerReady) stage = 'confirming';
+      else if (armed) stage = 'armed';
+      else if (armReady) stage = 'ready';
+      else if (recentlyCancelled) stage = 'cancelled';
+
+      summary.active++;
+      if (conditions.volume1m) summary.volumeReady++;
+      if (armReady) summary.armReady++;
+      if (stage === 'armed') summary.armed++;
+      if (stage === 'confirming') summary.confirming++;
+      if (stage === 'signaled') summary.signaled++;
+
+      candidates.push({
+        mint,
+        symbol: state.symbol || null,
+        updatedAt: latest.ts,
+        ageMs: Math.max(0, now - latest.ts),
+        stage,
+        armReady,
+        triggerReady,
+        armedAt: armed ? state.armedAt : null,
+        armedUntil: armed ? state.armedUntil : null,
+        confirmFirstTs: armed ? state.triggerConfirmFirstTs : null,
+        lastSignalTs: state.lastV5SignalTs || null,
+        cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
+        conditions,
+        s60: {
+          ...this._compactStats(s60),
+          volumeUsd: round(s60.volumeSol * this.solPriceUsd, 2),
+        },
+        s10: this._compactStats(s10),
+        s5: this._compactStats(s5),
+        trigger: {
+          previousNet5s: round(previousNet5s, 4),
+          currentNet5s: round(s5.netFlow, 4),
+          flowAcceleration5s: round(flowAcceleration5s, 4),
+          txAcceleration5s: round(txAcceleration5s, 2),
+        },
+      });
+    }
+
+    const stageRank = { signaled: 5, confirming: 4, armed: 3, ready: 2, cancelled: 1, monitoring: 0 };
+    candidates.sort((a, b) =>
+      (stageRank[b.stage] - stageRank[a.stage]) ||
+      (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
+      (b.s60.volumeUsd - a.s60.volumeUsd) ||
+      (b.updatedAt - a.updatedAt));
+
+    return {
+      mode: this.entryMode,
+      now,
+      thresholds: {
+        volume1mUsd: this.minVolume1mUsd,
+        volume1mSol: this.minVolume1mSol,
+        trades1m: this.minTrades1m,
+        wallets1m: this.armMinUniqueTraders1m,
+        largestBuyShare1m: this.armMaxLargestBuyShare1m,
+        volatility1mPct: this.armMinVolatility1mPct,
+        volume5sSol: this.triggerMinVolume5sSol,
+        trades5s: this.triggerMinTrades5s,
+        buyers5s: this.triggerMinUniqueBuyers5s,
+        txAcceleration5s: this.triggerMinTxAcceleration5s,
+        range5sPct: this.triggerMinRange5sPct,
+        priceChange10sMinPct: this.triggerMinPriceChange10sPct,
+        priceChange10sMaxPct: this.triggerMaxPriceChange10sPct,
+        confirmMinGapMs: this.triggerConfirmMinGapMs,
+        confirmMaxGapMs: this.triggerConfirmMaxGapMs,
+      },
+      summary,
+      candidates: candidates.slice(0, safeLimit),
+    };
+  }
+
   _stateOf(mint) {
     let state = this.states.get(mint);
     if (!state) {
@@ -302,6 +442,9 @@ class OrderFlowTracker extends EventEmitter {
         armedAt: null,
         armedUntil: null,
         triggerConfirmFirstTs: null,
+        lastArmCancelTs: null,
+        lastArmCancelReason: null,
+        lastV5SignalTs: null,
       };
       this.states.set(mint, state);
     }
@@ -442,6 +585,8 @@ class OrderFlowTracker extends EventEmitter {
     const s60 = this._stats(state, ev.ts, this.window60Ms);
 
     if (state.armedUntil != null && ev.ts > state.armedUntil) {
+      state.lastArmCancelTs = ev.ts;
+      state.lastArmCancelReason = 'arm timeout';
       this._clearArm(state);
     }
 
@@ -466,6 +611,8 @@ class OrderFlowTracker extends EventEmitter {
     const cancelReason = this._v5CancelReason(s10, s60);
     if (cancelReason) {
       console.log(`[ActivityFlow] ARM_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${cancelReason}`);
+      state.lastArmCancelTs = ev.ts;
+      state.lastArmCancelReason = cancelReason;
       this._clearArm(state);
       return;
     }
@@ -509,6 +656,7 @@ class OrderFlowTracker extends EventEmitter {
         confirmGapMs: ev.ts - state.triggerConfirmFirstTs,
       },
     });
+    state.lastV5SignalTs = ev.ts;
     this._clearArm(state);
     this.cooldowns.set(ev.mint, wallNow + Math.max(this.cooldownMs, 5_000));
   }

@@ -15,6 +15,7 @@ class Server {
     tradeLogger,
     positionManager,
     signalEngine,
+    activityFlowTracker,
     dailyReport,
     competitorTracker,
     onTokenListChanged,
@@ -24,6 +25,7 @@ class Server {
     this.tradeLogger = tradeLogger;
     this.positionManager = positionManager;
     this.signalEngine = signalEngine;
+    this.activityFlowTracker = activityFlowTracker || null;
     this.dailyReport = dailyReport;
     this.competitorTracker = competitorTracker || null;
     this.onTokenListChanged = onTokenListChanged;
@@ -241,6 +243,17 @@ class Server {
       res.json({ ok: true, signals: this.tradeLogger.getRecentSignals(limit) });
     });
 
+    app.get('/api/strategy-signals', (req, res) => {
+      const limit = Math.max(1, Math.min(200, parseInt(req.query.limit || '100', 10) || 100));
+      if (!this.activityFlowTracker) {
+        return res.status(503).json({ ok: false, error: 'activity flow tracker unavailable' });
+      }
+      return res.json({
+        ok: true,
+        ...this.activityFlowTracker.getStrategyCandidates(limit),
+      });
+    });
+
     app.get('/api/trades', (req, res) => {
       const limit = parseInt(req.query.limit || '100', 10);
       res.json({ ok: true, trades: this.tradeLogger.getRecentTrades(limit) });
@@ -358,6 +371,8 @@ class Server {
         config: {
           minSellSol: config.strategy.minSellSol,
           minPriceImpactPct: config.strategy.minPriceImpactPct,
+          activityVolume1mUsd: config.activityFlow.minVolume1mUsd,
+          activityTrades1m: config.activityFlow.minTrades1m,
           positionSizeSol: config.strategy.positionSizeSol,
           takeProfitPct: config.strategy.takeProfitPct,
           maxHoldMs: config.strategy.maxHoldMs,

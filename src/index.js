@@ -298,6 +298,7 @@ async function main() {
     tradeLogger,
     positionManager,
     signalEngine,
+    activityFlowTracker,
     dailyReport,
     competitorTracker,
     onTokenListChanged: () => {
@@ -662,6 +663,7 @@ async function main() {
 
   // sellAnalyzed: 只记录"接近触发"的（半阈值），避免写入风暴
   dumpDetector.on('sellAnalyzed', (info) => {
+    if (activityFlowTracker.enabled && activityFlowTracker.replaceDumpSignal) return;
     if (info.passSize && info.passImpact && info.passLiquidity) return; // 已 dumpSignal
     const halfSize = config.strategy.minSellSol * 0.5;
     const halfImpact = config.strategy.minPriceImpactPct * 0.5;

@@ -68,6 +68,12 @@ function runEntryTests() {
   subject.handleSwap(event(0, 'SELL', 1, 1.00, 'prior-a'));
   assert.strictEqual(signals.length, 0, 'arming must not buy immediately');
   assert.strictEqual(subject.states.get(MINT).armedAt, BASE);
+  const armedView = subject.getStrategyCandidates(10, BASE);
+  assert.strictEqual(armedView.mode, 'ACTIVITY_BURST_V5');
+  assert.strictEqual(armedView.candidates.length, 1);
+  assert.strictEqual(armedView.candidates[0].stage, 'armed');
+  assert.strictEqual(armedView.candidates[0].conditions.volume1m, true);
+  assert.strictEqual(armedView.candidates[0].s60.volumeUsd, 72);
 
   subject.handleSwap(event(1_000, 'SELL', 1, 1.00, 'prior-b'));
   subject.handleSwap(event(5_500, 'BUY', 0.6, 1.01, 'buyer-a'));
@@ -75,6 +81,9 @@ function runEntryTests() {
   subject.handleSwap(event(6_500, 'BUY', 0.6, 1.03, 'buyer-c'));
   subject.handleSwap(event(7_100, 'BUY', 0.6, 1.04, 'buyer-d'));
   assert.strictEqual(signals.length, 0, 'the first qualifying observation must only start confirmation');
+  const confirmingView = subject.getStrategyCandidates(10, BASE + 7_100);
+  assert.strictEqual(confirmingView.candidates[0].stage, 'confirming');
+  assert.strictEqual(confirmingView.candidates[0].conditions.netTurn5s, true);
   subject.handleSwap(event(8_200, 'BUY', 0.6, 1.04, 'buyer-e'));
 
   assert.strictEqual(signals.length, 1);
@@ -82,6 +91,9 @@ function runEntryTests() {
   assert.strictEqual(signals[0]._flow.entryV5.currentNet5s > 0, true);
   assert.strictEqual(signals[0]._flow.entryV5.txAcceleration5s >= 2, true);
   assert.strictEqual(signals[0].poolQuoteSol, null, 'entry must not repeat the watchlist pool filter');
+  const signaledView = subject.getStrategyCandidates(10, BASE + 8_200);
+  assert.strictEqual(signaledView.candidates[0].stage, 'signaled');
+  assert.strictEqual(signaledView.summary.signaled, 1);
 
   const cancel = tracker();
   cancel.handleSwap(event(0, 'SELL', 1, 1.00, 'cancel-arm'));
@@ -93,8 +105,18 @@ function runEntryTests() {
   concentration.handleSwap(event(500, 'BUY', 1, 1.00, 'share-b'));
   concentration.handleSwap(event(1_000, 'BUY', 1, 1.00, 'share-c'));
   assert.strictEqual(concentration.states.get(MINT).armedAt, null, 'a largest buy above 25% must not arm');
+  const concentrationView = concentration.getStrategyCandidates(10, BASE + 1_000);
+  assert.strictEqual(concentrationView.candidates[0].conditions.largestBuy1m, false);
+  assert.strictEqual(concentrationView.candidates[0].stage, 'monitoring');
   concentration.handleSwap(event(1_500, 'BUY', 1, 1.00, 'share-d'));
   assert.strictEqual(concentration.states.get(MINT).armedAt, BASE + 1_500, '25% largest buy share may arm');
+
+  const volumeGate = tracker({ minVolume1mSol: 10, minVolume1mUsd: 3_000 });
+  volumeGate.handleSwap(event(0, 'BUY', 1, 1.00, 'volume-gate'));
+  const volumeView = volumeGate.getStrategyCandidates(10, BASE);
+  assert.strictEqual(volumeView.thresholds.volume1mUsd, 3_000);
+  assert.strictEqual(volumeView.candidates[0].conditions.volume1m, false);
+  assert.strictEqual(volumeView.candidates[0].stage, 'monitoring');
 }
 
 function runExitTests() {

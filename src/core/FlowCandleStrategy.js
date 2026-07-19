@@ -10,6 +10,14 @@ function sumVolume(events, side) {
   }, 0);
 }
 
+function uniqueWalletCount(events, side) {
+  return new Set(
+    events
+      .filter((event) => event.side === side && event.signer)
+      .map((event) => event.signer),
+  ).size;
+}
+
 function buildClosedCandles(events, now, count, options = {}) {
   const frameMs = Number(options.frameMs) || DEFAULT_FRAME_MS;
   const closedBefore = Math.floor(now / frameMs) * frameMs;
@@ -54,6 +62,8 @@ function buildClosedCandles(events, now, count, options = {}) {
       buySol,
       sellSol,
       netFlow: buySol - sellSol,
+      uniqueBuyers: uniqueWalletCount(rows, 'BUY'),
+      uniqueSellers: uniqueWalletCount(rows, 'SELL'),
       tradeCount: rows.length,
       priceChangePct: open > 0 ? ((close - open) / open) * 100 : 0,
     });
@@ -103,13 +113,22 @@ function evaluateFlowTurnExit(events, now, options = {}) {
 
   const [previous, current] = candles;
   const flowTurnedNegative = previous.netFlow > 0 && current.netFlow < 0;
+  const requireSellerBreadth = options.requireSellerBreadth !== false;
+  const sellerBreadthConfirmed = current.uniqueSellers >= current.uniqueBuyers;
 
   return {
-    matched: flowTurnedNegative,
-    reason: !flowTurnedNegative ? '15s net flow did not turn positive to negative' : null,
+    matched: flowTurnedNegative && (!requireSellerBreadth || sellerBreadthConfirmed),
+    reason: !flowTurnedNegative
+      ? '15s net flow did not turn positive to negative'
+      : requireSellerBreadth && !sellerBreadthConfirmed
+        ? '15s seller wallet breadth is below buyer wallet breadth'
+        : null,
     candles,
     previousNetFlow: previous.netFlow,
     currentNetFlow: current.netFlow,
+    currentUniqueBuyers: current.uniqueBuyers,
+    currentUniqueSellers: current.uniqueSellers,
+    sellerBreadthConfirmed,
     triggerBucketTs: current.bucketTs,
   };
 }

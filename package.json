@@ -21,6 +21,7 @@
     "test:rsi": "node scripts/test-rsi-calculator.js",
     "test:exit-policy": "node scripts/test-position-exit-policy.js",
     "test:flow-candles": "node scripts/test-flow-candle-strategy.js",
+    "test:strategy-v5": "node scripts/test-strategy-v5.js",
     "test:swap-sanitizer": "node scripts/test-swap-event-sanitizer.js",
     "test:strategy-lab-schema": "node scripts/test-strategy-lab-schema.js",
     "test:strategy-lab-throughput": "node scripts/test-strategy-lab-throughput.js",

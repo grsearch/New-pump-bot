@@ -47,7 +47,7 @@ function candleEvents(bucketTs, open, close, buySol, sellSol) {
 
 function run() {
   assert.strictEqual(config.activityFlow.minVolume1mUsd, 3000);
-  assert.strictEqual(config.activityFlow.entryMode, 'FLOW_ACCEL_15S');
+  assert.strictEqual(config.activityFlow.entryMode, 'ACTIVITY_BURST_V5');
   assert.strictEqual(config.strategy.flowReversalExitEnabled, true);
   assert.strictEqual(config.strategy.flowReversalExitMode, 'FLOW_TURN_15S');
 
@@ -85,7 +85,6 @@ function run() {
     entryMode: 'FLOW_ACCEL_15S',
     minVolume1mSol: 0,
     minTrades1m: 0,
-    minPoolQuoteSol: 0,
     maxSignalAgeMs: 0,
     cooldownMs: 0,
   });
@@ -107,6 +106,7 @@ function run() {
   assert.strictEqual(exit.matched, true);
   assert.strictEqual(exit.previousNetFlow, 3);
   assert.strictEqual(exit.currentNetFlow, -3);
+  assert.strictEqual(exit.sellerBreadthConfirmed, true);
   assert(
     exit.candles.every((candle) => candle.close > candle.open),
     'price direction must not be part of the exit rule',
@@ -116,6 +116,17 @@ function run() {
     false,
     'a partial entry candle must not count toward the two post-entry exit candles',
   );
+
+  const narrowSellerExit = [
+    ...candleEvents(BASE, 2.00, 2.10, 4, 1),
+    event(BASE + FRAME_MS, 'BUY', 0.5, 2.10, 'buyer-a'),
+    event(BASE + FRAME_MS + 1_000, 'BUY', 0.5, 2.11, 'buyer-b'),
+    event(BASE + FRAME_MS + 10_000, 'SELL', 4, 2.20, 'seller-only'),
+  ];
+  const narrow = evaluateFlowTurnExit(narrowSellerExit, exitNow, { sinceTs: BASE - 1 });
+  assert.strictEqual(narrow.currentNetFlow < 0, true);
+  assert.strictEqual(narrow.sellerBreadthConfirmed, false);
+  assert.strictEqual(narrow.matched, false, 'one seller must not confirm a broad flow reversal');
 
   const manager = Object.create(PositionManager.prototype);
   manager._flowExitEvents = new Map([[event(0, 'BUY', 1, 1).mint, exitEvents]]);

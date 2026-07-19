@@ -172,6 +172,10 @@ class OrderFlowTracker extends EventEmitter {
       opts.breadthMaxPriceChange10sPct ??
       flowConfig.breadthMaxPriceChange10sPct ??
       numEnv('BREADTH_BURST_MAX_PRICE_CHANGE_10S_PCT', 5);
+    this.breadthMaxPriceChange60sPct =
+      opts.breadthMaxPriceChange60sPct ??
+      flowConfig.breadthMaxPriceChange60sPct ??
+      numEnv('BREADTH_BURST_MAX_PRICE_CHANGE_60S_PCT', 20);
     this.breadthMinConfirmations =
       opts.breadthMinConfirmations ??
       flowConfig.breadthMinConfirmations ??
@@ -520,6 +524,7 @@ class OrderFlowTracker extends EventEmitter {
         accelerationFactor5s: this.breadthMinAccelerationFactor5s,
         breadthPriceChange10sMinPct: this.breadthMinPriceChange10sPct,
         breadthPriceChange10sMaxPct: this.breadthMaxPriceChange10sPct,
+        breadthPriceChange60sMaxPct: this.breadthMaxPriceChange60sPct,
         minConfirmations: this.breadthMinConfirmations,
         cooldownMs: this.breadthCooldownMs,
         warmupMs: this.breadthWarmupMs,
@@ -656,6 +661,7 @@ class OrderFlowTracker extends EventEmitter {
       volume1m: s60.volumeSol >= this.minVolume1mSol,
       buyers1m: s60.uniqueBuyers >= this.breadthMinUniqueBuyers1m,
       newBuyers1m: s60.newUniqueBuyers >= this.breadthMinNewBuyers1m,
+      price60s: s60.priceChangePct <= this.breadthMaxPriceChange60sPct,
       price10s:
         s10.priceChangePct >= this.breadthMinPriceChange10sPct &&
         s10.priceChangePct <= this.breadthMaxPriceChange10sPct,
@@ -768,7 +774,7 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] ARMED ${state.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${s60.buyCount}buys/${s60.volumeSol.toFixed(1)}SOL ` +
           `buyers=${s60.uniqueBuyers} new=${s60.newUniqueBuyers} ` +
-          `price10=${s10.priceChangePct.toFixed(2)}%`,
+          `price10=${s10.priceChangePct.toFixed(2)}% price60=${s60.priceChangePct.toFixed(2)}%`,
       );
       return;
     }
@@ -834,6 +840,9 @@ class OrderFlowTracker extends EventEmitter {
     }
     if (!breadth.coreConditions.newBuyers1m) {
       return `1m new buyers ${s60.newUniqueBuyers}<${this.breadthMinNewBuyers1m}`;
+    }
+    if (!breadth.coreConditions.price60s) {
+      return `60s price ${s60.priceChangePct.toFixed(1)}%>${this.breadthMaxPriceChange60sPct}%`;
     }
     if (s10.priceChangePct < this.breadthMinPriceChange10sPct) {
       return `10s price ${s10.priceChangePct.toFixed(1)}%<${this.breadthMinPriceChange10sPct}%`;
@@ -1043,6 +1052,7 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${flow.s60.buyCount}buys/${flow.s60.volumeSol.toFixed(1)}SOL ` +
           `buyers=${flow.s60.uniqueBuyers} new=${flow.s60.newUniqueBuyers} ` +
+          `price60=${flow.s60.priceChangePct.toFixed(2)}% ` +
           `support=${flow.entryV6.supportScore}/${Object.keys(flow.entryV6.supportConditions).length} ` +
           `ratio5=${flow.entryV6.previousBuySellRatio5s.toFixed(2)}->` +
           `${flow.entryV6.currentBuySellRatio5s.toFixed(2)} ` +

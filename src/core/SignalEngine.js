@@ -655,6 +655,7 @@ class SignalEngine extends EventEmitter {
       activityReason =
         `breadth_burst_v6: 1m=${flow.s60.buyCount}buys/${flow.s60.volumeSol.toFixed(2)}SOL ` +
         `buyers=${flow.s60.uniqueBuyers} new=${flow.s60.newUniqueBuyers} ` +
+        `price60=${flow.s60.priceChangePct.toFixed(2)}% ` +
         `topBuy=${(flow.s60.largestBuyShare * 100).toFixed(1)}% ` +
         `support=${flow.entryV6.supportScore}/5 ` +
         `ratio5=${flow.entryV6.previousBuySellRatio5s.toFixed(2)}->` +

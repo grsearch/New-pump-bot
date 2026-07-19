@@ -50,6 +50,7 @@ function tracker(overrides = {}) {
     breadthMinAccelerationFactor5s: 1.5,
     breadthMinPriceChange10sPct: -5,
     breadthMaxPriceChange10sPct: 6,
+    breadthMaxPriceChange60sPct: 20,
     breadthMinConfirmations: 4,
     breadthCooldownMs: 60_000,
     breadthWarmupMs: 0,
@@ -125,6 +126,14 @@ function runEntryTests() {
 
   const legacyMode = tracker({ entryMode: 'ACTIVITY_BURST_V5' });
   assert.strictEqual(legacyMode.entryMode, 'BREADTH_BURST_V6', 'production V5 env must activate V6 rules');
+
+  const antiChase = tracker({ armWindowMs: 120_000 });
+  antiChase.handleSwap(event(0, 'SELL', 1, 1.00, 'anti-chase-arm'));
+  antiChase.handleSwap(event(50_000, 'BUY', 1, 1.25, 'anti-chase-pump'));
+  assert.strictEqual(antiChase.states.get(MINT).armedAt, null, 'a >20% rolling 60s pump must cancel entry');
+  assert.match(antiChase.states.get(MINT).lastArmCancelReason, /60s price/);
+  const antiChaseView = antiChase.getStrategyCandidates(10, BASE + 50_000);
+  assert.strictEqual(antiChaseView.candidates[0].conditions.price60s, false);
 
   const warmup = tracker({ breadthWarmupMs: 60_000 });
   warmup.handleSwap(event(0, 'BUY', 1, 1.00, 'warmup-a'));
@@ -210,6 +219,7 @@ function runSlippageTests() {
   assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
   assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 80);
   assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 40);
+  assert.strictEqual(config.activityFlow.breadthMaxPriceChange60sPct, 20);
   assert.strictEqual(config.activityFlow.breadthMinConfirmations, 3);
   assert.strictEqual(config.activityFlow.breadthCooldownMs, 60_000);
   assert.strictEqual(config.activityFlow.breadthWarmupMs, 60_000);

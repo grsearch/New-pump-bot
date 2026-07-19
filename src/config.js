@@ -268,6 +268,7 @@ const config = {
     ),
     breadthMinPriceChange10sPct: parseFloat(process.env.BREADTH_BURST_MIN_PRICE_CHANGE_10S_PCT || '-5'),
     breadthMaxPriceChange10sPct: parseFloat(process.env.BREADTH_BURST_MAX_PRICE_CHANGE_10S_PCT || '5'),
+    breadthMaxPriceChange60sPct: parseFloat(process.env.BREADTH_BURST_MAX_PRICE_CHANGE_60S_PCT || '20'),
     breadthMinConfirmations: parseInt(process.env.BREADTH_BURST_MIN_CONFIRMATIONS || '3', 10),
     breadthCooldownMs: parseInt(process.env.BREADTH_BURST_COOLDOWN_MS || '60000', 10),
     breadthWarmupMs: parseInt(process.env.BREADTH_BURST_WARMUP_MS || '60000', 10),

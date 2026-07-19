@@ -222,6 +222,7 @@ async function main() {
       `arm=${activityFlowTracker.armWindowMs / 1000}s ` +
       `buyers>=${activityFlowTracker.breadthMinUniqueBuyers1m} ` +
       `newBuyers>=${activityFlowTracker.breadthMinNewBuyers1m} ` +
+      `price60<=${activityFlowTracker.breadthMaxPriceChange60sPct}% ` +
       `entry=breadth-score-${activityFlowTracker.breadthMinConfirmations}/5+2x-confirm ` +
       `warmup=${activityFlowTracker.breadthWarmupMs / 1000}s ` +
       `cooldown=${activityFlowTracker.breadthCooldownMs / 1000}s ` +

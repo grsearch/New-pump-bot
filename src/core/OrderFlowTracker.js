@@ -454,7 +454,403 @@ class OrderFlowTracker extends EventEmitter {
       const recentlyCancelled =
         state.lastArmCancelTs != null && now - state.lastArmCancelTs <= this.window15Ms;
 
-…3851 tokens truncated… const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
+      let stage = 'monitoring';
+      if (recentlySignaled) stage = 'signaled';
+      else if (armed && state.triggerConfirmFirstTs != null && triggerReady) stage = 'confirming';
+      else if (armed && state.lastArmWaitReason) stage = 'waiting';
+      else if (armed) stage = 'armed';
+      else if (armReady) stage = 'ready';
+      else if (recentlyCancelled) stage = 'cancelled';
+
+      summary.active++;
+      if (conditions.volume1m) summary.volumeReady++;
+      if (armReady) summary.armReady++;
+      if (stage === 'armed') summary.armed++;
+      if (stage === 'waiting') summary.waiting++;
+      if (stage === 'confirming') summary.confirming++;
+      if (stage === 'signaled') summary.signaled++;
+
+      candidates.push({
+        mint,
+        symbol: state.symbol || null,
+        updatedAt: latest.ts,
+        ageMs: Math.max(0, now - latest.ts),
+        stage,
+        armReady,
+        triggerReady,
+        armedAt: armed ? state.armedAt : null,
+        armedUntil: armed ? state.armedUntil : null,
+        confirmFirstTs: armed ? state.triggerConfirmFirstTs : null,
+        lastSignalTs: state.lastV5SignalTs || null,
+        cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
+        waitReason: armed ? state.lastArmWaitReason : null,
+        conditions,
+        s60: {
+          ...this._compactStats(s60),
+          volumeUsd: round(s60.volumeSol * this.solPriceUsd, 2),
+        },
+        s10: this._compactStats(s10),
+        s5: this._compactStats(s5),
+        trigger,
+      });
+    }
+
+    const stageRank = { signaled: 6, confirming: 5, waiting: 4, armed: 3, ready: 2, cancelled: 1, monitoring: 0 };
+    candidates.sort((a, b) =>
+      (stageRank[b.stage] - stageRank[a.stage]) ||
+      (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
+      (b.s60.volumeUsd - a.s60.volumeUsd) ||
+      (b.updatedAt - a.updatedAt));
+
+    return {
+      mode: this.entryMode,
+      now,
+      thresholds: {
+        volume1mUsd: this.minVolume1mUsd,
+        volume1mSol: this.minVolume1mSol,
+        trades1m: this.minTrades1m,
+        wallets1m: this.armMinUniqueTraders1m,
+        largestBuyShare1m: this.armMaxLargestBuyShare1m,
+        volatility1mPct: this.armMinVolatility1mPct,
+        volume5sSol: this.triggerMinVolume5sSol,
+        trades5s: this.triggerMinTrades5s,
+        buyers5s: this.triggerMinUniqueBuyers5s,
+        txAcceleration5s: this.triggerMinTxAcceleration5s,
+        range5sPct: this.triggerMinRange5sPct,
+        priceChange10sMinPct: this.triggerMinPriceChange10sPct,
+        priceChange10sMaxPct: this.triggerMaxPriceChange10sPct,
+        confirmMinGapMs: this.triggerConfirmMinGapMs,
+        confirmMaxGapMs: this.triggerConfirmMaxGapMs,
+        buyers1m: this.breadthMinUniqueBuyers1m,
+        newBuyers1m: this.breadthMinNewBuyers1m,
+        buyTrades1m: this.breadthMinBuyCount1m,
+        breadthLargestBuyShare1m: this.breadthMaxLargestBuyShare1m,
+        breadthBuyers5s: this.breadthMinUniqueBuyers5s,
+        maxAvgBuyPerWallet5sSol: this.breadthMaxAvgBuyPerWallet5sSol,
+        previousRatioMax5s: this.breadthPreviousRatioMax5s,
+        currentRatioMin5s: this.breadthCurrentRatioMin5s,
+        currentRatioMax5s: this.breadthCurrentRatioMax5s,
+        accelerationFactor5s: this.breadthMinAccelerationFactor5s,
+        breadthPriceChange10sMinPct: this.breadthMinPriceChange10sPct,
+        breadthPriceChange10sMaxPct: this.breadthMaxPriceChange10sPct,
+        breadthPriceChange60sMaxPct: this.breadthMaxPriceChange60sPct,
+        minConfirmations: this.breadthMinConfirmations,
+        cooldownMs: this.breadthCooldownMs,
+        warmupMs: this.breadthWarmupMs,
+      },
+      summary,
+      candidates: candidates.slice(0, safeLimit),
+    };
+  }
+
+  _stateOf(mint) {
+    let state = this.states.get(mint);
+    if (!state) {
+      state = {
+        events: [],
+        symbol: null,
+        poolAddress: null,
+        lastPoolQuoteAfter: null,
+        lastDumpSignal: null,
+        lastEntrySignalBucket: null,
+        firstSeenTs: null,
+        armedAt: null,
+        armedUntil: null,
+        triggerConfirmFirstTs: null,
+        lastArmCancelTs: null,
+        lastArmCancelReason: null,
+        lastArmWaitTs: null,
+        lastArmWaitReason: null,
+        lastV5SignalTs: null,
+        firstBuySeen: new Map(),
+        lastWalletPruneTs: 0,
+      };
+      this.states.set(mint, state);
+    }
+    return state;
+  }
+
+  _prune(state, now) {
+    const cutoff = now - this.maxWindowMs - 1_000;
+    while (state.events.length > 0 && state.events[0].ts < cutoff) state.events.shift();
+    if (state.events.length > this.maxEventsPerMint) {
+      state.events.splice(0, state.events.length - this.maxEventsPerMint);
+    }
+    if (now - state.lastWalletPruneTs >= 60_000) {
+      const walletCutoff = now - 24 * 60 * 60 * 1000;
+      for (const [wallet, ts] of state.firstBuySeen) {
+        if (ts < walletCutoff) state.firstBuySeen.delete(wallet);
+      }
+      state.lastWalletPruneTs = now;
+    }
+  }
+
+  _windowEvents(state, now, windowMs) {
+    const start = now - windowMs;
+    return state.events
+      .filter((ev) => ev.ts >= start && ev.ts <= now)
+      .sort((a, b) => (a.ts - b.ts) || ((a.slot || 0) - (b.slot || 0)));
+  }
+
+  _stats(state, now, windowMs) {
+    const events = this._windowEvents(state, now, windowMs);
+    const buys = events.filter((ev) => ev.side === 'BUY');
+    const sells = events.filter((ev) => ev.side === 'SELL');
+    const buySol = sumVolume(buys);
+    const sellSol = sumVolume(sells);
+    const volumeSol = buySol + sellSol;
+    const buyerVolume = new Map();
+    for (const buy of buys) {
+      const buyer = buy.signer || '__unknown__';
+      buyerVolume.set(buyer, (buyerVolume.get(buyer) || 0) + buy.solVolume);
+    }
+    const largestBuyerSol = buyerVolume.size > 0 ? Math.max(...buyerVolume.values()) : 0;
+    const largestBuySol = buys.length > 0 ? Math.max(...buys.map((buy) => buy.solVolume)) : 0;
+    const maxSingleBuyImpactPct = buys.reduce(
+      (maxImpact, buy) => Math.max(maxImpact, Number.isFinite(buy.priceChangePct) ? buy.priceChangePct : 0),
+      0,
+    );
+    const first = events[0] || null;
+    const last = events[events.length - 1] || null;
+    const firstPrice = first ? first.price : 0;
+    const lastPrice = last ? last.price : 0;
+    const priceChangePct = firstPrice > 0 && lastPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+    const prices = events.map((event) => event.price).filter((value) => Number.isFinite(value) && value > 0);
+    const returns = [];
+    for (let index = 1; index < prices.length; index++) {
+      returns.push(((prices[index] - prices[index - 1]) / prices[index - 1]) * 100);
+    }
+    const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const start = now - windowMs;
+    const uniqueBuyers = uniqueCount(buys, 'signer');
+    const newUniqueBuyers = [...new Set(buys.map((buy) => buy.signer).filter(Boolean))]
+      .filter((wallet) => (state.firstBuySeen.get(wallet) || 0) >= start).length;
+
+    return {
+      windowMs,
+      events,
+      tradeCount: events.length,
+      buyCount: buys.length,
+      sellCount: sells.length,
+      buySol,
+      sellSol,
+      netFlow: buySol - sellSol,
+      volumeSol,
+      buySellRatio: buySol / Math.max(sellSol, 0.001),
+      buyCountRatio: buys.length / Math.max(sells.length, 1),
+      imbalance: (buySol - sellSol) / Math.max(volumeSol, 0.001),
+      uniqueBuyers,
+      newUniqueBuyers,
+      uniqueSellers: uniqueCount(sells, 'signer'),
+      uniqueTraders: uniqueCount(events, 'signer'),
+      largestBuyerSol,
+      largestBuyerShare: largestBuyerSol / Math.max(buySol, 0.001),
+      largestBuySol,
+      largestBuyShare: largestBuySol / Math.max(buySol, 0.001),
+      maxSingleBuyImpactPct,
+      firstPrice,
+      lastPrice,
+      priceChangePct,
+      highPrice,
+      lowPrice,
+      rangePct: lastPrice > 0 ? ((highPrice - lowPrice) / lastPrice) * 100 : 0,
+      volatilityPct: stddev(returns),
+      lastSide: last ? last.side : null,
+    };
+  }
+
+  _breadthMetrics(s5, s10, s60, historyAgeMs = Number.POSITIVE_INFINITY) {
+    const previousBuy5s = Math.max(0, s10.buySol - s5.buySol);
+    const previousSell5s = Math.max(0, s10.sellSol - s5.sellSol);
+    const previousBuySellRatio5s = previousBuy5s / Math.max(previousSell5s, 0.001);
+    const txAccelerationFactor5s = (s5.tradeCount * 12) / Math.max(s60.tradeCount, 1);
+    const volumeAccelerationFactor5s = (s5.buySol * 12) / Math.max(s60.buySol, 0.001);
+    const avgBuyPerWallet5sSol = s5.uniqueBuyers > 0
+      ? s5.buySol / s5.uniqueBuyers
+      : Number.POSITIVE_INFINITY;
+
+    const coreConditions = {
+      historyReady: historyAgeMs >= this.breadthWarmupMs,
+      volume1m: s60.volumeSol >= this.minVolume1mSol,
+      buyers1m: s60.uniqueBuyers >= this.breadthMinUniqueBuyers1m,
+      newBuyers1m: s60.newUniqueBuyers >= this.breadthMinNewBuyers1m,
+      avgBuyPerWallet5s:
+        !Number.isFinite(this.breadthMaxAvgBuyPerWallet5sSol) ||
+        (Number.isFinite(avgBuyPerWallet5sSol) &&
+          avgBuyPerWallet5sSol <= this.breadthMaxAvgBuyPerWallet5sSol),
+      price60s: s60.priceChangePct <= this.breadthMaxPriceChange60sPct,
+      price10s:
+        s10.priceChangePct >= this.breadthMinPriceChange10sPct &&
+        s10.priceChangePct <= this.breadthMaxPriceChange10sPct,
+    };
+    const supportConditions = {
+      buyTrades1m: s60.buyCount >= this.breadthMinBuyCount1m,
+      largestBuy1m: s60.largestBuyShare <= this.breadthMaxLargestBuyShare1m,
+      buyers5s: s5.uniqueBuyers >= this.breadthMinUniqueBuyers5s,
+      ratioTurn5s:
+        previousBuySellRatio5s < this.breadthPreviousRatioMax5s &&
+        s5.buySellRatio >= this.breadthCurrentRatioMin5s &&
+        s5.buySellRatio <= this.breadthCurrentRatioMax5s,
+      acceleration5s:
+        txAccelerationFactor5s >= this.breadthMinAccelerationFactor5s ||
+        volumeAccelerationFactor5s >= this.breadthMinAccelerationFactor5s,
+    };
+    const supportScore = Object.values(supportConditions).filter(Boolean).length;
+
+    return {
+      coreConditions,
+      supportConditions,
+      supportScore,
+      trigger: {
+        previousBuySellRatio5s,
+        currentBuySellRatio5s: s5.buySellRatio,
+        txAccelerationFactor5s,
+        volumeAccelerationFactor5s,
+        avgBuyPerWallet5sSol,
+      },
+    };
+  }
+
+  _trySignal(state, ev) {
+    const wallNow = Date.now();
+    if (this.maxSignalAgeMs > 0 && wallNow - ev.ts > this.maxSignalAgeMs) {
+      this._debugReject(ev.mint, ev.ts, `signal age ${wallNow - ev.ts}ms>${this.maxSignalAgeMs}ms`, null, null, null, null);
+      return;
+    }
+
+    const cooldownUntil = this.cooldowns.get(ev.mint) || 0;
+    if (cooldownUntil > wallNow) return;
+
+    if (this.entryMode === 'BREADTH_BURST_V6') {
+      this._tryBreadthBurstV6(state, ev, wallNow);
+      return;
+    }
+
+    if (this.entryMode === 'ACTIVITY_BURST_V5') {
+      this._tryActivityBurstV5(state, ev, wallNow);
+      return;
+    }
+
+    const entryPattern = evaluateFlowAccelerationEntry(state.events, ev.ts, {
+      sinceTs: state.firstSeenTs,
+    });
+    if (
+      entryPattern.triggerBucketTs != null &&
+      entryPattern.triggerBucketTs === state.lastEntrySignalBucket
+    ) {
+      return;
+    }
+
+    const s5 = this._stats(state, ev.ts, this.window5Ms);
+    const s10 = this._stats(state, ev.ts, this.window10Ms);
+    const s15 = this._stats(state, ev.ts, this.window15Ms);
+    const s30 = this._stats(state, ev.ts, this.window30Ms);
+    const s60 = this._stats(state, ev.ts, this.window60Ms);
+    const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
+    const reject = this._firstReject(s5, s15, s30, s60, entryPattern);
+    if (reject) {
+      this._debugReject(ev.mint, ev.ts, reject, s5, s15, s30, s60);
+      return;
+    }
+
+    this._emitBuySignal(state, ev, {
+      s5,
+      s10,
+      s15,
+      s30,
+      s60,
+      poolQuoteSol,
+      entryPattern,
+    });
+  }
+
+  _tryBreadthBurstV6(state, ev, wallNow) {
+    const s5 = this._stats(state, ev.ts, this.window5Ms);
+    const s10 = this._stats(state, ev.ts, this.window10Ms);
+    const s15 = this._stats(state, ev.ts, this.window15Ms);
+    const s30 = this._stats(state, ev.ts, this.window30Ms);
+    const s60 = this._stats(state, ev.ts, this.window60Ms);
+    const historyAgeMs = Math.max(0, ev.ts - (state.firstSeenTs ?? ev.ts));
+    const breadth = this._breadthMetrics(s5, s10, s60, historyAgeMs);
+
+    if (state.armedUntil != null && ev.ts > state.armedUntil) {
+      state.lastArmCancelTs = ev.ts;
+      state.lastArmCancelReason = 'arm timeout';
+      this._clearArm(state);
+    }
+
+    const coreReject = this._v6CoreReject(s10, s60, breadth);
+    if (state.armedAt == null) {
+      if (coreReject) {
+        this._debugReject(ev.mint, ev.ts, coreReject, s5, s15, s30, s60);
+        return;
+      }
+      state.armedAt = ev.ts;
+      state.armedUntil = ev.ts + this.armWindowMs;
+      state.triggerConfirmFirstTs = null;
+      state.lastArmWaitTs = null;
+      state.lastArmWaitReason = null;
+      console.log(
+        `[ActivityFlow] ARMED ${state.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
+          `1m=${s60.buyCount}buys/${s60.volumeSol.toFixed(1)}SOL ` +
+          `buyers=${s60.uniqueBuyers} new=${s60.newUniqueBuyers} ` +
+          `avgBuy5=${breadth.trigger.avgBuyPerWallet5sSol.toFixed(2)}SOL ` +
+          `price10=${s10.priceChangePct.toFixed(2)}% price60=${s60.priceChangePct.toFixed(2)}%`,
+      );
+      return;
+    }
+
+    const cancelReason = this._v6ArmCancelReject(s60, breadth);
+    if (cancelReason) {
+      console.log(`[ActivityFlow] ARM_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${cancelReason}`);
+      state.lastArmCancelTs = ev.ts;
+      state.lastArmCancelReason = cancelReason;
+      this._clearArm(state);
+      return;
+    }
+
+    const waitReason = this._v6ConfirmationWaitReason(s10, breadth);
+    if (waitReason) {
+      state.triggerConfirmFirstTs = null;
+      state.lastArmWaitTs = ev.ts;
+      if (state.lastArmWaitReason !== waitReason) {
+        console.log(`[ActivityFlow] ARM_WAIT ${state.symbol || ev.mint.slice(0, 6)}: ${waitReason}`);
+      }
+      state.lastArmWaitReason = waitReason;
+      return;
+    }
+
+    if (state.lastArmWaitReason) {
+      console.log(
+        `[ActivityFlow] ARM_RESUME ${state.symbol || ev.mint.slice(0, 6)}: ` +
+          `recovered from ${state.lastArmWaitReason}`,
+      );
+      state.lastArmWaitTs = null;
+      state.lastArmWaitReason = null;
+    }
+
+    if (breadth.supportScore < this.breadthMinConfirmations) {
+      state.triggerConfirmFirstTs = null;
+      this._debugReject(
+        ev.mint,
+        ev.ts,
+        `support ${breadth.supportScore}<${this.breadthMinConfirmations}`,
+        s5,
+        s15,
+        s30,
+        s60,
+      );
+      return;
+    }
+
+    if (state.triggerConfirmFirstTs == null || ev.ts - state.triggerConfirmFirstTs > this.triggerConfirmMaxGapMs) {
+      state.triggerConfirmFirstTs = ev.ts;
+      return;
+    }
+    if (ev.ts - state.triggerConfirmFirstTs < this.triggerConfirmMinGapMs) return;
+
+    const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
     this._emitBuySignal(state, ev, {
       s5,
       s10,
@@ -915,4 +1311,3 @@ class OrderFlowTracker extends EventEmitter {
 }
 
 module.exports = OrderFlowTracker;
-

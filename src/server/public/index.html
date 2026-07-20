@@ -172,7 +172,7 @@
   .pill.success { background: rgba(38, 166, 154, 0.2); color: var(--green); }
   .pill.fail { background: rgba(239, 83, 80, 0.2); color: var(--red); }
   .pill.monitoring { background: rgba(139, 148, 170, 0.14); color: var(--text-dim); }
-  .pill.ready, .pill.armed { background: rgba(245, 176, 65, 0.2); color: var(--yellow); }
+  .pill.ready, .pill.armed, .pill.waiting { background: rgba(245, 176, 65, 0.2); color: var(--yellow); }
   .pill.confirming { background: rgba(41, 182, 246, 0.2); color: var(--accent); }
   .pill.signaled { background: rgba(38, 166, 154, 0.24); color: var(--green); }
   .pill.cancelled { background: rgba(239, 83, 80, 0.14); color: #ff8a87; }
@@ -724,6 +724,7 @@ function _strategyStage(candidate, now) {
     cancelled: '已取消',
     ready: '待激活',
     armed: '已激活',
+    waiting: '等待恢复',
     confirming: '确认 1/2',
     signaled: '买入信号',
   };
@@ -731,7 +732,7 @@ function _strategyStage(candidate, now) {
   const remaining = candidate.armedUntil
     ? ` ${Math.max(0, Math.ceil((candidate.armedUntil - now) / 1000))}s`
     : '';
-  const title = candidate.cancelReason || '';
+  const title = candidate.waitReason || candidate.cancelReason || '';
   return `<span class="pill ${stage}" title="${escapeHtml(title)}">${labels[stage] || escapeHtml(stage)}${remaining}</span>`;
 }
 
@@ -754,6 +755,7 @@ async function refreshSignals() {
     `<span>1m量达标 <b>${summary.volumeReady || 0}</b></span>`,
     `<span>预备 <b>${summary.armReady || 0}</b></span>`,
     `<span>激活 <b>${summary.armed || 0}</b></span>`,
+    `<span>等待恢复 <b>${summary.waiting || 0}</b></span>`,
     `<span>确认 <b>${summary.confirming || 0}</b></span>`,
     `<span>信号 <b>${summary.signaled || 0}</b></span>`,
   ].join('');

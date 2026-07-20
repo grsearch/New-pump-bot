@@ -3,6 +3,7 @@
 const EventEmitter = require('events');
 const { config } = require('../config');
 const { getMonitor } = require('../monitor/HealthMonitor');
+const { normalizeUnixMs } = require('../utils/migrationTime');
 
 const monitor = getMonitor();
 // SignalEngine 只在收到 dump 信号时 beat，没信号时不会心跳。砸盘信号本来就稀疏，
@@ -398,11 +399,11 @@ class SignalEngine extends EventEmitter {
       }
     }
 
-    // Optional hot-path age filter uses Pump migration time, matching Watchdog.
-    const maxAgeH = parseFloat(process.env.MAX_MINT_AGE_HOURS || '0'); // 0=禁用
-    if (maxAgeH > 0 && this.tokenRegistry) {
+    // Hot-path age guard uses the same Pump migration AGE as TokenWatchdog.
+    const maxAgeH = config.strategy.maxMintAgeHours;
+    if (this.tokenRegistry) {
       const tokenInfo = this.tokenRegistry.getToken(mint);
-      const migrationTime = tokenInfo?.migration_time; // ms
+      const migrationTime = normalizeUnixMs(tokenInfo?.migration_time);
       // Unknown migration time is allowed; never substitute mint creation time.
       if (migrationTime && (Date.now() - migrationTime) > maxAgeH * 3600 * 1000) {
         monitor.inc('SignalEngine.rejectedOldMint', 1, 'SignalEngine');

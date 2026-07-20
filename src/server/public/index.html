@@ -388,8 +388,8 @@
         <div id="strategySignalMeta" class="strategy-meta"><span>等待实时数据</span></div>
         <div class="table-wrap" style="overflow:auto;">
           <table class="strategy-table">
-            <thead><tr><th>更新</th><th>Symbol</th><th>CA</th><th>1m 成交量</th><th>1m 买入笔数</th><th>1m 买家</th><th>1m 新买家</th><th>最大单买</th><th>5s 买家</th><th>5s 买卖比</th><th>5s 加速</th><th>1m 涨幅</th><th>10s 涨幅</th><th>确认</th><th>阶段</th></tr></thead>
-            <tbody id="signalsTbody"><tr><td colspan="15" class="empty">暂无活跃成交</td></tr></tbody>
+            <thead><tr><th>更新</th><th>Symbol</th><th>CA</th><th>1m 成交量</th><th>1m 买入笔数</th><th>1m 买家</th><th>1m 新买家</th><th>最大单买</th><th>5s 买家</th><th>5s 人均买量</th><th>5s 买卖比</th><th>5s 加速</th><th>1m 涨幅</th><th>10s 涨幅</th><th>确认</th><th>阶段</th></tr></thead>
+            <tbody id="signalsTbody"><tr><td colspan="16" class="empty">暂无活跃成交</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -741,7 +741,7 @@ async function refreshSignals() {
   const tbody = $('signalsTbody');
   if (!r.ok) {
     meta.innerHTML = `<span class="neg">${escapeHtml(r.error || 'V6 实时数据不可用')}</span>`;
-    tbody.innerHTML = '<tr><td colspan="15" class="empty">等待 Strategy V6 数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" class="empty">等待 Strategy V6 数据</td></tr>';
     return;
   }
 
@@ -759,7 +759,7 @@ async function refreshSignals() {
   ].join('');
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="15" class="empty">暂无活跃成交</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" class="empty">暂无活跃成交</td></tr>';
     return;
   }
 
@@ -780,6 +780,7 @@ async function refreshSignals() {
         <td>${_strategyCondition(`${minute.newUniqueBuyers || 0} / ${thresholds.newBuyers1m || 0}`, conditions.newBuyers1m)}</td>
         <td>${_strategyCondition(`${_strategyNumber((minute.largestBuyShare || 0) * 100, 1)}%`, conditions.largestBuy1m, `上限 ${_strategyNumber((thresholds.breadthLargestBuyShare1m || 0) * 100, 0)}%`)}</td>
         <td>${_strategyCondition(`${fiveSeconds.uniqueBuyers || 0} / ${thresholds.breadthBuyers5s || 0}`, conditions.buyers5s)}</td>
+        <td>${_strategyCondition(`${_strategyNumber(trigger.avgBuyPerWallet5sSol, 3)} SOL`, conditions.avgBuyPerWallet5s, `上限 ${_strategyNumber(thresholds.maxAvgBuyPerWallet5sSol, 2)} SOL`)}</td>
         <td>${_strategyCondition(`${_strategyNumber(trigger.previousBuySellRatio5s)}→${_strategyNumber(trigger.currentBuySellRatio5s)}`, conditions.ratioTurn5s, `${thresholds.currentRatioMin5s}～${thresholds.currentRatioMax5s}`)}</td>
         <td>${_strategyCondition(`${_strategyNumber(trigger.txAccelerationFactor5s)}x / ${_strategyNumber(trigger.volumeAccelerationFactor5s)}x`, conditions.acceleration5s, `任一 ≥${thresholds.accelerationFactor5s}x`)}</td>
         <td>${_strategyCondition(`${_strategyNumber(minute.priceChangePct)}%`, conditions.price60s, `上限 ${thresholds.breadthPriceChange60sMaxPct}%`)}</td>

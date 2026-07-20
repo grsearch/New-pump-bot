@@ -30,6 +30,7 @@ class TokenWatchdog {
     this.maxWatchDurationMs = process.env.MAX_WATCH_DURATION_MS != null
       ? parseInt(process.env.MAX_WATCH_DURATION_MS, 10)
       : config.strategy.maxWatchDurationMs;
+    this.maxTokenAgeMs = config.strategy.maxTokenAgeMs;
     this.minFdVUsd = process.env.MIN_FDV_USD != null
       ? parseFloat(process.env.MIN_FDV_USD)
       : config.strategy.minFdVUsd;
@@ -79,6 +80,7 @@ class TokenWatchdog {
       `market=dexscreener(batch ${this.marketBatchSize})+birdeye fallback`,
     ];
     if (this.maxWatchDurationMs > 0) features.push(`maxWatch=${this.maxWatchDurationMs / 60000}min`);
+    if (this.maxTokenAgeMs > 0) features.push(`maxAge=${this.maxTokenAgeMs / 60000}min`);
     if (this.minFdVUsd > 0) features.push(`minFDV=$${this.minFdVUsd}`);
     if (this.maxFdVUsd > 0) features.push(`maxFDV=$${this.maxFdVUsd}`);
     if (this.minLiquidityUsd > 0) features.push(`minLiquidity=$${this.minLiquidityUsd}`);
@@ -90,6 +92,7 @@ class TokenWatchdog {
   start() {
     if (
       this.maxWatchDurationMs <= 0 &&
+      this.maxTokenAgeMs <= 0 &&
       this.minFdVUsd <= 0 &&
       this.maxFdVUsd <= 0 &&
       this.minLiquidityUsd <= 0 &&
@@ -132,8 +135,19 @@ class TokenWatchdog {
     return Number.isFinite(updatedAt) && updatedAt > 0 && now - updatedAt <= this.marketStaleMs;
   }
 
-  _backfillWebhookMigration(token, market) {
-    if (token?.migration_time || token?.source !== 'webhook') return;
+  _getMigrationAgeMs(token, now = Date.now()) {
+    const migrationTime = normalizeUnixMs(token?.migration_time);
+    if (!migrationTime) return null;
+    return Math.max(0, now - migrationTime);
+  }
+
+  _isTokenTooOld(token, now = Date.now()) {
+    const ageMs = this._getMigrationAgeMs(token, now);
+    return ageMs != null && this.maxTokenAgeMs > 0 && ageMs > this.maxTokenAgeMs;
+  }
+
+  _backfillMigrationTime(token, market) {
+    if (token?.migration_time) return;
     const migrationTime = normalizeUnixMs(market?.pairCreatedAt);
     if (!migrationTime) return;
     this.tokenRegistry.recordMigration(token.mint, {
@@ -156,6 +170,12 @@ class TokenWatchdog {
     if (!marketFilterEnabled) return { refreshed: 0, failed: 0 };
 
     const due = tokens.filter((token) => {
+      if (
+        this._isTokenTooOld(token, now) &&
+        !this.positionManager?.hasOpenPosition?.(token.mint)
+      ) {
+        return false;
+      }
       const lastSuccess = Number(token.market_updated_at) || 0;
       const lastAttempt = this._lastMarketAttemptAt.get(token.mint) || 0;
       return (
@@ -188,7 +208,7 @@ class TokenWatchdog {
 
       for (const token of batch) {
         const market = markets.get(token.mint);
-        if (market) this._backfillWebhookMigration(token, market);
+        if (market) this._backfillMigrationTime(token, market);
         const marketComplete = (
           Number(market?.fdv) > 0 &&
           Number(market?.liquidity) > 0
@@ -259,6 +279,14 @@ class TokenWatchdog {
 
     for (const token of activeTokens) {
       const reasons = [];
+
+      const tokenAgeMs = this._getMigrationAgeMs(token, now);
+      if (tokenAgeMs != null && this.maxTokenAgeMs > 0 && tokenAgeMs > this.maxTokenAgeMs) {
+        reasons.push(
+          `migration_age(${Math.ceil(tokenAgeMs / 60000)}min > ` +
+          `${this.maxTokenAgeMs / 60000}min)`,
+        );
+      }
 
       if (this.maxWatchDurationMs > 0 && token.added_at) {
         const watchAge = now - token.added_at;

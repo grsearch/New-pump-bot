@@ -131,7 +131,7 @@ class OrderFlowTracker extends EventEmitter {
     this.breadthMinUniqueBuyers1m =
       opts.breadthMinUniqueBuyers1m ??
       flowConfig.breadthMinUniqueBuyers1m ??
-      numEnv('BREADTH_BURST_MIN_UNIQUE_BUYERS_1M', 80);
+      numEnv('BREADTH_BURST_MIN_UNIQUE_BUYERS_1M', 100);
     this.breadthMinNewBuyers1m =
       opts.breadthMinNewBuyers1m ??
       flowConfig.breadthMinNewBuyers1m ??
@@ -148,6 +148,10 @@ class OrderFlowTracker extends EventEmitter {
       opts.breadthMinUniqueBuyers5s ??
       flowConfig.breadthMinUniqueBuyers5s ??
       numEnv('BREADTH_BURST_MIN_UNIQUE_BUYERS_5S', 10);
+    this.breadthMaxAvgBuyPerWallet5sSol =
+      opts.breadthMaxAvgBuyPerWallet5sSol ??
+      flowConfig.breadthMaxAvgBuyPerWallet5sSol ??
+      numEnv('BREADTH_BURST_MAX_AVG_BUY_PER_WALLET_5S_SOL', 0.4);
     this.breadthPreviousRatioMax5s =
       opts.breadthPreviousRatioMax5s ??
       flowConfig.breadthPreviousRatioMax5s ??
@@ -518,6 +522,7 @@ class OrderFlowTracker extends EventEmitter {
         buyTrades1m: this.breadthMinBuyCount1m,
         breadthLargestBuyShare1m: this.breadthMaxLargestBuyShare1m,
         breadthBuyers5s: this.breadthMinUniqueBuyers5s,
+        maxAvgBuyPerWallet5sSol: this.breadthMaxAvgBuyPerWallet5sSol,
         previousRatioMax5s: this.breadthPreviousRatioMax5s,
         currentRatioMin5s: this.breadthCurrentRatioMin5s,
         currentRatioMax5s: this.breadthCurrentRatioMax5s,
@@ -655,12 +660,19 @@ class OrderFlowTracker extends EventEmitter {
     const previousBuySellRatio5s = previousBuy5s / Math.max(previousSell5s, 0.001);
     const txAccelerationFactor5s = (s5.tradeCount * 12) / Math.max(s60.tradeCount, 1);
     const volumeAccelerationFactor5s = (s5.buySol * 12) / Math.max(s60.buySol, 0.001);
+    const avgBuyPerWallet5sSol = s5.uniqueBuyers > 0
+      ? s5.buySol / s5.uniqueBuyers
+      : Number.POSITIVE_INFINITY;
 
     const coreConditions = {
       historyReady: historyAgeMs >= this.breadthWarmupMs,
       volume1m: s60.volumeSol >= this.minVolume1mSol,
       buyers1m: s60.uniqueBuyers >= this.breadthMinUniqueBuyers1m,
       newBuyers1m: s60.newUniqueBuyers >= this.breadthMinNewBuyers1m,
+      avgBuyPerWallet5s:
+        !Number.isFinite(this.breadthMaxAvgBuyPerWallet5sSol) ||
+        (Number.isFinite(avgBuyPerWallet5sSol) &&
+          avgBuyPerWallet5sSol <= this.breadthMaxAvgBuyPerWallet5sSol),
       price60s: s60.priceChangePct <= this.breadthMaxPriceChange60sPct,
       price10s:
         s10.priceChangePct >= this.breadthMinPriceChange10sPct &&
@@ -689,6 +701,7 @@ class OrderFlowTracker extends EventEmitter {
         currentBuySellRatio5s: s5.buySellRatio,
         txAccelerationFactor5s,
         volumeAccelerationFactor5s,
+        avgBuyPerWallet5sSol,
       },
     };
   }
@@ -774,6 +787,7 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] ARMED ${state.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${s60.buyCount}buys/${s60.volumeSol.toFixed(1)}SOL ` +
           `buyers=${s60.uniqueBuyers} new=${s60.newUniqueBuyers} ` +
+          `avgBuy5=${breadth.trigger.avgBuyPerWallet5sSol.toFixed(2)}SOL ` +
           `price10=${s10.priceChangePct.toFixed(2)}% price60=${s60.priceChangePct.toFixed(2)}%`,
       );
       return;
@@ -840,6 +854,11 @@ class OrderFlowTracker extends EventEmitter {
     }
     if (!breadth.coreConditions.newBuyers1m) {
       return `1m new buyers ${s60.newUniqueBuyers}<${this.breadthMinNewBuyers1m}`;
+    }
+    if (!breadth.coreConditions.avgBuyPerWallet5s) {
+      const avgBuy = breadth.trigger.avgBuyPerWallet5sSol;
+      return `5s avg buy/wallet ${Number.isFinite(avgBuy) ? avgBuy.toFixed(2) : 'n/a'}` +
+        `>${this.breadthMaxAvgBuyPerWallet5sSol.toFixed(2)}SOL`;
     }
     if (!breadth.coreConditions.price60s) {
       return `60s price ${s60.priceChangePct.toFixed(1)}%>${this.breadthMaxPriceChange60sPct}%`;
@@ -1052,6 +1071,7 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${flow.s60.buyCount}buys/${flow.s60.volumeSol.toFixed(1)}SOL ` +
           `buyers=${flow.s60.uniqueBuyers} new=${flow.s60.newUniqueBuyers} ` +
+          `avgBuy5=${flow.entryV6.avgBuyPerWallet5sSol.toFixed(2)}SOL ` +
           `price60=${flow.s60.priceChangePct.toFixed(2)}% ` +
           `support=${flow.entryV6.supportScore}/${Object.keys(flow.entryV6.supportConditions).length} ` +
           `ratio5=${flow.entryV6.previousBuySellRatio5s.toFixed(2)}->` +
@@ -1218,6 +1238,7 @@ class OrderFlowTracker extends EventEmitter {
       currentBuySellRatio5s: round(pattern.currentBuySellRatio5s, 3),
       txAccelerationFactor5s: round(pattern.txAccelerationFactor5s, 3),
       volumeAccelerationFactor5s: round(pattern.volumeAccelerationFactor5s, 3),
+      avgBuyPerWallet5sSol: round(pattern.avgBuyPerWallet5sSol, 4),
     };
   }
 

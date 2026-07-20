@@ -16,6 +16,11 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
+const configuredMaxMintAgeHours = numberEnv('MAX_MINT_AGE_HOURS', 0.5);
+// Clamp older production values (0 or 1 hour) to the current 30-minute strategy limit.
+const maxMintAgeHours = configuredMaxMintAgeHours > 0
+  ? Math.min(configuredMaxMintAgeHours, 0.5)
+  : 0.5;
 
 const config = {
   // ============ Mode ============
@@ -207,6 +212,9 @@ const config = {
     // v3.17.13: 代币监控超时（毫秒），0 = 禁用
     //   v3.17.20: 用户明确不要"监控超时退出"（不要 6 小时到期退出），保持 0
     maxWatchDurationMs: parseInt(process.env.MAX_WATCH_DURATION_MS || '0', 10),
+    // AGE is measured from the confirmed Pump migration time. Unknown AGE is retained.
+    maxMintAgeHours,
+    maxTokenAgeMs: maxMintAgeHours * 60 * 60 * 1000,
     // v3.17.20: FDV lower bound in USD; refreshed once per minute by TokenWatchdog.
     minFdVUsd: parseFloat(process.env.MIN_FDV_USD || '15000'),
     // Birdeye liquidity in USD. Shared by discovery admission and watchdog removal.
@@ -253,13 +261,20 @@ const config = {
     triggerMaxPriceChange10sPct: parseFloat(process.env.ACTIVITY_FLOW_TRIGGER_MAX_PRICE_CHANGE_10S_PCT || '6'),
     triggerConfirmMinGapMs: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_CONFIRM_MIN_GAP_MS || '1000', 10),
     triggerConfirmMaxGapMs: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_CONFIRM_MAX_GAP_MS || '3000', 10),
-    breadthMinUniqueBuyers1m: parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_1M || '80', 10),
+    // Clamp legacy production values (80) to the current strategy floor.
+    breadthMinUniqueBuyers1m: Math.max(
+      100,
+      parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_1M || '100', 10),
+    ),
     breadthMinNewBuyers1m: parseInt(process.env.BREADTH_BURST_MIN_NEW_BUYERS_1M || '40', 10),
     breadthMinBuyCount1m: parseInt(process.env.BREADTH_BURST_MIN_BUY_COUNT_1M || '100', 10),
     breadthMaxLargestBuyShare1m: parseFloat(
       process.env.BREADTH_BURST_MAX_LARGEST_BUY_SHARE_1M || '0.10',
     ),
     breadthMinUniqueBuyers5s: parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_5S || '10', 10),
+    breadthMaxAvgBuyPerWallet5sSol: parseFloat(
+      process.env.BREADTH_BURST_MAX_AVG_BUY_PER_WALLET_5S_SOL || '0.4',
+    ),
     breadthPreviousRatioMax5s: parseFloat(process.env.BREADTH_BURST_PREVIOUS_RATIO_MAX_5S || '0.8'),
     breadthCurrentRatioMin5s: parseFloat(process.env.BREADTH_BURST_CURRENT_RATIO_MIN_5S || '0.8'),
     breadthCurrentRatioMax5s: parseFloat(process.env.BREADTH_BURST_CURRENT_RATIO_MAX_5S || '1.0'),

@@ -44,6 +44,7 @@ function tracker(overrides = {}) {
     breadthMinBuyCount1m: 0,
     breadthMaxLargestBuyShare1m: 1,
     breadthMinUniqueBuyers5s: 4,
+    breadthMaxAvgBuyPerWallet5sSol: Number.POSITIVE_INFINITY,
     breadthPreviousRatioMax5s: 0.8,
     breadthCurrentRatioMin5s: 0.8,
     breadthCurrentRatioMax5s: 1.0,
@@ -116,6 +117,35 @@ function runEntryTests() {
   assert.strictEqual(repeatBuyer.states.get(MINT).armedAt, null, 'repeat buys from one wallet count once');
   repeatBuyer.handleSwap(event(1_000, 'BUY', 1, 1.00, 'second-wallet'));
   assert.strictEqual(repeatBuyer.states.get(MINT).armedAt, BASE + 1_000, 'a second new wallet must complete the gate');
+
+  const concentratedBuy = tracker({
+    breadthMinUniqueBuyers1m: 2,
+    breadthMinNewBuyers1m: 2,
+    breadthMaxAvgBuyPerWallet5sSol: 0.4,
+  });
+  concentratedBuy.handleSwap(event(0, 'BUY', 0.5, 1.00, 'avg-high-a'));
+  concentratedBuy.handleSwap(event(500, 'BUY', 0.5, 1.00, 'avg-high-b'));
+  assert.strictEqual(
+    concentratedBuy.states.get(MINT).armedAt,
+    null,
+    '5s average buy above 0.4 SOL per unique buyer must block arming',
+  );
+  const concentratedView = concentratedBuy.getStrategyCandidates(10, BASE + 500);
+  assert.strictEqual(concentratedView.candidates[0].conditions.avgBuyPerWallet5s, false);
+  assert.strictEqual(concentratedView.thresholds.maxAvgBuyPerWallet5sSol, 0.4);
+
+  const distributedBuy = tracker({
+    breadthMinUniqueBuyers1m: 2,
+    breadthMinNewBuyers1m: 2,
+    breadthMaxAvgBuyPerWallet5sSol: 0.4,
+  });
+  distributedBuy.handleSwap(event(0, 'BUY', 0.3, 1.00, 'avg-low-a'));
+  distributedBuy.handleSwap(event(500, 'BUY', 0.3, 1.00, 'avg-low-b'));
+  assert.strictEqual(
+    distributedBuy.states.get(MINT).armedAt,
+    BASE + 500,
+    'distributed 5s buying at or below 0.4 SOL per wallet may arm',
+  );
 
   const volumeGate = tracker({ minVolume1mSol: 10, minVolume1mUsd: 3_000 });
   volumeGate.handleSwap(event(0, 'BUY', 1, 1.00, 'volume-gate'));
@@ -217,8 +247,9 @@ function runSlippageTests() {
   assert.strictEqual(config.strategy.maxHoldMs, 180_000);
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
   assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
-  assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 80);
+  assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 100);
   assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 40);
+  assert.strictEqual(config.activityFlow.breadthMaxAvgBuyPerWallet5sSol, 0.4);
   assert.strictEqual(config.activityFlow.breadthMaxPriceChange60sPct, 20);
   assert.strictEqual(config.activityFlow.breadthMinConfirmations, 3);
   assert.strictEqual(config.activityFlow.breadthCooldownMs, 60_000);

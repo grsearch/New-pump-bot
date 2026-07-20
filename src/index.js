@@ -39,10 +39,11 @@ async function main() {
   console.log(
     `Entry: ACTIVITY_FLOW ` +
       `(${config.activityFlow.entryMode}: 1m volume>=${config.activityFlow.minVolume1mSol.toFixed(2)}SOL ` +
-      `(~$${Math.round(config.activityFlow.minVolume1mUsd)}), trades>=${config.activityFlow.minTrades1m}, ` +
-      `wallets>=${config.activityFlow.armMinUniqueTraders1m}, largest buy<=` +
-      `${Math.round(config.activityFlow.armMaxLargestBuyShare1m * 100)}%, ` +
-      `5s flow-turn confirmation)`,
+      `(~$${Math.round(config.activityFlow.minVolume1mUsd)}), ` +
+      `buyers>=${config.activityFlow.breadthMinUniqueBuyers1m}, ` +
+      `newBuyers>=${config.activityFlow.breadthMinNewBuyers1m}, ` +
+      `avgBuy5<=${config.activityFlow.breadthMaxAvgBuyPerWallet5sSol}SOL, ` +
+      `support>=${config.activityFlow.breadthMinConfirmations}/5 + 2x confirmation)`,
   );
   console.log(config.strategy.flowReversalExitEnabled
     ? `Flow exit: ${config.strategy.flowReversalExitMode} ` +
@@ -53,7 +54,7 @@ async function main() {
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
-      `ageFilter=disabled ` +
+      `migrationAge<=${config.strategy.maxMintAgeHours}h ` +
       `(check every ${watchdogCheckIntervalMs / 60_000}min)`,
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
@@ -222,6 +223,7 @@ async function main() {
       `arm=${activityFlowTracker.armWindowMs / 1000}s ` +
       `buyers>=${activityFlowTracker.breadthMinUniqueBuyers1m} ` +
       `newBuyers>=${activityFlowTracker.breadthMinNewBuyers1m} ` +
+      `avgBuy5<=${activityFlowTracker.breadthMaxAvgBuyPerWallet5sSol}SOL ` +
       `price60<=${activityFlowTracker.breadthMaxPriceChange60sPct}% ` +
       `entry=breadth-score-${activityFlowTracker.breadthMinConfirmations}/5+2x-confirm ` +
       `warmup=${activityFlowTracker.breadthWarmupMs / 1000}s ` +
@@ -398,7 +400,10 @@ async function main() {
     }
   }, 3600_000);
 
-  console.log('[main] token age filtering disabled; AGE is retained for analytics only');
+  console.log(
+    `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeHours}h ` +
+    '(open positions are retained until exit)',
+  );
 
   // ============ 定期补缺 pool 信息（每 60 秒扫描一次） ============
   // 防止 onTokenAdded 时 PoolFinder 失败导致代币永远没有 pool

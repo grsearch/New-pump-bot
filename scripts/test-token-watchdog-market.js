@@ -114,7 +114,7 @@ assert.strictEqual(
   const token = {
     mint,
     symbol: 'TEST',
-    source: 'webhook',
+    source: 'manual',
     pool_address: preferredPool,
     fdv: 40_000,
     liquidity: 20_000,
@@ -179,9 +179,9 @@ assert.strictEqual(
     'legacy 15-minute watchdog configuration must be clamped to one minute',
   );
   assert.strictEqual(
-    Object.hasOwn(watchdog, 'maxTokenAgeMs'),
-    false,
-    'watchdog must not configure an AGE removal threshold',
+    watchdog.maxTokenAgeMs,
+    1_800_000,
+    'watchdog must expire tokens 30 minutes after migration',
   );
   watchdog.minFdVUsd = 15_000;
   watchdog.minLiquidityUsd = 3_000;
@@ -236,7 +236,7 @@ assert.strictEqual(
     mint,
     symbol: 'OLDAGE',
     added_at: now - 60_000,
-    migration_time: now - 7_200_001,
+    migration_time: now - 1_800_001,
     is_active: 1,
   };
   let oldAgeRemoved = false;
@@ -257,9 +257,29 @@ assert.strictEqual(
   oldAgeWatchdog.maxWatchDurationMs = 0;
 
   await oldAgeWatchdog._check();
-  assert.strictEqual(oldAgeRemoved, false, 'migration AGE must not remove a monitored token');
+  assert.strictEqual(oldAgeRemoved, true, 'migration AGE above 30 minutes must remove the token');
 
-  console.log('Token market refresh and AGE retention tests passed');
+  let openAgeRemoved = false;
+  const openAgeWatchdog = new TokenWatchdog({
+    tokenRegistry: {
+      listActive: () => (openAgeRemoved ? [] : [{ ...oldAgeToken, mint: `${mint}-open` }]),
+      removeToken: () => { openAgeRemoved = true; },
+    },
+    positionManager: { hasOpenPosition: () => true },
+    tradeLogger: null,
+    fetchMarkets: async () => new Map(),
+  });
+  openAgeWatchdog.minFdVUsd = 0;
+  openAgeWatchdog.maxFdVUsd = 0;
+  openAgeWatchdog.minLiquidityUsd = 0;
+  openAgeWatchdog.minVolume24hUsd = 0;
+  openAgeWatchdog.noBuyRemoveMs = 0;
+  openAgeWatchdog.maxWatchDurationMs = 0;
+
+  await openAgeWatchdog._check();
+  assert.strictEqual(openAgeRemoved, false, 'an old token with an open position must stay monitored');
+
+  console.log('Token market refresh and AGE expiry tests passed');
   process.exit(0);
 })().catch((err) => {
   console.error(err);

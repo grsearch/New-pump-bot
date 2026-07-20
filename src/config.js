@@ -16,11 +16,8 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
-const configuredMaxMintAgeHours = numberEnv('MAX_MINT_AGE_HOURS', 0.5);
-// Clamp older production values (0 or 1 hour) to the current 30-minute strategy limit.
-const maxMintAgeHours = configuredMaxMintAgeHours > 0
-  ? Math.min(configuredMaxMintAgeHours, 0.5)
-  : 0.5;
+// Keep the production AGE limit fixed even when an older .env still says 0 or 0.5.
+const maxMintAgeHours = 1;
 
 const config = {
   // ============ Mode ============

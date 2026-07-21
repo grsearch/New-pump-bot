@@ -135,7 +135,7 @@ class OrderFlowTracker extends EventEmitter {
     this.breadthMinNewBuyers1m =
       opts.breadthMinNewBuyers1m ??
       flowConfig.breadthMinNewBuyers1m ??
-      numEnv('BREADTH_BURST_MIN_NEW_BUYERS_1M', 40);
+      numEnv('BREADTH_BURST_MIN_NEW_BUYERS_1M', 30);
     this.breadthMinBuyCount1m =
       opts.breadthMinBuyCount1m ??
       flowConfig.breadthMinBuyCount1m ??
@@ -371,6 +371,7 @@ class OrderFlowTracker extends EventEmitter {
       volumeReady: 0,
       armReady: 0,
       armed: 0,
+      waiting: 0,
       confirming: 0,
       signaled: 0,
     };
@@ -456,6 +457,7 @@ class OrderFlowTracker extends EventEmitter {
       let stage = 'monitoring';
       if (recentlySignaled) stage = 'signaled';
       else if (armed && state.triggerConfirmFirstTs != null && triggerReady) stage = 'confirming';
+      else if (armed && state.lastArmWaitReason) stage = 'waiting';
       else if (armed) stage = 'armed';
       else if (armReady) stage = 'ready';
       else if (recentlyCancelled) stage = 'cancelled';
@@ -464,6 +466,7 @@ class OrderFlowTracker extends EventEmitter {
       if (conditions.volume1m) summary.volumeReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
+      if (stage === 'waiting') summary.waiting++;
       if (stage === 'confirming') summary.confirming++;
       if (stage === 'signaled') summary.signaled++;
 
@@ -480,6 +483,7 @@ class OrderFlowTracker extends EventEmitter {
         confirmFirstTs: armed ? state.triggerConfirmFirstTs : null,
         lastSignalTs: state.lastV5SignalTs || null,
         cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
+        waitReason: armed ? state.lastArmWaitReason : null,
         conditions,
         s60: {
           ...this._compactStats(s60),
@@ -491,7 +495,7 @@ class OrderFlowTracker extends EventEmitter {
       });
     }
 
-    const stageRank = { signaled: 5, confirming: 4, armed: 3, ready: 2, cancelled: 1, monitoring: 0 };
+    const stageRank = { signaled: 6, confirming: 5, waiting: 4, armed: 3, ready: 2, cancelled: 1, monitoring: 0 };
     candidates.sort((a, b) =>
       (stageRank[b.stage] - stageRank[a.stage]) ||
       (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
@@ -555,6 +559,8 @@ class OrderFlowTracker extends EventEmitter {
         triggerConfirmFirstTs: null,
         lastArmCancelTs: null,
         lastArmCancelReason: null,
+        lastArmWaitTs: null,
+        lastArmWaitReason: null,
         lastV5SignalTs: null,
         firstBuySeen: new Map(),
         lastWalletPruneTs: 0,
@@ -783,6 +789,8 @@ class OrderFlowTracker extends EventEmitter {
       state.armedAt = ev.ts;
       state.armedUntil = ev.ts + this.armWindowMs;
       state.triggerConfirmFirstTs = null;
+      state.lastArmWaitTs = null;
+      state.lastArmWaitReason = null;
       console.log(
         `[ActivityFlow] ARMED ${state.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${s60.buyCount}buys/${s60.volumeSol.toFixed(1)}SOL ` +
@@ -793,12 +801,33 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
 
-    if (coreReject) {
-      console.log(`[ActivityFlow] ARM_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${coreReject}`);
+    const cancelReason = this._v6ArmCancelReject(s60, breadth);
+    if (cancelReason) {
+      console.log(`[ActivityFlow] ARM_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${cancelReason}`);
       state.lastArmCancelTs = ev.ts;
-      state.lastArmCancelReason = coreReject;
+      state.lastArmCancelReason = cancelReason;
       this._clearArm(state);
       return;
+    }
+
+    const waitReason = this._v6ConfirmationWaitReason(s10, breadth);
+    if (waitReason) {
+      state.triggerConfirmFirstTs = null;
+      state.lastArmWaitTs = ev.ts;
+      if (state.lastArmWaitReason !== waitReason) {
+        console.log(`[ActivityFlow] ARM_WAIT ${state.symbol || ev.mint.slice(0, 6)}: ${waitReason}`);
+      }
+      state.lastArmWaitReason = waitReason;
+      return;
+    }
+
+    if (state.lastArmWaitReason) {
+      console.log(
+        `[ActivityFlow] ARM_RESUME ${state.symbol || ev.mint.slice(0, 6)}: ` +
+          `recovered from ${state.lastArmWaitReason}`,
+      );
+      state.lastArmWaitTs = null;
+      state.lastArmWaitReason = null;
     }
 
     if (breadth.supportScore < this.breadthMinConfirmations) {
@@ -843,6 +872,10 @@ class OrderFlowTracker extends EventEmitter {
   }
 
   _v6CoreReject(s10, s60, breadth) {
+    return this._v6ArmCancelReject(s60, breadth) || this._v6ConfirmationWaitReason(s10, breadth);
+  }
+
+  _v6ArmCancelReject(s60, breadth) {
     if (!breadth.coreConditions.historyReady) {
       return `history warmup <${this.breadthWarmupMs / 1000}s`;
     }
@@ -855,13 +888,17 @@ class OrderFlowTracker extends EventEmitter {
     if (!breadth.coreConditions.newBuyers1m) {
       return `1m new buyers ${s60.newUniqueBuyers}<${this.breadthMinNewBuyers1m}`;
     }
+    if (!breadth.coreConditions.price60s) {
+      return `60s price ${s60.priceChangePct.toFixed(1)}%>${this.breadthMaxPriceChange60sPct}%`;
+    }
+    return null;
+  }
+
+  _v6ConfirmationWaitReason(s10, breadth) {
     if (!breadth.coreConditions.avgBuyPerWallet5s) {
       const avgBuy = breadth.trigger.avgBuyPerWallet5sSol;
       return `5s avg buy/wallet ${Number.isFinite(avgBuy) ? avgBuy.toFixed(2) : 'n/a'}` +
         `>${this.breadthMaxAvgBuyPerWallet5sSol.toFixed(2)}SOL`;
-    }
-    if (!breadth.coreConditions.price60s) {
-      return `60s price ${s60.priceChangePct.toFixed(1)}%>${this.breadthMaxPriceChange60sPct}%`;
     }
     if (s10.priceChangePct < this.breadthMinPriceChange10sPct) {
       return `10s price ${s10.priceChangePct.toFixed(1)}%<${this.breadthMinPriceChange10sPct}%`;
@@ -1020,6 +1057,8 @@ class OrderFlowTracker extends EventEmitter {
     state.armedAt = null;
     state.armedUntil = null;
     state.triggerConfirmFirstTs = null;
+    state.lastArmWaitTs = null;
+    state.lastArmWaitReason = null;
   }
 
   _emitBuySignal(

@@ -263,7 +263,7 @@ const config = {
       100,
       parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_1M || '100', 10),
     ),
-    breadthMinNewBuyers1m: parseInt(process.env.BREADTH_BURST_MIN_NEW_BUYERS_1M || '40', 10),
+    breadthMinNewBuyers1m: parseInt(process.env.BREADTH_BURST_MIN_NEW_BUYERS_1M || '30', 10),
     breadthMinBuyCount1m: parseInt(process.env.BREADTH_BURST_MIN_BUY_COUNT_1M || '100', 10),
     breadthMaxLargestBuyShare1m: parseFloat(
       process.env.BREADTH_BURST_MAX_LARGEST_BUY_SHARE_1M || '0.10',

@@ -99,10 +99,21 @@ function runEntryTests() {
   assert.strictEqual(signaledView.candidates[0].stage, 'signaled');
   assert.strictEqual(signaledView.summary.signaled, 1);
 
-  const cancel = tracker();
+  const cancel = tracker({ breadthMinConfirmations: 0 });
   cancel.handleSwap(event(0, 'SELL', 1, 1.00, 'cancel-arm'));
   cancel.handleSwap(event(1_000, 'BUY', 1, 1.10, 'already-pumped'));
-  assert.strictEqual(cancel.states.get(MINT).armedAt, null, 'a >6% 10s move must cancel arming');
+  assert.strictEqual(cancel.states.get(MINT).armedAt, BASE, 'a transient >6% 10s move must keep the arm open');
+  assert.match(cancel.states.get(MINT).lastArmWaitReason, /10s price/);
+  assert.strictEqual(cancel.states.get(MINT).triggerConfirmFirstTs, null);
+  const waitingView = cancel.getStrategyCandidates(10, BASE + 1_000);
+  assert.strictEqual(waitingView.candidates[0].stage, 'waiting');
+  assert.match(waitingView.candidates[0].waitReason, /10s price/);
+
+  cancel.handleSwap(event(11_001, 'BUY', 0.2, 1.10, 'price-recovered-a'));
+  assert.strictEqual(cancel.states.get(MINT).lastArmWaitReason, null, 'price recovery must resume confirmation');
+  assert.strictEqual(cancel.states.get(MINT).triggerConfirmFirstTs, BASE + 11_001);
+  cancel.handleSwap(event(12_101, 'BUY', 0.2, 1.10, 'price-recovered-b'));
+  assert.strictEqual(cancel.states.get(MINT).lastV5SignalTs, BASE + 12_101);
 
   const breadthGate = tracker({ breadthMinUniqueBuyers1m: 3, breadthMinNewBuyers1m: 3 });
   breadthGate.handleSwap(event(0, 'BUY', 1, 1.00, 'breadth-a'));
@@ -146,6 +157,21 @@ function runEntryTests() {
     BASE + 500,
     'distributed 5s buying at or below 0.4 SOL per wallet may arm',
   );
+
+  const avgBuyWait = tracker({
+    breadthMaxAvgBuyPerWallet5sSol: 0.4,
+    breadthMinConfirmations: 0,
+  });
+  avgBuyWait.handleSwap(event(0, 'BUY', 0.3, 1.00, 'avg-wait-arm'));
+  avgBuyWait.handleSwap(event(1_000, 'BUY', 1.0, 1.00, 'avg-wait-spike'));
+  assert.strictEqual(avgBuyWait.states.get(MINT).armedAt, BASE, 'a transient large buy must not cancel the arm');
+  assert.match(avgBuyWait.states.get(MINT).lastArmWaitReason, /avg buy\/wallet/);
+  assert.strictEqual(avgBuyWait.states.get(MINT).triggerConfirmFirstTs, null);
+  avgBuyWait.handleSwap(event(6_100, 'BUY', 0.2, 1.00, 'avg-wait-recover-a'));
+  assert.strictEqual(avgBuyWait.states.get(MINT).lastArmWaitReason, null);
+  assert.strictEqual(avgBuyWait.states.get(MINT).triggerConfirmFirstTs, BASE + 6_100);
+  avgBuyWait.handleSwap(event(7_200, 'BUY', 0.2, 1.00, 'avg-wait-recover-b'));
+  assert.strictEqual(avgBuyWait.states.get(MINT).lastV5SignalTs, BASE + 7_200);
 
   const volumeGate = tracker({ minVolume1mSol: 10, minVolume1mUsd: 3_000 });
   volumeGate.handleSwap(event(0, 'BUY', 1, 1.00, 'volume-gate'));
@@ -248,7 +274,7 @@ function runSlippageTests() {
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
   assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
   assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 100);
-  assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 40);
+  assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 30);
   assert.strictEqual(config.activityFlow.breadthMaxAvgBuyPerWallet5sSol, 0.4);
   assert.strictEqual(config.activityFlow.breadthMaxPriceChange60sPct, 20);
   assert.strictEqual(config.activityFlow.breadthMinConfirmations, 3);

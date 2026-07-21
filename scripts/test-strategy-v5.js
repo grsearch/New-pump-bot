@@ -274,7 +274,7 @@ function runSlippageTests() {
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
   assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
   assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 100);
-  assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 40);
+  assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 30);
   assert.strictEqual(config.activityFlow.breadthMaxAvgBuyPerWallet5sSol, 0.4);
   assert.strictEqual(config.activityFlow.breadthMaxPriceChange60sPct, 20);
   assert.strictEqual(config.activityFlow.breadthMinConfirmations, 3);

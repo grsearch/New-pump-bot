@@ -135,7 +135,7 @@ class OrderFlowTracker extends EventEmitter {
     this.breadthMinNewBuyers1m =
       opts.breadthMinNewBuyers1m ??
       flowConfig.breadthMinNewBuyers1m ??
-      numEnv('BREADTH_BURST_MIN_NEW_BUYERS_1M', 40);
+      numEnv('BREADTH_BURST_MIN_NEW_BUYERS_1M', 30);
     this.breadthMinBuyCount1m =
       opts.breadthMinBuyCount1m ??
       flowConfig.breadthMinBuyCount1m ??

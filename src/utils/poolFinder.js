@@ -86,7 +86,12 @@ class PoolFinder {
 
     // 5. v3.17.18: 二次验证 — RPC getAccountInfo 确认 pool_address 真的是 Pump AMM PDA
     //    Helius Enhanced API 历史数据可能滞后或错位, 必须用 chain 状态最终确认
-    const verified = await this._verifyPoolOnChain(best.poolAddress, best.baseVault, mint);
+    const verified = await this._verifyPoolOnChain(
+      best.poolAddress,
+      best.baseVault,
+      best.quoteVault,
+      mint,
+    );
     if (!verified) {
       monitor.inc('PoolFinder.verifyFailed', 1, 'PoolFinder');
       return null;
@@ -107,17 +112,18 @@ class PoolFinder {
    *   - pool_address 的 account owner 必须是 Pump AMM program
    *   - pool_base_vault 的 SPL Token mint 必须 == 代币本身
    */
-  async _verifyPoolOnChain(poolAddress, baseVault, mint) {
+  async _verifyPoolOnChain(poolAddress, baseVault, quoteVault, mint) {
+    if (!poolAddress || !baseVault || !quoteVault) return false;
     const body = {
       jsonrpc: '2.0',
       id: 1,
       method: 'getMultipleAccounts',
-      params: [[poolAddress, baseVault], { encoding: 'jsonParsed', commitment: 'confirmed' }],
+      params: [[poolAddress, baseVault, quoteVault], { encoding: 'jsonParsed', commitment: 'confirmed' }],
     };
     try {
       const { data } = await axios.post(this.rpcUrl, body, { timeout: 8000 });
       if (data.error) return false;
-      const [pa, bv] = data.result?.value || [null, null];
+      const [pa, bv, qv] = data.result?.value || [null, null, null];
       if (!pa || pa.owner !== PUMP_AMM_PROGRAM) {
         return false;
       }
@@ -128,6 +134,12 @@ class PoolFinder {
       }
       const bvMint = bv.data?.parsed?.info?.mint;
       if (bvMint !== mint) {
+        return false;
+      }
+      if (!qv || (qv.owner !== TOKEN && qv.owner !== TOKEN_2022)) {
+        return false;
+      }
+      if (qv.data?.parsed?.info?.mint !== WSOL) {
         return false;
       }
       return true;
@@ -202,9 +214,10 @@ class PoolFinder {
     if (!pumpIx) return null;
     const poolAddress = pumpIx.accounts[0];
 
-    // 从 tokenTransfers 里找两个 vault
-    let baseVault = null;
-    let quoteVault = null;
+    // PumpSwap buy/sell IDL fixes the pool vaults at indexes 7 and 8.
+    // Enhanced transfer inference remains a fallback for incomplete payloads.
+    let baseVault = pumpIx.accounts[7] || null;
+    let quoteVault = pumpIx.accounts[8] || null;
 
     const transfers = tx.tokenTransfers || [];
     for (const t of transfers) {
@@ -212,7 +225,7 @@ class PoolFinder {
       //   user → pool base vault (mint)
       //   pool quote vault → user (WSOL)
       // 或反向。
-      if (t.mint === mint) {
+      if (t.mint === mint && !baseVault) {
         // 这笔 transfer 涉及到我们的代币，目标 token account 是 vault 的候选
         // 优先取 toTokenAccount 不是 user wallet 的（pool 不是 user 自己）
         if (t.toTokenAccount && !this._isUserAccount(t.toUserAccount, tx)) {
@@ -220,7 +233,7 @@ class PoolFinder {
         } else if (t.fromTokenAccount && !this._isUserAccount(t.fromUserAccount, tx)) {
           baseVault = t.fromTokenAccount;
         }
-      } else if (t.mint === WSOL) {
+      } else if (t.mint === WSOL && !quoteVault) {
         if (t.fromTokenAccount && !this._isUserAccount(t.fromUserAccount, tx)) {
           quoteVault = t.fromTokenAccount;
         } else if (t.toTokenAccount && !this._isUserAccount(t.toUserAccount, tx)) {

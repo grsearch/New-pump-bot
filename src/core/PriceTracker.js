@@ -55,7 +55,7 @@ class PriceTracker extends EventEmitter {
    * @param {number} ts
    * @param {string} poolAddress
    */
-  update(mint, price, ts = Date.now(), poolAddress = null) {
+  update(mint, price, ts = Date.now(), poolAddress = null, metadata = null) {
     if (!Number.isFinite(price) || price <= 0) {
       monitor.inc('PriceTracker.invalidPrice', 1, 'PriceTracker');
       return;
@@ -63,10 +63,11 @@ class PriceTracker extends EventEmitter {
     monitor.beat('PriceTracker', 'update');
 
     const last = this.prices.get(mint);
+    const meta = metadata && typeof metadata === 'object' ? metadata : {};
 
     // 第一笔：直接接受
     if (!last) {
-      this._commit(mint, price, ts, poolAddress);
+      this._commit(mint, price, ts, poolAddress, meta);
       return;
     }
 
@@ -94,7 +95,7 @@ class PriceTracker extends EventEmitter {
     if (!isSuspicious) {
       // 正常范围，直接接受
       this.suspicious.delete(mint); // 清空可疑缓存
-      this._commit(mint, price, ts, poolAddress);
+      this._commit(mint, price, ts, poolAddress, meta);
       return;
     }
 
@@ -112,7 +113,7 @@ class PriceTracker extends EventEmitter {
     const cutoff = ts - window;
     while (buf.length > 0 && buf[0].ts < cutoff) buf.shift();
 
-    buf.push({ price, ts, direction, poolAddress });
+    buf.push({ price, ts, direction, poolAddress, metadata: meta });
 
     // 检查是否满足"连续 N 次同方向"
     const minSamples = config.priceFilter.confirmMinSamples;
@@ -149,18 +150,40 @@ class PriceTracker extends EventEmitter {
     const latest = recent[recent.length - 1];
     monitor.inc('PriceTracker.suspiciousAccepted', 1, 'PriceTracker');
     this.suspicious.set(mint, []); // 清空
-    this._commit(mint, latest.price, latest.ts, latest.poolAddress);
+    this._commit(mint, latest.price, latest.ts, latest.poolAddress, latest.metadata);
     console.log(
       `[PriceTracker] ${mint.slice(0, 6)} suspicious jump confirmed (${recent.length} samples, ` +
         `${direction}, last ratio=${(latest.price / last.price).toFixed(3)})`,
     );
   }
 
-  _commit(mint, price, ts, poolAddress) {
+  _commit(mint, price, ts, poolAddress, metadata = null) {
     const prev = this.prices.get(mint);
-    this.prices.set(mint, { price, ts, poolAddress });
+    const meta = metadata && typeof metadata === 'object' ? metadata : {};
+    const rawPrice = Number(meta.rawPrice) || null;
+    const virtualQuoteReserveSol = Number(meta.virtualQuoteReserveSol) || 0;
+    const effectiveQuoteReserveSol = Number(meta.effectiveQuoteReserveSol) || 0;
+    const source = meta.source || 'price_tick';
+    this.prices.set(mint, {
+      price,
+      ts,
+      poolAddress,
+      source,
+      rawPrice,
+      virtualQuoteReserveSol,
+      effectiveQuoteReserveSol,
+    });
     monitor.inc('PriceTracker.committed', 1, 'PriceTracker');
-    this.emit('update', { mint, price, ts, prev: prev?.price ?? null });
+    this.emit('update', {
+      mint,
+      price,
+      ts,
+      prev: prev?.price ?? null,
+      source,
+      rawPrice,
+      virtualQuoteReserveSol,
+      effectiveQuoteReserveSol,
+    });
   }
 
   get(mint) {
@@ -174,10 +197,13 @@ class PriceTracker extends EventEmitter {
   /**
    * 强制设置（用于 BUY 后立即用真实成交价初始化 entryPrice）
    */
-  forceSet(mint, price, ts = Date.now()) {
+  forceSet(mint, price, ts = Date.now(), metadata = null) {
     if (!Number.isFinite(price) || price <= 0) return;
     this.suspicious.delete(mint);
-    this._commit(mint, price, ts, null);
+    this._commit(mint, price, ts, null, {
+      ...(metadata && typeof metadata === 'object' ? metadata : {}),
+      source: metadata?.source || 'force_set',
+    });
   }
 }
 

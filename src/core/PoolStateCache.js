@@ -70,6 +70,9 @@ class PoolStateCache {
     this._tickIntervalMs = parseInt(process.env.POOL_STATE_TICK_MS || '200', 10);
 
     this.cache = new Map();   // poolAddress(string) → { state, fetchedAt }
+    this.metadataRetentionMs = parseInt(
+      process.env.POOL_STATE_METADATA_RETENTION_MS || '7200000', 10,
+    );
     this.timer = null;
     this._refreshing = false;
 
@@ -503,9 +506,12 @@ class PoolStateCache {
       if (targets.length === 0) {
         // 无热币：只做清理
         let removed = 0;
-        for (const addr of this.cache.keys()) {
-          this.cache.delete(addr);
-          removed += 1;
+        const now = Date.now();
+        for (const [addr, entry] of this.cache) {
+          if (now - entry.fetchedAt > this.metadataRetentionMs) {
+            this.cache.delete(addr);
+            removed += 1;
+          }
         }
         if (removed > 0) {
           monitor.inc('PoolStateCache.evicted', removed, 'PoolStateCache');
@@ -519,8 +525,9 @@ class PoolStateCache {
       // 清理 cache 中已不在 hotMints 的 entry
       const hotAddresses = new Set(targets.map((t) => t.poolAddress));
       let removed = 0;
-      for (const addr of this.cache.keys()) {
-        if (!hotAddresses.has(addr)) {
+      const now = Date.now();
+      for (const [addr, entry] of this.cache) {
+        if (!hotAddresses.has(addr) && now - entry.fetchedAt > this.metadataRetentionMs) {
           this.cache.delete(addr);
           removed += 1;
         }

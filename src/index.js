@@ -78,9 +78,8 @@ async function main() {
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
   console.log(
-    `Buy guard: chain<=${(config.strategy.buySlippageBps / 100).toFixed(1)}% ` +
-      `signal<=+${config.strategy.buyMaxPriceDeviationPct}% ` +
-      `poolState<=${config.strategy.buyMaxPoolStateAgeMs}ms`,
+    `Buy execution: buy_exact_quote_in, fixed SOL, virtual-reserve-aware, ` +
+      `signal<=+${config.strategy.buyMaxPriceDeviationPct}%, forced pool refresh`,
   );
   console.log('Add-on: disabled');
   console.log(`Executor: Pump AMM SDK direct (no Jupiter)`);
@@ -469,6 +468,7 @@ async function main() {
     const vaultWatcher = new VaultBalanceWatcher({
       connection: executor.rpc,
       tokenRegistry,
+      poolStateCache: executor.poolStateCache || null,
     });
     vaultWatcher.on('vaultSell', (info) => {
       // v3.17.23: VaultWatcher 检测到的卖单作为辅助信号
@@ -479,7 +479,12 @@ async function main() {
 
       // 喂价给 PriceTracker
       if (info.priceAfter > 0) {
-        priceTracker.update(info.mint, info.priceAfter, info.ts, info.poolAddress);
+        priceTracker.update(info.mint, info.priceAfter, info.ts, info.poolAddress, {
+          source: 'vault_watcher',
+          rawPrice: info.rawPriceAfter,
+          virtualQuoteReserveSol: info.virtualQuoteReserveSol,
+          effectiveQuoteReserveSol: info.effectiveQuoteReserveSol,
+        });
       }
 
       // 预热 PoolStateCache
@@ -658,8 +663,24 @@ async function main() {
     }
   }, 10_000);
 
-  dumpDetector.on('priceTick', ({ mint, price, ts, poolAddress, side, solVolume, poolQuoteAfter }) => {
-    priceTracker.update(mint, price, ts, poolAddress);
+  dumpDetector.on('priceTick', ({
+    mint,
+    price,
+    ts,
+    poolAddress,
+    side,
+    solVolume,
+    poolQuoteAfter,
+    rawPrice,
+    virtualQuoteReserveSol,
+    effectiveQuoteReserveSol,
+  }) => {
+    priceTracker.update(mint, price, ts, poolAddress, {
+      source: 'chain_swap',
+      rawPrice,
+      virtualQuoteReserveSol,
+      effectiveQuoteReserveSol,
+    });
     // v3.17.41: 采样价格到长窗口缓存 (比 handleDumpSignal 更频繁，覆盖所有 priceTick)
     signalEngine._sampleLongPrice(mint, priceTracker.getPrice(mint));
     // v3.17.17: 喂 RSI - 用 feedTrade 带上 volume,RSI 能做 volume-weighted aggregation
@@ -667,7 +688,7 @@ async function main() {
       // v3.17.38-fix: poolQuoteAfter=0 时用 tokenRegistry.liquidity 推算
       //   CPI/balanceOnly 路径算不出 poolQuoteAfter → 0
       //   导致 RSI 的 lastPoolQuoteSol 永远为 null → rsi_pre_dump 不缓存
-      let effectivePoolQuoteSol = poolQuoteAfter;
+      let effectivePoolQuoteSol = effectiveQuoteReserveSol || poolQuoteAfter;
       if ((!effectivePoolQuoteSol || effectivePoolQuoteSol <= 0) && tokenRegistry) {
         const ti = tokenRegistry.getToken(mint);
         if (ti && ti.liquidity) {
@@ -833,6 +854,9 @@ async function main() {
             cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
             stateSource: buyResult.stateSource,
             failureStage: buyResult.failureStage,
+            buyMode: buyResult.buyMode,
+            minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
+            virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
           },
         });
       } catch (_) { /* analytics only */ }
@@ -866,6 +890,9 @@ async function main() {
       cacheAgeBeforeMs: buyResult.cacheAgeBeforeMs,
       cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
       stateSource: buyResult.stateSource,
+      buyMode: buyResult.buyMode,
+      minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
+      virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
     });
 
     if (!buyResult.success) {

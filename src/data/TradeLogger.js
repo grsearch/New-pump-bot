@@ -237,6 +237,9 @@ class TradeLogger {
       ['cache_age_before_ms', 'INTEGER'],
       ['cache_age_at_build_ms', 'INTEGER'],
       ['state_source', 'TEXT'],
+      ['buy_mode', 'TEXT'],
+      ['min_base_amount_out_raw', 'TEXT'],
+      ['virtual_quote_reserves_raw', 'TEXT'],
     ]);
     this._ensureColumns('swap_events', [
       ['source', 'TEXT'],
@@ -530,11 +533,13 @@ ${snapshotColumnsSql},
           (position_id, ts, mint, symbol, side, sol_amount, token_amount, price, signature,
            success, dry_run, reason, latency_ms, error, configured_slippage_pct,
            effective_slippage_pct, signal_price, expected_price, max_price, max_quote_sol,
-           cache_age_before_ms, cache_age_at_build_ms, state_source)
+           cache_age_before_ms, cache_age_at_build_ms, state_source, buy_mode,
+           min_base_amount_out_raw, virtual_quote_reserves_raw)
         VALUES (@positionId, @ts, @mint, @symbol, @side, @solAmount, @tokenAmount, @price, @signature,
                 @success, @dryRun, @reason, @latencyMs, @error, @configuredSlippagePct,
                 @effectiveSlippagePct, @signalPrice, @expectedPrice, @maxPrice, @maxQuoteSol,
-                @cacheAgeBeforeMs, @cacheAgeAtBuildMs, @stateSource)
+                @cacheAgeBeforeMs, @cacheAgeAtBuildMs, @stateSource, @buyMode,
+                @minBaseAmountOutRaw, @virtualQuoteReservesRaw)
       `),
 
       tradesInRange: this.db.prepare(`
@@ -880,7 +885,8 @@ ${snapshotColumnsSql},
   logTrade({ positionId, ts, mint, symbol, side, solAmount, tokenAmount, price, signature,
              success, dryRun, reason, latencyMs, error, configuredSlippagePct,
              effectiveSlippagePct, signalPrice, expectedPrice, maxPrice, maxQuoteSol,
-             cacheAgeBeforeMs, cacheAgeAtBuildMs, stateSource }) {
+             cacheAgeBeforeMs, cacheAgeAtBuildMs, stateSource, buyMode,
+             minBaseAmountOutRaw, virtualQuoteReservesRaw }) {
     this.stmts.insertTrade.run({
       positionId: positionId || null,
       ts: ts || Date.now(),
@@ -905,6 +911,9 @@ ${snapshotColumnsSql},
       cacheAgeBeforeMs: cacheAgeBeforeMs ?? null,
       cacheAgeAtBuildMs: cacheAgeAtBuildMs ?? null,
       stateSource: stateSource || null,
+      buyMode: buyMode || null,
+      minBaseAmountOutRaw: minBaseAmountOutRaw || null,
+      virtualQuoteReservesRaw: virtualQuoteReservesRaw || null,
     });
   }
 

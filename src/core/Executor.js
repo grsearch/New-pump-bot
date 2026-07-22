@@ -30,6 +30,7 @@ const {
 const bs58Lib = require('bs58');
 const bs58 = bs58Lib.default || bs58Lib;
 const BN = require('bn.js');
+const path = require('path');
 
 // v3.25: ATA 指令 — BUY 前确保 ATA 存在
 const {
@@ -43,8 +44,9 @@ const { config } = require('../config');
 const { getMonitor } = require('../monitor/HealthMonitor');
 const { estimateBuySlippagePct } = require('./ExecutionMath');
 const {
-  calculateBuyPriceGuard,
+  calculateExactQuoteBuyGuard,
   extractBuyInstructionAmounts,
+  replaceBuyWithExactQuoteIn,
   resolveFreshPoolState,
 } = require('./BuyExecutionGuard');
 
@@ -114,12 +116,31 @@ class Executor {
           throw new Error('SDK exports missing PumpAmmSdk / OnlinePumpAmmSdk');
         }
         this.pumpSdk = new PumpAmmSdk();
+        const sdkPackagePath = path.join(
+          path.dirname(require.resolve('@pump-fun/pump-swap-sdk')),
+          '..',
+          'package.json',
+        );
+        this.pumpSdkVersion = require(sdkPackagePath).version;
+        if (this.pumpSdkVersion !== '1.19.0') {
+          throw new Error(`PumpSwap SDK 1.19.0 required, loaded ${this.pumpSdkVersion || 'unknown'}`);
+        }
         // v3.15: onlineSdk 改用 this.rpc（普通节点），不再走 stakedRpc
         // 原因：stakedRpc（你的 donetta 专属端点）限流严格，70 token 刷新会打爆
         this.onlineSdk = new OnlinePumpAmmSdk(this.rpc);
         // v3.15: cacheSdk 独立实例，专给 PoolStateCache 用
         // 即使 onlineSdk 因 BUY 短时占用也不影响后台刷新
         this.cacheSdk = new OnlinePumpAmmSdk(this.rpc);
+        console.log(
+          `[Executor] Pump AMM SDK ${this.pumpSdkVersion} ready ` +
+            '(virtual_quote_reserves + buy_exact_quote_in)',
+        );
+        if (process.env.BUY_MIN_EFFECTIVE_SLIPPAGE_PCT != null) {
+          console.warn(
+            '[Executor] BUY_MIN_EFFECTIVE_SLIPPAGE_PCT is deprecated and ignored; ' +
+              'BUY_MAX_PRICE_DEVIATION_PCT controls the exact-quote output floor',
+          );
+        }
         console.log('[Executor] Pump AMM SDK loaded (onlineSdk + cacheSdk 都走普通 RPC，stakedRpc 仅用于 sendTx)');
       } catch (err) {
         console.error(`[Executor] failed to load @pump-fun/pump-swap-sdk: ${err.message}`);
@@ -902,6 +923,7 @@ class Executor {
     const configuredSlippagePct = config.strategy.buySlippageBps / 100;
     let buyStage = 'validation';
     const buyDiagnostics = {
+      buyMode: 'buy_exact_quote_in',
       configuredSlippagePct,
       effectiveSlippagePct: null,
       signalPrice: Number.isFinite(Number(order.priceAfter)) ? Number(order.priceAfter) : null,
@@ -911,6 +933,8 @@ class Executor {
       cacheAgeBeforeMs: null,
       cacheAgeAtBuildMs: null,
       stateSource: null,
+      minBaseAmountOutRaw: null,
+      virtualQuoteReservesRaw: null,
     };
 
     // ============ DRY_RUN ============
@@ -943,7 +967,7 @@ class Executor {
         maxPrice: buyDiagnostics.signalPrice > 0
           ? buyDiagnostics.signalPrice * (1 + config.strategy.buyMaxPriceDeviationPct / 100)
           : null,
-        maxQuoteSol: sizeSol * 1.005,
+        maxQuoteSol: sizeSol,
         stateSource: 'dry-run',
         latencyMs: Date.now() - t0,
         dryRun: true,
@@ -1019,6 +1043,7 @@ class Executor {
         poolKey,
         user: this.keypair.publicKey,
         maxAgeMs: config.strategy.buyMaxPoolStateAgeMs,
+        forceRefresh: true,
       });
       const swapState = stateInfo.swapState;
       Object.assign(buyDiagnostics, {
@@ -1033,6 +1058,14 @@ class Executor {
       const stateReadyAt = Date.now();
       monitor.inc('Executor.stateOk', 1, 'Executor');
       monitor.set('Executor.lastStateLatencyMs', stateLatencyMs, 'Executor');
+
+      const virtualQuoteReserves = swapState?.pool?.virtualQuoteReserves;
+      if (virtualQuoteReserves == null) {
+        throw new Error(
+          'pool state missing virtualQuoteReserves; PumpSwap SDK 1.19.0 state is required',
+        );
+      }
+      buyDiagnostics.virtualQuoteReservesRaw = virtualQuoteReserves.toString();
 
       // ============ v3.17.20: BUY 前验证 pool 归属（防签名串） ============
       //   根因(图8)：DB 里不同代币共享了同一个 pool_address。
@@ -1090,7 +1123,9 @@ class Executor {
           try { return Number(v.toString()); } catch { return 0; }
         };
         const baseAmt = toNum(poolBaseAmount);
-        const quoteAmt = toNum(poolQuoteAmount);
+        const rawQuoteAmt = toNum(poolQuoteAmount);
+        const virtualQuoteAmt = toNum(swapState?.pool?.virtualQuoteReserves);
+        const quoteAmt = rawQuoteAmt + virtualQuoteAmt;
         // pool 余额为 0 = 已被抽干（迁移到 Raydium 后 bonding curve 归零）
         if (baseAmt === 0 && quoteAmt === 0) {
           monitor.inc('Executor.buyPoolDead', 1, 'Executor');
@@ -1111,7 +1146,8 @@ class Executor {
           monitor.inc('Executor.buyPoolLowLiquidity', 1, 'Executor');
           console.error(
             `[Executor:LIVE] 🚫 BUY ABORTED ${order.symbol || order.mint.slice(0, 6)}: ` +
-            `pool low liquidity (quoteAmt=${(quoteAmt / 1e9).toFixed(4)} SOL) — will likely fail, skipping`,
+            `pool low liquidity (effective=${(quoteAmt / 1e9).toFixed(4)} SOL, ` +
+            `raw=${(rawQuoteAmt / 1e9).toFixed(4)} SOL) — will likely fail, skipping`,
           );
           return {
             success: false,
@@ -1123,9 +1159,10 @@ class Executor {
         }
       }
 
-      // 2. Quote at zero slippage to obtain the exact base amount encoded by the
-      // SDK, then spend only the portion of the configured ceiling that remains
-      // below the signal-price cap.
+      // 2. SDK 1.19 prices against quoteReserve + virtualQuoteReserves. Build its
+      // zero-slippage BUY once to obtain the account list and expected output,
+      // then replace only the data with buy_exact_quote_in. The chain spends the
+      // fixed position size and enforces the signal-price cap through min output.
       buyStage = 'preview_quote';
       const tB0 = Date.now();
       const previewResult = await this.pumpSdk.buyQuoteInput(swapState, sizeLamportsBN, 0);
@@ -1133,19 +1170,19 @@ class Executor {
       if (!previewAmounts || previewAmounts.baseAmountOut <= 0n) {
         throw new Error('SDK zero-slippage quote did not expose BUY amounts');
       }
-      const expectedTokenAmount = Number(previewAmounts.baseAmountOut) / Math.pow(10, baseDecimals);
-      const expectedPrice = expectedTokenAmount > 0 ? sizeSol / expectedTokenAmount : 0;
-      buyDiagnostics.maxQuoteSol = Number(previewAmounts.maxQuoteAmountIn) / 1e9;
-      const guard = calculateBuyPriceGuard({
+      const guard = calculateExactQuoteBuyGuard({
         signalPrice: order.priceAfter,
-        expectedPrice,
+        spendableQuoteSol: sizeSol,
+        expectedBaseAmountRaw: previewAmounts.baseAmountOut,
+        baseDecimals,
         maxPriceDeviationPct: config.strategy.buyMaxPriceDeviationPct,
-        configuredSlippagePct,
       });
       Object.assign(buyDiagnostics, {
         effectiveSlippagePct: guard.effectiveSlippagePct ?? 0,
-        expectedPrice: guard.expectedPrice ?? expectedPrice,
+        expectedPrice: guard.expectedPrice ?? null,
         maxPrice: guard.maxPrice ?? null,
+        maxQuoteSol: sizeSol,
+        minBaseAmountOutRaw: guard.minBaseAmountOut?.toString() || null,
       });
 
       if (!guard.allowed) {
@@ -1153,7 +1190,7 @@ class Executor {
         const error = `buy_price_guard: ${guard.reason}`;
         console.warn(
           `[Executor:LIVE] BUY ABORTED ${order.symbol || order.mint.slice(0, 6)}: ${error} ` +
-            `(signal=${buyDiagnostics.signalPrice ?? 'n/a'} expected=${expectedPrice || 'n/a'})`,
+            `(signal=${buyDiagnostics.signalPrice ?? 'n/a'} expected=${guard.expectedPrice || 'n/a'})`,
         );
         return {
           success: false,
@@ -1164,18 +1201,16 @@ class Executor {
         };
       }
 
-      buyStage = 'final_quote';
-      const buyResult = guard.effectiveSlippagePct === 0
-        ? previewResult
-        : await this.pumpSdk.buyQuoteInput(
-          swapState,
-          sizeLamportsBN,
-          guard.effectiveSlippagePct,
-        );
-      const finalAmounts = extractBuyInstructionAmounts(buyResult);
-      buyDiagnostics.maxQuoteSol = finalAmounts
-        ? Number(finalAmounts.maxQuoteAmountIn) / 1e9
-        : sizeSol * (1 + guard.effectiveSlippagePct / 100);
+      buyStage = 'exact_quote_instruction';
+      const swapIxs = this._extractInstructions(previewResult);
+      if (!swapIxs || swapIxs.length === 0) {
+        throw new Error('SDK buyQuoteInput returned no instructions');
+      }
+      replaceBuyWithExactQuoteIn(swapIxs, {
+        spendableQuoteIn: BigInt(sizeLamportsBN.toString()),
+        minBaseAmountOut: guard.minBaseAmountOut,
+        trackVolume: true,
+      });
       buyDiagnostics.cacheAgeAtBuildMs = this.poolStateCache
         ? this.poolStateCache.getAge(order.poolAddress)
         : Date.now() - stateReadyAt;
@@ -1191,18 +1226,15 @@ class Executor {
         `[Executor:LIVE] BUY quote: signal=${guard.signalPrice.toExponential(6)} ` +
           `expected=${guard.expectedPrice.toExponential(6)} ` +
           `deviation=${guard.priceDeviationPct.toFixed(2)}% ` +
-          `slippage=${configuredSlippagePct.toFixed(2)}%->${guard.effectiveSlippagePct.toFixed(2)}% ` +
-          `maxQuote=${buyDiagnostics.maxQuoteSol.toFixed(6)}SOL ` +
+          `mode=buy_exact_quote_in quote=${buyDiagnostics.maxQuoteSol.toFixed(6)}SOL ` +
+          `minBase=${buyDiagnostics.minBaseAmountOutRaw} ` +
+          `outputTolerance=${guard.effectiveSlippagePct.toFixed(2)}% ` +
+          `virtualQuote=${buyDiagnostics.virtualQuoteReservesRaw} ` +
           `cache=${beforeAge}->${atBuildAge}[${buyDiagnostics.stateSource}]`,
       );
 
-      const swapIxs = this._extractInstructions(buyResult);
-      if (!swapIxs || swapIxs.length === 0) {
-        throw new Error('SDK buyQuoteInput returned no instructions');
-      }
-
-      const tokenAmount = expectedTokenAmount;
-      const realPrice = expectedPrice;
+      const tokenAmount = guard.expectedTokenAmount;
+      const realPrice = guard.expectedPrice;
       const estimatedSlippagePct = this._estimateBuySlippagePct(
         swapState,
         sizeSol,
@@ -1543,7 +1575,9 @@ class Executor {
     // fallback：用 constant product 公式估算（不精确，仅用于显示）
     try {
       const baseReserve = BigInt(state.poolBaseAmount.toString());
-      const quoteReserve = BigInt(state.poolQuoteAmount.toString());
+      if (state.pool?.virtualQuoteReserves == null) return 0n;
+      const quoteReserve = BigInt(state.poolQuoteAmount.toString()) +
+        BigInt(state.pool.virtualQuoteReserves.toString());
       const quoteIn = BigInt(fallbackQuoteIn.toString());
       const k = baseReserve * quoteReserve;
       const newQuote = quoteReserve + quoteIn;
@@ -1564,7 +1598,9 @@ class Executor {
     // fallback
     try {
       const baseReserve = BigInt(state.poolBaseAmount.toString());
-      const quoteReserve = BigInt(state.poolQuoteAmount.toString());
+      if (state.pool?.virtualQuoteReserves == null) return 0n;
+      const quoteReserve = BigInt(state.poolQuoteAmount.toString()) +
+        BigInt(state.pool.virtualQuoteReserves.toString());
       const baseIn = BigInt(fallbackBaseIn.toString());
       const k = baseReserve * quoteReserve;
       const newBase = baseReserve + baseIn;

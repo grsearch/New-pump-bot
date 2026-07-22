@@ -32,6 +32,10 @@ const bs58 = bs58Lib.default || bs58Lib;
 const { config } = require('../config');
 const { getMonitor } = require('../monitor/HealthMonitor');
 const SwapEventSanitizer = require('./SwapEventSanitizer');
+const {
+  priceDetailsFromUiReserves,
+  constantProductAfterBaseUi,
+} = require('../utils/pumpSwapPricing');
 
 const monitor = getMonitor();
 monitor.registerModule('DumpDetector', { staleMs: 120_000, label: 'Dump Detector' });
@@ -69,6 +73,7 @@ class DumpDetector extends EventEmitter {
     super();
     this.tokenRegistry = tokenRegistry;
     this.poolStateCache = null;
+    this._pricingRefreshRequestedAt = new Map();
     this.swapEventSanitizer = new SwapEventSanitizer({ tokenRegistry });
 
     // v3.17.13: 短窗口累计砸盘追踪
@@ -103,11 +108,31 @@ class DumpDetector extends EventEmitter {
     }
     this._recentSells.clear();
     this._processedSigs.clear();
+    this._pricingRefreshRequestedAt.clear();
     this.swapEventSanitizer.clear();
   }
 
   setPoolStateCache(cache) {
     this.poolStateCache = cache;
+  }
+
+  _getPricingState(poolAddress, maxAgeMs = 60_000) {
+    if (!this.poolStateCache || !poolAddress) return null;
+    const state = this.poolStateCache.get(poolAddress);
+    const ageMs = this.poolStateCache.getAge?.(poolAddress);
+    if (
+      state?.pool?.virtualQuoteReserves != null &&
+      ageMs != null && ageMs <= maxAgeMs
+    ) return state;
+
+    const now = Date.now();
+    const lastRequestedAt = this._pricingRefreshRequestedAt.get(poolAddress) || 0;
+    if (now - lastRequestedAt >= 2_000) {
+      this._pricingRefreshRequestedAt.set(poolAddress, now);
+      const refresh = this.poolStateCache.refreshOne?.(poolAddress, { force: true });
+      refresh?.catch?.(() => {});
+    }
+    return null;
   }
 
   /**
@@ -187,7 +212,7 @@ class DumpDetector extends EventEmitter {
         slot: parsed.slot,
         signature: parsed.signature,
         poolAddress: parsed.poolAddress,
-        poolQuoteAfter: parsed.poolQuoteAfter,
+        poolQuoteAfter: parsed.effectiveQuoteReserveSol || parsed.poolQuoteAfter,
         source: parsed.source,
         priceReliable: parsed.priceReliable,
       });
@@ -211,10 +236,17 @@ class DumpDetector extends EventEmitter {
             mint: swap.mint,
             price: swap.price,
             ts: swap.ts,
+            slot: swap.slot,
+            signature: swap.signature,
             poolAddress: swap.poolAddress,
             side: swap.side,
             solVolume: swap.solVolume,
             poolQuoteAfter: swap.poolQuoteAfter,
+            poolBaseAfter: parsed.poolBaseAfter,
+            baseDecimals: parsed.baseDecimals,
+            rawPrice: parsed.rawPriceAfter,
+            virtualQuoteReserveSol: parsed.virtualQuoteReserveSol,
+            effectiveQuoteReserveSol: parsed.effectiveQuoteReserveSol,
             priceSanitized: swap.priceSanitized,
             dataQualityVersion: swap.dataQualityVersion,
           });
@@ -269,7 +301,7 @@ class DumpDetector extends EventEmitter {
 
       const sellSol = parsed.quoteAmount; // 用户得到的 quote (SOL)
       const priceImpactPct = -(parsed._analyticsPriceChangePct ?? parsed.priceChangePct); // 转为正数表示跌幅
-      const poolQuoteAfter = parsed.poolQuoteAfter; // 池子 SOL 余额
+      const poolQuoteAfter = parsed.effectiveQuoteReserveSol || parsed.poolQuoteAfter;
 
       // v3.10: 三条过滤
       // 1. sellSol 下限(决心卖单)
@@ -774,8 +806,16 @@ class DumpDetector extends EventEmitter {
       return null;
     }
 
-    const priceBefore = quoteBefore / baseBefore;
-    const priceAfter = quoteAfter / baseAfter;
+    const poolState = this._getPricingState(tokenInfo.pool_address);
+    const beforePricing = priceDetailsFromUiReserves(baseBefore, quoteBefore, poolState);
+    const afterPricing = priceDetailsFromUiReserves(baseAfter, quoteAfter, poolState);
+    if (!beforePricing || !afterPricing) {
+      monitor.inc('DumpDetector.virtualQuoteReserveMissing', 1, 'DumpDetector');
+      return null;
+    }
+
+    const priceBefore = beforePricing.effectivePrice;
+    const priceAfter = afterPricing.effectivePrice;
     if (priceBefore <= 0 || priceAfter <= 0) return null;
     const priceChangePct = ((priceAfter - priceBefore) / priceBefore) * 100;
 
@@ -799,6 +839,10 @@ class DumpDetector extends EventEmitter {
       quoteAmount,
       priceBefore,
       priceAfter,
+      rawPriceBefore: beforePricing.rawPrice,
+      rawPriceAfter: afterPricing.rawPrice,
+      virtualQuoteReserveSol: afterPricing.virtualQuoteUi,
+      effectiveQuoteReserveSol: afterPricing.effectiveQuoteUi,
       priceChangePct,
       poolAddress: tokenInfo.pool_address,
       poolBaseVault,
@@ -865,16 +909,23 @@ class DumpDetector extends EventEmitter {
 
     // 用 AMM 常数乘积近似报价
     // 需要池子的当前 quote/base reserve - 从 PoolStateCache 获取
-    const poolState = this.poolStateCache
-      ? this.poolStateCache.get(tokenInfo.pool_address)
-      : null;
+    const poolState = this._getPricingState(tokenInfo.pool_address, 2_000);
 
     let quoteAmount = 0;
     let priceBefore = 0;
     let priceAfter = 0;
+    let rawPriceBefore = 0;
+    let rawPriceAfter = 0;
+    let virtualQuoteReserveSol = 0;
+    let effectiveQuoteReserveSol = 0;
     let priceChangePct = 0;
     let poolQuoteAfter = 0;
     let priceReliable = false;
+
+    if (!poolState || !poolState.poolQuoteAmount || !poolState.poolBaseAmount) {
+      monitor.inc('DumpDetector.cpiNoPoolState', 1, 'DumpDetector');
+      return null;
+    }
 
     if (poolState && poolState.poolQuoteAmount && poolState.poolBaseAmount) {
       // 有实时池子状态,用 AMM 常数乘积精确计算
@@ -887,19 +938,28 @@ class DumpDetector extends EventEmitter {
         : Number(poolState.poolBaseAmount) / Math.pow(10, baseDecimals);
 
       if (qBefore > 0 && bBefore > 0) {
+        const simulated = constantProductAfterBaseUi({
+          baseBeforeUi: bBefore,
+          baseAfterUi: baseAfter,
+          rawQuoteBeforeUi: qBefore,
+          state: poolState,
+        });
+        if (!simulated) {
+          monitor.inc('DumpDetector.virtualQuoteReserveMissing', 1, 'DumpDetector');
+          return null;
+        }
         priceReliable = true;
-        priceBefore = qBefore / bBefore;
-        const qAfter = (qBefore * bBefore) / baseAfter;
-        quoteAmount = Math.abs(qBefore - qAfter);
-        priceAfter = qAfter / baseAfter;
+        priceBefore = simulated.priceBefore;
+        priceAfter = simulated.priceAfter;
+        rawPriceBefore = simulated.rawPriceBefore;
+        rawPriceAfter = simulated.rawPriceAfter;
+        virtualQuoteReserveSol = simulated.virtualQuoteUi;
+        effectiveQuoteReserveSol = simulated.effectiveQuoteAfterUi;
+        quoteAmount = simulated.quoteAmountUi;
         priceChangePct = ((priceAfter - priceBefore) / priceBefore) * 100;
-        poolQuoteAfter = qAfter;
+        poolQuoteAfter = simulated.rawQuoteAfterUi;
       } else {
-        priceBefore = 1;
-        priceAfter = baseBefore / baseAfter;
-        priceChangePct = ((priceAfter - priceBefore) / priceBefore) * 100;
-        quoteAmount = 0;
-        poolQuoteAfter = 0;
+        return null;
       }
     } else {
       // 没有实时池子状态(hotMints 改造后非热币的常态)
@@ -963,6 +1023,10 @@ class DumpDetector extends EventEmitter {
       quoteAmount,
       priceBefore,
       priceAfter,
+      rawPriceBefore,
+      rawPriceAfter,
+      virtualQuoteReserveSol,
+      effectiveQuoteReserveSol,
       priceChangePct,
       poolAddress: tokenInfo.pool_address,
       poolBaseVault,
@@ -1179,6 +1243,10 @@ class DumpDetector extends EventEmitter {
     let quoteAmount = 0;
     let priceBefore = 0;
     let priceAfter = 0;
+    let rawPriceBefore = 0;
+    let rawPriceAfter = 0;
+    let virtualQuoteReserveSol = 0;
+    let effectiveQuoteReserveSol = 0;
     let priceChangePct = 0;
     let poolQuoteAfter = 0;
     let priceReliable = false;
@@ -1194,9 +1262,12 @@ class DumpDetector extends EventEmitter {
     }
 
     // 用 PoolStateCache 算价格影响和补充 quoteAmount
-    const poolState = this.poolStateCache
-      ? this.poolStateCache.get(tokenInfo.pool_address)
-      : null;
+    const poolState = this._getPricingState(tokenInfo.pool_address, 2_000);
+
+    if (!poolState || !poolState.poolQuoteAmount || !poolState.poolBaseAmount) {
+      monitor.inc('DumpDetector.balanceOnlyNoPoolState', 1, 'DumpDetector');
+      return null;
+    }
 
     if (poolState && poolState.poolQuoteAmount && poolState.poolBaseAmount) {
       const qBefore = poolState.poolQuoteAmount.toNumber
@@ -1206,14 +1277,27 @@ class DumpDetector extends EventEmitter {
         ? poolState.poolBaseAmount.toNumber() / Math.pow(10, baseDecimals)
         : Number(poolState.poolBaseAmount) / Math.pow(10, baseDecimals);
       if (qBefore > 0 && bBefore > 0) {
-        priceReliable = true;
-        priceBefore = qBefore / bBefore;
         const bAfter = bBefore + tokensSold;
-        const qAfter = (qBefore * bBefore) / bAfter;
-        if (quoteAmount <= 0) quoteAmount = Math.abs(qBefore - qAfter);
-        priceAfter = qAfter / bAfter;
+        const simulated = constantProductAfterBaseUi({
+          baseBeforeUi: bBefore,
+          baseAfterUi: bAfter,
+          rawQuoteBeforeUi: qBefore,
+          state: poolState,
+        });
+        if (!simulated) {
+          monitor.inc('DumpDetector.virtualQuoteReserveMissing', 1, 'DumpDetector');
+          return null;
+        }
+        priceReliable = true;
+        priceBefore = simulated.priceBefore;
+        priceAfter = simulated.priceAfter;
+        rawPriceBefore = simulated.rawPriceBefore;
+        rawPriceAfter = simulated.rawPriceAfter;
+        virtualQuoteReserveSol = simulated.virtualQuoteUi;
+        effectiveQuoteReserveSol = simulated.effectiveQuoteAfterUi;
+        if (quoteAmount <= 0) quoteAmount = simulated.quoteAmountUi;
         priceChangePct = ((priceAfter - priceBefore) / priceBefore) * 100;
-        poolQuoteAfter = qAfter;
+        poolQuoteAfter = simulated.rawQuoteAfterUi;
       }
     }
 
@@ -1264,6 +1348,10 @@ class DumpDetector extends EventEmitter {
       quoteAmount,
       priceBefore,
       priceAfter,
+      rawPriceBefore,
+      rawPriceAfter,
+      virtualQuoteReserveSol,
+      effectiveQuoteReserveSol,
       priceChangePct,
       poolAddress: tokenInfo.pool_address,
       poolBaseVault: poolBaseVault || null,

@@ -52,7 +52,10 @@ function run() {
     maxQuoteSol: 0.215,
     cacheAgeBeforeMs: 1200,
     cacheAgeAtBuildMs: 3,
-    stateSource: 'rpc',
+    stateSource: 'rpc-forced',
+    buyMode: 'buy_exact_quote_in',
+    minBaseAmountOutRaw: '173914',
+    virtualQuoteReservesRaw: '5000000000',
   });
   const tradeDiagnostic = db.prepare("SELECT * FROM trades WHERE mint = 'TradeMint'").get();
   assert.strictEqual(tradeDiagnostic.configured_slippage_pct, 50);
@@ -63,7 +66,10 @@ function run() {
   assert.strictEqual(tradeDiagnostic.max_quote_sol, 0.215);
   assert.strictEqual(tradeDiagnostic.cache_age_before_ms, 1200);
   assert.strictEqual(tradeDiagnostic.cache_age_at_build_ms, 3);
-  assert.strictEqual(tradeDiagnostic.state_source, 'rpc');
+  assert.strictEqual(tradeDiagnostic.state_source, 'rpc-forced');
+  assert.strictEqual(tradeDiagnostic.buy_mode, 'buy_exact_quote_in');
+  assert.strictEqual(tradeDiagnostic.min_base_amount_out_raw, '173914');
+  assert.strictEqual(tradeDiagnostic.virtual_quote_reserves_raw, '5000000000');
   const snapshotColumns = db.pragma('table_info(token_snapshots)').map((row) => row.name);
   const swapColumns = new Set(db.pragma('table_info(swap_events)').map((row) => row.name));
   assert.strictEqual(snapshotColumns.length, logger._snapshotColumnNames().length + 1);

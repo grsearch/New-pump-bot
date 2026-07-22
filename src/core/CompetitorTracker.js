@@ -315,11 +315,15 @@ class CompetitorTracker extends EventEmitter {
     if (this.poolStateCache && poolAddress) {
       try {
         const st = this.poolStateCache.get(poolAddress);
-        const lamports = st && st.poolQuoteAmount;
-        if (lamports != null) {
+        const rawLamports = st && st.poolQuoteAmount;
+        const virtualLamports = st?.pool?.virtualQuoteReserves;
+        if (rawLamports != null && virtualLamports != null) {
           // BN / BigInt / number 统一走 toString() 再 Number，避免 BN.toNumber() 溢出抛错
-          const v = Number(lamports.toString());
-          if (Number.isFinite(v)) poolQuoteSol = v / 1e9;
+          const raw = Number(rawLamports.toString());
+          const virtual = Number(virtualLamports.toString());
+          if (Number.isFinite(raw) && Number.isFinite(virtual)) {
+            poolQuoteSol = (raw + virtual) / 1e9;
+          }
         }
       } catch (_) { /* ignore */ }
     }

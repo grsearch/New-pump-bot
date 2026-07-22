@@ -262,11 +262,18 @@ function runSlippageTests() {
   const state = {
     poolBaseAmount: 1_000_000_000_000n,
     poolQuoteAmount: 100_000_000_000n,
+    pool: { virtualQuoteReserves: 0n },
   };
   assert.strictEqual(estimateBuySlippagePct(state, 1, 10_000, 6), 0);
   const fivePct = estimateBuySlippagePct(state, 1, 1 / 0.000105, 6);
   assert(Math.abs(fivePct - 5) < 1e-9);
   assert(estimateBuySlippagePct(state, 1, 9_000, 6) > 5);
+  const virtualState = {
+    poolBaseAmount: 100_000_000_000_000n,
+    poolQuoteAmount: 135_800_000_000n,
+    pool: { virtualQuoteReserves: 17_900_000_000n },
+  };
+  assert(Math.abs(estimateBuySlippagePct(virtualState, 1.537, 1_000_000, 6)) < 1e-9);
   assert.strictEqual(config.strategy.buySlippageBps, 5000);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 15);
   assert.strictEqual(config.strategy.buyMaxPoolStateAgeMs, 500);

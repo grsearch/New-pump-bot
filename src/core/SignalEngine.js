@@ -127,6 +127,12 @@ class SignalEngine extends EventEmitter {
         cleaned += 1;
       }
     }
+    for (const [mint, expireAt] of this._exitCooldowns) {
+      if (expireAt <= now) {
+        this._exitCooldowns.delete(mint);
+        cleaned += 1;
+      }
+    }
     // v3.17.15: 清理过期的卖家累计卖出
     for (const [key, sells] of this.sellerRecentSells) {
       const cutoff = Date.now() - 30_000;
@@ -151,6 +157,16 @@ class SignalEngine extends EventEmitter {
   }
   markBuyDone(mint) {
     this.inflightBuys.delete(mint);
+  }
+
+  _getMintProtectionRemainingMs(mint, now = Date.now()) {
+    const expiresAt = this._exitCooldowns.get(mint) || 0;
+    if (!expiresAt) return 0;
+    if (expiresAt <= now) {
+      this._exitCooldowns.delete(mint);
+      return 0;
+    }
+    return expiresAt - now;
   }
 
   registerOurSignature(sig) {
@@ -425,13 +441,14 @@ class SignalEngine extends EventEmitter {
       return;
     }
 
-    // 7. Same-mint controls: post-sale cooldown and in-flight/open-position lock.
+    // 7. Same-mint controls: explicit post-sale or execution-failure cooldown,
+    // plus the in-flight/open-position lock. Failure protection must still be
+    // read when REBUY_COOLDOWN_MS=0.
     {
-      const rebuyCooldownMs = config.strategy.rebuyCooldownMs;
-      const exitCooldown = rebuyCooldownMs > 0 ? this._exitCooldowns.get(mint) : 0;
-      if (exitCooldown && Date.now() < exitCooldown) {
+      const protectionRemainingMs = this._getMintProtectionRemainingMs(mint);
+      if (protectionRemainingMs > 0) {
         monitor.inc('SignalEngine.rejectedRebuyCooldown', 1, 'SignalEngine');
-        this._logReject(signal, 'REBUY_COOLDOWN: sold this mint recently, cooldown ' + Math.round((exitCooldown - Date.now()) / 1000) + 's remaining');
+        this._logReject(signal, 'MINT_PROTECTION_COOLDOWN: ' + Math.round(protectionRemainingMs / 1000) + 's remaining');
         return;
       }
     }

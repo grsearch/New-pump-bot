@@ -2,6 +2,9 @@
 
 const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const PUMP_AMM_PROGRAM_ID = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
+const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const SYSTEM_PROGRAM_ID = '11111111111111111111111111111111';
 const MIGRATE_DISCRIMINATOR = Buffer.from([155, 234, 231, 146, 236, 158, 162, 30]);
 const MIGRATE_V2_DISCRIMINATOR = Buffer.from([187, 203, 18, 31, 206, 237, 254, 41]);
 
@@ -21,8 +24,8 @@ const MIGRATION_LAYOUTS = [
     mintIndex: 2,
     pumpAmmIndex: 9,
     poolIndex: 10,
-    baseVaultIndex: 18,
-    quoteVaultIndex: 19,
+    baseVaultIndex: 17,
+    quoteVaultIndex: 18,
   },
 ];
 
@@ -107,6 +110,16 @@ function isLikelyPublicKey(value) {
     [...value].every((char) => BASE58_ALPHABET.includes(char));
 }
 
+function isLikelyVault(value) {
+  return isLikelyPublicKey(value) && ![
+    PUMP_PROGRAM_ID,
+    PUMP_AMM_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID,
+    SYSTEM_PROGRAM_ID,
+  ].includes(value);
+}
+
 /**
  * Parse a confirmed Pump migrate transaction using the official instruction layout.
  * Log messages are deliberately ignored here: they are only a transport-side prefilter.
@@ -142,10 +155,10 @@ function parsePumpMigrationTransaction(transactionResult, opts = {}) {
     return {
       mint,
       poolAddress,
-      poolBaseVault: isLikelyPublicKey(accounts[layout.baseVaultIndex])
+      poolBaseVault: isLikelyVault(accounts[layout.baseVaultIndex])
         ? accounts[layout.baseVaultIndex]
         : null,
-      poolQuoteVault: isLikelyPublicKey(accounts[layout.quoteVaultIndex])
+      poolQuoteVault: isLikelyVault(accounts[layout.quoteVaultIndex])
         ? accounts[layout.quoteVaultIndex]
         : null,
       migrationVersion: layout.version,

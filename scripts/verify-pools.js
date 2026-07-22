@@ -143,7 +143,11 @@ async function fixToken(registry, finder, token, log) {
       log(`  ❌ PoolFinder still can't find Pump AMM pool — token may not be graduated yet`);
       return false;
     }
-    if (result.poolAddress === token.pool_address && result.poolBaseVault === token.pool_base_vault) {
+    if (
+      result.poolAddress === token.pool_address &&
+      result.poolBaseVault === token.pool_base_vault &&
+      result.poolQuoteVault === token.pool_quote_vault
+    ) {
       log(`  ⚠️  PoolFinder returned same (wrong) pool — likely Helius indexed stale data`);
       return false;
     }

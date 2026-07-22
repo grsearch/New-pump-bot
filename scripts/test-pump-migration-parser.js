@@ -12,6 +12,9 @@ const {
 } = require('../src/utils/pumpMigrationParser');
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const SYSTEM_PROGRAM_ID = '11111111111111111111111111111111';
 
 function encodeBase58(buffer) {
   let number = BigInt(`0x${buffer.toString('hex') || '0'}`);
@@ -42,8 +45,17 @@ function migrationAccounts() {
 }
 
 function migrationV2Accounts() {
-  const accounts = migrationAccounts();
-  accounts.splice(8, 0, '11111111111111111111111111111111');
+  const accounts = Array.from({ length: 27 }, (_, index) => key(String.fromCharCode(65 + index)));
+  accounts[2] = key('M');
+  accounts[8] = SYSTEM_PROGRAM_ID;
+  accounts[9] = PUMP_AMM_PROGRAM_ID;
+  accounts[10] = key('P');
+  accounts[17] = key('V');
+  accounts[18] = key('W');
+  accounts[19] = TOKEN_2022_PROGRAM_ID;
+  accounts[20] = TOKEN_PROGRAM_ID;
+  accounts[21] = TOKEN_2022_PROGRAM_ID;
+  accounts[26] = PUMP_PROGRAM_ID;
   return accounts;
 }
 
@@ -90,6 +102,17 @@ assert.strictEqual(parsedV2.poolBaseVault, key('V'));
 assert.strictEqual(parsedV2.poolQuoteVault, key('W'));
 assert.strictEqual(parsedV2.migrationVersion, 'v2');
 
+const invalidV2VaultAccounts = migrationV2Accounts();
+invalidV2VaultAccounts[18] = TOKEN_2022_PROGRAM_ID;
+const invalidV2Vault = parsePumpMigrationTransaction(parsedTransaction({
+  instruction: {
+    accounts: invalidV2VaultAccounts,
+    data: encodeBase58(MIGRATE_V2_DISCRIMINATOR),
+  },
+}));
+assert(invalidV2Vault, 'migration detection should survive a missing vault so PoolFinder can repair it');
+assert.strictEqual(invalidV2Vault.poolQuoteVault, null, 'a token program ID must never be stored as a vault');
+
 const wrongData = Buffer.from(MIGRATE_DISCRIMINATOR);
 wrongData[0] ^= 0xff;
 assert.strictEqual(parsePumpMigrationTransaction(parsedTransaction({
@@ -134,6 +157,62 @@ const compiled = parsedTransaction({
 });
 assert(parsePumpMigrationTransaction(compiled), 'compiled account indexes should be supported');
 
+const compiledV2Accounts = migrationV2Accounts();
+const compiledV2Static = [PUMP_PROGRAM_ID, ...compiledV2Accounts.slice(0, 17)];
+const compiledV2 = parsedTransaction({
+  transaction: {
+    slot: 234567,
+    blockTime: 1_700_000_100,
+    meta: {
+      err: null,
+      innerInstructions: [],
+      loadedAddresses: {
+        writable: compiledV2Accounts.slice(17),
+        readonly: [],
+      },
+    },
+    transaction: {
+      message: {
+        staticAccountKeys: compiledV2Static,
+        instructions: [{
+          programIdIndex: 0,
+          accounts: compiledV2Accounts.map((_, index) => index + 1),
+          data: encodeBase58(MIGRATE_V2_DISCRIMINATOR),
+        }],
+      },
+    },
+  },
+});
+const parsedCompiledV2 = parsePumpMigrationTransaction(compiledV2);
+assert(parsedCompiledV2, 'compiled migrate_v2 account indexes with ALT addresses should be supported');
+assert.strictEqual(parsedCompiledV2.poolBaseVault, key('V'));
+assert.strictEqual(parsedCompiledV2.poolQuoteVault, key('W'));
+
+const jsonParsedV2 = parsedTransaction({
+  transaction: {
+    meta: { err: null, innerInstructions: [] },
+    transaction: {
+      message: {
+        accountKeys: [PUMP_PROGRAM_ID, ...compiledV2Accounts].map((pubkey, index) => ({
+          pubkey,
+          signer: false,
+          writable: index > 17,
+          source: index > 17 ? 'lookupTable' : 'transaction',
+        })),
+        instructions: [{
+          programIdIndex: 0,
+          accounts: compiledV2Accounts.map((_, index) => index + 1),
+          data: encodeBase58(MIGRATE_V2_DISCRIMINATOR),
+        }],
+      },
+    },
+  },
+});
+const parsedJsonV2 = parsePumpMigrationTransaction(jsonParsedV2);
+assert(parsedJsonV2, 'jsonParsed ALT account keys should be supported without meta.loadedAddresses');
+assert.strictEqual(parsedJsonV2.poolBaseVault, key('V'));
+assert.strictEqual(parsedJsonV2.poolQuoteVault, key('W'));
+
 assert.deepStrictEqual(decodeBase58('1'), Buffer.from([0]));
 assert.deepStrictEqual(decodeBase58('2'), Buffer.from([1]));
 
@@ -146,7 +225,24 @@ Module._load = function loadWithDependencyStubs(request, parent, isMain) {
 };
 const PumpGraduationDiscovery = require('../src/core/PumpGraduationDiscovery');
 const TokenWatchdog = require('../src/core/TokenWatchdog');
+const PoolFinder = require('../src/utils/poolFinder');
 Module._load = originalLoad;
+
+const pumpSwapAccounts = Array.from({ length: 23 }, (_, index) => key(String.fromCharCode(65 + index)));
+pumpSwapAccounts[0] = key('P');
+pumpSwapAccounts[3] = key('M');
+pumpSwapAccounts[7] = key('V');
+pumpSwapAccounts[8] = key('W');
+const poolFinder = Object.create(PoolFinder.prototype);
+const extractedPool = poolFinder._extractPoolFromTx({
+  instructions: [{ programId: PUMP_AMM_PROGRAM_ID, accounts: pumpSwapAccounts }],
+  tokenTransfers: [],
+}, key('M'));
+assert.deepStrictEqual(extractedPool, {
+  poolAddress: key('P'),
+  poolBaseVault: key('V'),
+  poolQuoteVault: key('W'),
+}, 'PoolFinder should use the canonical PumpSwap vault indexes before transfer inference');
 
 const discovery = Object.create(PumpGraduationDiscovery.prototype);
 discovery.settings = {

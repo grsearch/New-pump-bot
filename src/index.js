@@ -23,6 +23,22 @@ const PumpGraduationDiscovery = require('./core/PumpGraduationDiscovery');
 const FeatureRecorder = require('./core/FeatureRecorder');
 
 const monitor = getMonitor();
+const INVALID_VAULT_ADDRESSES = new Set([
+  '11111111111111111111111111111111',
+  '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+  'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+]);
+
+function needsPoolRepair(token) {
+  return !token.pool_address ||
+    !token.pool_base_vault ||
+    !token.pool_quote_vault ||
+    token.pool_base_vault === token.pool_quote_vault ||
+    INVALID_VAULT_ADDRESSES.has(token.pool_base_vault) ||
+    INVALID_VAULT_ADDRESSES.has(token.pool_quote_vault);
+}
 
 async function main() {
   const watchdogCheckIntervalMs = parseInt(process.env.WATCHDOG_CHECK_INTERVAL_MS || '60000', 10);
@@ -408,7 +424,7 @@ async function main() {
   // ============ 定期补缺 pool 信息（每 60 秒扫描一次） ============
   // 防止 onTokenAdded 时 PoolFinder 失败导致代币永远没有 pool
   setInterval(() => {
-    const missing = tokenRegistry.listActive().filter(t => !t.pool_address);
+    const missing = tokenRegistry.listActive().filter(needsPoolRepair);
     if (missing.length === 0) return;
     console.log(`[pool-refill] ${missing.length} token(s) missing pool info, filling...`);
     for (const t of missing) {
@@ -1002,7 +1018,7 @@ async function main() {
 async function backgroundFillPools(tokenRegistry) {
   const targets = tokenRegistry
     .listAll()
-    .filter((t) => t.is_active && (!t.pool_address || !t.pool_base_vault || !t.pool_quote_vault));
+    .filter((t) => t.is_active && needsPoolRepair(t));
 
   if (targets.length === 0) return;
   console.log(`[main] auto-fill pool for ${targets.length} tokens (background)`);

@@ -38,6 +38,32 @@ function run() {
   `);
 
   const logger = new TradeLogger(db);
+  logger.logTrade({
+    ts: 1_800_000_000_000,
+    mint: 'TradeMint',
+    side: 'BUY',
+    success: false,
+    error: 'ExceededSlippage',
+    configuredSlippagePct: 50,
+    effectiveSlippagePct: 7.5,
+    signalPrice: 1,
+    expectedPrice: 1.07,
+    maxPrice: 1.15,
+    maxQuoteSol: 0.215,
+    cacheAgeBeforeMs: 1200,
+    cacheAgeAtBuildMs: 3,
+    stateSource: 'rpc',
+  });
+  const tradeDiagnostic = db.prepare("SELECT * FROM trades WHERE mint = 'TradeMint'").get();
+  assert.strictEqual(tradeDiagnostic.configured_slippage_pct, 50);
+  assert.strictEqual(tradeDiagnostic.effective_slippage_pct, 7.5);
+  assert.strictEqual(tradeDiagnostic.signal_price, 1);
+  assert.strictEqual(tradeDiagnostic.expected_price, 1.07);
+  assert.strictEqual(tradeDiagnostic.max_price, 1.15);
+  assert.strictEqual(tradeDiagnostic.max_quote_sol, 0.215);
+  assert.strictEqual(tradeDiagnostic.cache_age_before_ms, 1200);
+  assert.strictEqual(tradeDiagnostic.cache_age_at_build_ms, 3);
+  assert.strictEqual(tradeDiagnostic.state_source, 'rpc');
   const snapshotColumns = db.pragma('table_info(token_snapshots)').map((row) => row.name);
   const swapColumns = new Set(db.pragma('table_info(swap_events)').map((row) => row.name));
   assert.strictEqual(snapshotColumns.length, logger._snapshotColumnNames().length + 1);

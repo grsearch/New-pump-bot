@@ -78,8 +78,9 @@ async function main() {
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
   console.log(
-    `Buy slippage: tolerance=${(config.strategy.buySlippageBps / 100).toFixed(1)}% ` +
-      `estimated<=${config.strategy.buyMaxEstimatedSlippagePct}%`,
+    `Buy guard: chain<=${(config.strategy.buySlippageBps / 100).toFixed(1)}% ` +
+      `signal<=+${config.strategy.buyMaxPriceDeviationPct}% ` +
+      `poolState<=${config.strategy.buyMaxPoolStateAgeMs}ms`,
   );
   console.log('Add-on: disabled');
   console.log(`Executor: Pump AMM SDK direct (no Jupiter)`);
@@ -768,20 +769,6 @@ async function main() {
     // Record the current chain slot on BUY for execution metadata.
     executor.setLatestSlot(tickStream.latestSlot || 0);
 
-    // v3.17.27: 同步刷新 pool state → 确保 executor.buy cache hit
-    //   如果 cache miss，executor.buy 会走同步 RPC(80-180ms)。
-    //   在这里同步 refreshOne(30-80ms) 把 state 填入 cache，
-    //   buy 时直接 cache hit → state=0ms → 总延迟从 ~150ms 降到 ~60ms。
-    const preBuyPoolAddr = tokenInfo?.pool_address;
-    if (preBuyPoolAddr && executor.poolStateCache) {
-      const cachedState = executor.poolStateCache.get(preBuyPoolAddr);
-      if (!cachedState) {
-        const tPre = Date.now();
-        try { await executor.poolStateCache.refreshOne(preBuyPoolAddr); } catch (_) { /* 静默 */ }
-        monitor.set('main.preBuyRefreshMs', Date.now() - tPre, 'main');
-      }
-    }
-
     const _t2 = Date.now();
     let buyResult;
     try {
@@ -836,6 +823,16 @@ async function main() {
             reason: order.reason,
             stateLatencyMs: buyResult.stateLatencyMs,
             error: buyResult.error || null,
+            configuredSlippagePct: buyResult.configuredSlippagePct,
+            effectiveSlippagePct: buyResult.effectiveSlippagePct,
+            signalPrice: buyResult.signalPrice,
+            expectedPrice: buyResult.expectedPrice,
+            maxPrice: buyResult.maxPrice,
+            maxQuoteSol: buyResult.maxQuoteSol,
+            cacheAgeBeforeMs: buyResult.cacheAgeBeforeMs,
+            cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
+            stateSource: buyResult.stateSource,
+            failureStage: buyResult.failureStage,
           },
         });
       } catch (_) { /* analytics only */ }
@@ -860,18 +857,32 @@ async function main() {
       reason: order.reason,
       latencyMs: buyResult.latencyMs,
       error: buyResult.error,
+      configuredSlippagePct: buyResult.configuredSlippagePct ?? (config.strategy.buySlippageBps / 100),
+      effectiveSlippagePct: buyResult.effectiveSlippagePct,
+      signalPrice: buyResult.signalPrice ?? order.priceAfter,
+      expectedPrice: buyResult.expectedPrice,
+      maxPrice: buyResult.maxPrice,
+      maxQuoteSol: buyResult.maxQuoteSol,
+      cacheAgeBeforeMs: buyResult.cacheAgeBeforeMs,
+      cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
+      stateSource: buyResult.stateSource,
     });
 
     if (!buyResult.success) {
       console.error(
         `[main] BUY failed for ${order.symbol || order.mint.slice(0, 6)}: ${buyResult.error}`,
       );
-      // v3.26: pool dead/low-liquidity/mint-mismatch → 24h 冷却，防止同币反复浪费 fee
-      if (buyResult.poolDead || buyResult.poolLowLiquidity || buyResult.poolMintMismatch) {
-        const cooldownMs = parseInt(process.env.POOL_FAIL_REBUY_COOLDOWN_MS || '86400000', 10);
+      // Protect only explicit execution/pool failures. Local price-guard rejects
+      // spend no fee and do not create a strategy cooldown.
+      const poolFailure = buyResult.poolDead || buyResult.poolLowLiquidity || buyResult.poolMintMismatch;
+      if (buyResult.chainFailure || poolFailure) {
+        const cooldownMs = buyResult.chainFailure
+          ? parseInt(process.env.BUY_FAILED_REBUY_COOLDOWN_MS || '86400000', 10)
+          : parseInt(process.env.POOL_FAIL_REBUY_COOLDOWN_MS || '86400000', 10);
         signalEngine._exitCooldowns.set(order.mint, Date.now() + cooldownMs);
         console.log(
-          `[main] 🔒 Pool fail cooldown ${order.symbol || order.mint.slice(0, 6)} for ${Math.round(cooldownMs / 3600000)}h (poolDead=${!!buyResult.poolDead} poolLowLiq=${!!buyResult.poolLowLiquidity} mintMismatch=${!!buyResult.poolMintMismatch})`,
+          `[main] 🔒 ${buyResult.chainFailure ? 'BUY_CHAIN_FAILED' : 'Pool fail'} cooldown ` +
+            `${order.symbol || order.mint.slice(0, 6)} for ${Math.round(cooldownMs / 3600000)}h`,
         );
       }
       return;

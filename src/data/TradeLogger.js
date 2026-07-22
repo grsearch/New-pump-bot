@@ -227,6 +227,17 @@ class TradeLogger {
       ['price_tick_count', 'INTEGER'],
       ['pre_vol_5m_pct', 'REAL'],
     ]);
+    this._ensureColumns('trades', [
+      ['configured_slippage_pct', 'REAL'],
+      ['effective_slippage_pct', 'REAL'],
+      ['signal_price', 'REAL'],
+      ['expected_price', 'REAL'],
+      ['max_price', 'REAL'],
+      ['max_quote_sol', 'REAL'],
+      ['cache_age_before_ms', 'INTEGER'],
+      ['cache_age_at_build_ms', 'INTEGER'],
+      ['state_source', 'TEXT'],
+    ]);
     this._ensureColumns('swap_events', [
       ['source', 'TEXT'],
       ['price_reliable', 'INTEGER'],
@@ -517,9 +528,13 @@ ${snapshotColumnsSql},
       insertTrade: this.db.prepare(`
         INSERT INTO trades
           (position_id, ts, mint, symbol, side, sol_amount, token_amount, price, signature,
-           success, dry_run, reason, latency_ms, error)
+           success, dry_run, reason, latency_ms, error, configured_slippage_pct,
+           effective_slippage_pct, signal_price, expected_price, max_price, max_quote_sol,
+           cache_age_before_ms, cache_age_at_build_ms, state_source)
         VALUES (@positionId, @ts, @mint, @symbol, @side, @solAmount, @tokenAmount, @price, @signature,
-                @success, @dryRun, @reason, @latencyMs, @error)
+                @success, @dryRun, @reason, @latencyMs, @error, @configuredSlippagePct,
+                @effectiveSlippagePct, @signalPrice, @expectedPrice, @maxPrice, @maxQuoteSol,
+                @cacheAgeBeforeMs, @cacheAgeAtBuildMs, @stateSource)
       `),
 
       tradesInRange: this.db.prepare(`
@@ -863,7 +878,9 @@ ${snapshotColumnsSql},
   // ============================================================
 
   logTrade({ positionId, ts, mint, symbol, side, solAmount, tokenAmount, price, signature,
-             success, dryRun, reason, latencyMs, error }) {
+             success, dryRun, reason, latencyMs, error, configuredSlippagePct,
+             effectiveSlippagePct, signalPrice, expectedPrice, maxPrice, maxQuoteSol,
+             cacheAgeBeforeMs, cacheAgeAtBuildMs, stateSource }) {
     this.stmts.insertTrade.run({
       positionId: positionId || null,
       ts: ts || Date.now(),
@@ -879,6 +896,15 @@ ${snapshotColumnsSql},
       reason: reason || null,
       latencyMs: latencyMs ?? null,
       error: error || null,
+      configuredSlippagePct: configuredSlippagePct ?? null,
+      effectiveSlippagePct: effectiveSlippagePct ?? null,
+      signalPrice: signalPrice ?? null,
+      expectedPrice: expectedPrice ?? null,
+      maxPrice: maxPrice ?? null,
+      maxQuoteSol: maxQuoteSol ?? null,
+      cacheAgeBeforeMs: cacheAgeBeforeMs ?? null,
+      cacheAgeAtBuildMs: cacheAgeAtBuildMs ?? null,
+      stateSource: stateSource || null,
     });
   }
 

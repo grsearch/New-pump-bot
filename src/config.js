@@ -165,7 +165,12 @@ const config = {
     defenseProfitActivatePct: parseFloat(process.env.DEFENSE_PROFIT_ACTIVATE_PCT || '0'),
 
     // 滑点
-    buySlippageBps: parseInt(process.env.BUY_SLIPPAGE_BPS || '500', 10),  // 5%
+    // BUY_SLIPPAGE_BPS is only the on-chain ceiling. The executable allowance is
+    // reduced per quote so the fill can never exceed the signal-price cap.
+    buySlippageBps: parseInt(process.env.BUY_SLIPPAGE_BPS || '5000', 10),
+    buyMaxPriceDeviationPct: parseFloat(process.env.BUY_MAX_PRICE_DEVIATION_PCT || '15'),
+    buyMaxPoolStateAgeMs: parseInt(process.env.BUY_MAX_POOL_STATE_AGE_MS || '500', 10),
+    // Kept for exported-config compatibility; no longer used as the price guard.
     buyMaxEstimatedSlippagePct: parseFloat(process.env.BUY_MAX_ESTIMATED_SLIPPAGE_PCT || '5'),
     sellSlippageBps: parseInt(process.env.SELL_SLIPPAGE_BPS || '2000', 10), // 20%
 

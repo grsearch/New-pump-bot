@@ -267,7 +267,9 @@ function runSlippageTests() {
   const fivePct = estimateBuySlippagePct(state, 1, 1 / 0.000105, 6);
   assert(Math.abs(fivePct - 5) < 1e-9);
   assert(estimateBuySlippagePct(state, 1, 9_000, 6) > 5);
-  assert.strictEqual(config.strategy.buySlippageBps, 500);
+  assert.strictEqual(config.strategy.buySlippageBps, 5000);
+  assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 15);
+  assert.strictEqual(config.strategy.buyMaxPoolStateAgeMs, 500);
   assert.strictEqual(config.strategy.buyMaxEstimatedSlippagePct, 5);
   assert.strictEqual(config.strategy.noBounceExitMs, 90_000);
   assert.strictEqual(config.strategy.maxHoldMs, 180_000);

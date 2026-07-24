@@ -388,8 +388,8 @@
         <div id="strategySignalMeta" class="strategy-meta"><span>等待实时数据</span></div>
         <div class="table-wrap" style="overflow:auto;">
           <table class="strategy-table">
-            <thead><tr><th>更新</th><th>Symbol</th><th>CA</th><th>1m 成交量</th><th>1m 买入笔数</th><th>1m 买家</th><th>1m 新买家</th><th>最大单买</th><th>5s 买家</th><th>5s 人均买量</th><th>5s 买卖比</th><th>5s 加速</th><th>1m 涨幅</th><th>10s 涨幅</th><th>确认</th><th>阶段</th></tr></thead>
-            <tbody id="signalsTbody"><tr><td colspan="16" class="empty">暂无活跃成交</td></tr></tbody>
+            <thead><tr id="strategySignalsHeader"><th>更新</th><th>Symbol</th><th>CA</th><th>AGE</th><th>动态FDV</th><th>1m买家</th><th>1m成交量</th><th>阶段</th></tr></thead>
+            <tbody id="signalsTbody"><tr><td colspan="8" class="empty">暂无活跃成交</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -731,11 +731,11 @@ function _strategyStage(candidate, now) {
   const remaining = candidate.armedUntil
     ? ` ${Math.max(0, Math.ceil((candidate.armedUntil - now) / 1000))}s`
     : '';
-  const title = candidate.waitReason || candidate.cancelReason || '';
+  const title = candidate.decision || candidate.waitReason || candidate.cancelReason || '';
   return `<span class="pill ${stage}" title="${escapeHtml(title)}">${labels[stage] || escapeHtml(stage)}${remaining}</span>`;
 }
 
-async function refreshSignals() {
+async function refreshLegacySignals() {
   const r = await api('/api/strategy-signals?limit=100');
   const meta = $('strategySignalMeta');
   const tbody = $('signalsTbody');
@@ -787,6 +787,56 @@ async function refreshSignals() {
         <td>${_strategyCondition(`${_strategyNumber(minute.priceChangePct)}%`, conditions.price60s, `上限 ${thresholds.breadthPriceChange60sMaxPct}%`)}</td>
         <td>${_strategyCondition(`${_strategyNumber(tenSeconds.priceChangePct)}%`, conditions.price10s, `${thresholds.breadthPriceChange10sMinPct}%～${thresholds.breadthPriceChange10sMaxPct}%`)}</td>
         <td>${_strategyCondition(`${trigger.supportScore || 0} / 5`, conditions.supportScore, `至少 ${thresholds.minConfirmations || 0}`)}</td>
+        <td>${_strategyStage(candidate, r.now || Date.now())}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function refreshSignals() {
+  const r = await api('/api/strategy-signals?limit=100');
+  const meta = $('strategySignalMeta');
+  const tbody = $('signalsTbody');
+  if (!r.ok) {
+    meta.innerHTML = `<span class="neg">${escapeHtml(r.error || 'V7 实时数据不可用')}</span>`;
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">等待 Strategy V7 数据</td></tr>';
+    return;
+  }
+
+  const summary = r.summary || {};
+  const thresholds = r.thresholds || {};
+  const rows = r.candidates || [];
+  meta.innerHTML = [
+    `<span>模式 <b>${escapeHtml(r.mode || '-')}</b></span>`,
+    `<span>活跃 <b>${summary.active || 0}</b></span>`,
+    `<span>进入3分钟窗口 <b>${summary.windowReady || 0}</b></span>`,
+    `<span>FDV达标 <b>${summary.fdvReady || 0}</b></span>`,
+    `<span>买家达标 <b>${summary.buyersReady || 0}</b></span>`,
+    `<span>信号 <b>${summary.signaled || 0}</b></span>`,
+  ].join('');
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无活跃成交</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(candidate => {
+    const conditions = candidate.conditions || {};
+    const minute = candidate.s60 || {};
+    const ageMs = Number(candidate.tokenAgeMs);
+    const ageText = Number.isFinite(ageMs)
+      ? `${_strategyNumber(ageMs / 60000, 2)}m / ${_strategyNumber((thresholds.age3TargetMs || 180000) / 60000, 0)}m`
+      : '-';
+    const fdvText = `${fmtMoney(candidate.fdvUsd)} / ${fmtMoney(thresholds.age3MinFdvUsd)}`;
+    const buyersText = `${minute.uniqueBuyers || 0} / ${thresholds.age3MinUniqueBuyers1m || 0}`;
+    return `
+      <tr>
+        <td class="mono">${fmtTime(candidate.updatedAt)}</td>
+        <td><b>${escapeHtml(candidate.symbol || (candidate.mint || '').slice(0,6))}</b></td>
+        ${caCell(candidate.mint)}
+        <td>${_strategyCondition(ageText, conditions.ageWindow, '仅在迁移后3分钟至3分15秒评估一次')}</td>
+        <td>${_strategyCondition(fdvText, conditions.fdv, '动态FDV使用最新有效池价')}</td>
+        <td>${_strategyCondition(buyersText, conditions.buyers1m, '滚动前60秒独立买入钱包')}</td>
+        <td>${fmtMoney(minute.volumeUsd || 0)}</td>
         <td>${_strategyStage(candidate, r.now || Date.now())}</td>
       </tr>`;
   }).join('');

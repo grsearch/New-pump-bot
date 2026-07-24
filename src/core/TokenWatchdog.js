@@ -31,9 +31,13 @@ class TokenWatchdog {
       ? parseInt(process.env.MAX_WATCH_DURATION_MS, 10)
       : config.strategy.maxWatchDurationMs;
     this.maxTokenAgeMs = config.strategy.maxTokenAgeMs;
-    this.minFdVUsd = process.env.MIN_FDV_USD != null
+    const configuredMinFdvUsd = process.env.MIN_FDV_USD != null
       ? parseFloat(process.env.MIN_FDV_USD)
       : config.strategy.minFdVUsd;
+    this.minFdVUsd = Math.max(
+      Number.isFinite(configuredMinFdvUsd) ? configuredMinFdvUsd : 0,
+      config.strategy.positionFdvExitUsd || 0,
+    );
     this.maxFdVUsd = process.env.MAX_FDV_USD != null
       ? parseFloat(process.env.MAX_FDV_USD)
       : (config.strategy.maxFdVUsd || 0);

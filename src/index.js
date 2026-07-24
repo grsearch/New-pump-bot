@@ -49,17 +49,15 @@ async function main() {
   console.log('🎯 Dump Sniper V3.17.20 starting...');
   console.log(`Mode: ${config.DRY_RUN ? 'DRY_RUN' : '⚠️  LIVE TRADING ⚠️'}`);
   console.log(`Position: ${config.strategy.positionSizeSol} SOL`);
-  console.log(`TP: +${config.strategy.takeProfitPct}% (immediate, no confirm)`);
-  console.log(`Trailing: arm at +${config.strategy.trailingActivatePct}% / drawdown ${config.strategy.trailingDrawdownPct}% (priority: TP > trailing)`);
+  console.log(`Fixed TP: ${config.strategy.takeProfitPct > 0 ? `+${config.strategy.takeProfitPct}%` : 'disabled'}`);
+  console.log(`Trailing: arm at +${config.strategy.trailingActivatePct}% / drawdown ${config.strategy.trailingDrawdownPct}%`);
   console.log('RSI exit: disabled');
   console.log(
-    `Entry: ACTIVITY_FLOW ` +
-      `(${config.activityFlow.entryMode}: 1m volume>=${config.activityFlow.minVolume1mSol.toFixed(2)}SOL ` +
-      `(~$${Math.round(config.activityFlow.minVolume1mUsd)}), ` +
-      `buyers>=${config.activityFlow.breadthMinUniqueBuyers1m}, ` +
-      `newBuyers>=${config.activityFlow.breadthMinNewBuyers1m}, ` +
-      `avgBuy5<=${config.activityFlow.breadthMaxAvgBuyPerWallet5sSol}SOL, ` +
-      `support>=${config.activityFlow.breadthMinConfirmations}/5 + 2x confirmation)`,
+    `Entry: ${config.activityFlow.entryMode} ` +
+      `(one-shot at AGE=${config.activityFlow.age3EntryTargetMs / 1000}s` +
+      `+${config.activityFlow.age3EntryToleranceMs / 1000}s tolerance, ` +
+      `FDV>=$${Math.round(config.activityFlow.age3MinFdvUsd)}, ` +
+      `buyers60>=${config.activityFlow.age3MinUniqueBuyers1m})`,
   );
   console.log(config.strategy.flowReversalExitEnabled
     ? `Flow exit: ${config.strategy.flowReversalExitMode} ` +
@@ -70,10 +68,12 @@ async function main() {
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
-      `migrationAge<=${config.strategy.maxMintAgeHours}h ` +
+      `migrationAge<=${config.strategy.maxMintAgeMinutes}min ` +
       `(check every ${watchdogCheckIntervalMs / 60_000}min)`,
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
+  console.log(`Exit mode: ${config.strategy.exitMode}`);
+  console.log(`FDV exit: <$${Math.round(config.strategy.positionFdvExitUsd)} (sell then remove)`);
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
@@ -235,15 +235,11 @@ async function main() {
   console.log(
     `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
       `mode=${activityFlowTracker.entryMode} ` +
-      `1m>=${activityFlowTracker.minVolume1mSol.toFixed(2)}SOL(~$${Math.round(activityFlowTracker.minVolume1mUsd)}) ` +
-      `arm=${activityFlowTracker.armWindowMs / 1000}s ` +
-      `buyers>=${activityFlowTracker.breadthMinUniqueBuyers1m} ` +
-      `newBuyers>=${activityFlowTracker.breadthMinNewBuyers1m} ` +
-      `avgBuy5<=${activityFlowTracker.breadthMaxAvgBuyPerWallet5sSol}SOL ` +
-      `price60<=${activityFlowTracker.breadthMaxPriceChange60sPct}% ` +
-      `entry=breadth-score-${activityFlowTracker.breadthMinConfirmations}/5+2x-confirm ` +
-      `warmup=${activityFlowTracker.breadthWarmupMs / 1000}s ` +
-      `cooldown=${activityFlowTracker.breadthCooldownMs / 1000}s ` +
+      `age=${activityFlowTracker.age3EntryTargetMs / 1000}s` +
+      `+${activityFlowTracker.age3EntryToleranceMs / 1000}s ` +
+      `fdv>=$${Math.round(activityFlowTracker.age3MinFdvUsd)} ` +
+      `buyers60>=${activityFlowTracker.age3MinUniqueBuyers1m} ` +
+      `entry=one-shot ` +
       `replaceDump=${activityFlowTracker.replaceDumpSignal}`,
   );
   console.log(
@@ -417,7 +413,7 @@ async function main() {
   }, 3600_000);
 
   console.log(
-    `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeHours}h ` +
+    `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeMinutes}min ` +
     '(open positions are retained until exit)',
   );
 
@@ -974,6 +970,18 @@ async function main() {
     signalEngine.lastTriggerTs.set(pos.mint, Date.now());
     if (config.strategy.rebuyCooldownMs > 0) {
       signalEngine._exitCooldowns.set(pos.mint, Date.now() + config.strategy.rebuyCooldownMs);
+    }
+    if (pos.removeAfterExit && !positionManager.hasOpenPosition(pos.mint)) {
+      tokenRegistry.removeToken(pos.mint);
+      tickStream.updateSubscription(tokenRegistry.listActive().map((token) => token.mint));
+      server.broadcast({
+        type: 'tokenRemoved',
+        mint: pos.mint,
+        reason: pos.exitReason,
+      });
+      console.log(
+        `[main] removed ${pos.symbol || pos.mint.slice(0, 6)} after ${pos.exitReason}`,
+      );
     }
     server.broadcast({ type: 'positionClosed', position: pos });
   });

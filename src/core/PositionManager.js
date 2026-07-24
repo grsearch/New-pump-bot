@@ -31,6 +31,7 @@ const { config } = require('../config');
 const { getMonitor } = require('../monitor/HealthMonitor');
 const { priceDetailsFromRawState } = require('../utils/pumpSwapPricing');
 const { evaluateFlowTurnExit } = require('./FlowCandleStrategy');
+const { normalizeUnixMs } = require('../utils/migrationTime');
 
 const monitor = getMonitor();
 monitor.registerModule('PositionManager', { staleMs: 10_000, label: 'Position Manager' });
@@ -461,6 +462,9 @@ class PositionManager extends EventEmitter {
         // EMA 策略：从 DB 持久化字段恢复（不再靠环境变量推断）
         isEmaStrategy: false,  // EMA removed
         isAddOn: !!row.is_addon,
+        removeAfterExit: ['TOKEN_AGE_LIMIT', 'FDV_FLOOR_EXIT'].includes(
+          row.exit_intent || row.exit_reason,
+        ),
       };
       // 已经在 sell flow 中：标记 exiting=true 防止重新触发 _exit
       if (pos.status === 'sell_pending' || pos.status === 'sell_confirming') {
@@ -991,6 +995,24 @@ class PositionManager extends EventEmitter {
 
       this._fillPreVolFallback(pos);
       const age = now - pos.openedAt;
+      const tokenInfo = this.tokenRegistry?.getToken(pos.mint);
+      const migrationTime = normalizeUnixMs(tokenInfo?.migration_time);
+      const tokenAgeMs = migrationTime ? now - migrationTime : null;
+      if (
+        tokenAgeMs != null &&
+        config.strategy.maxTokenAgeMs > 0 &&
+        tokenAgeMs >= config.strategy.maxTokenAgeMs
+      ) {
+        pos.removeAfterExit = true;
+        const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
+        console.log(
+          `[PositionManager] TOKEN_AGE_LIMIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `age=${(tokenAgeMs / 60000).toFixed(1)}min ` +
+          `limit=${config.strategy.maxMintAgeMinutes}min; sell then remove`,
+        );
+        this._exitForCondition(pos, lastPrice, 'TOKEN_AGE_LIMIT');
+        continue;
+      }
       // Strategy V5 uses peak only for the 90-second no-bounce rule;
       // maxHoldMs remains an unconditional hard timeout.
       const peakPnlForTimeout = (pos.highWaterMark && pos.entryPrice > 0)
@@ -1031,7 +1053,10 @@ class PositionManager extends EventEmitter {
 
       // v3.18: EARLY_LOW_PEAK_CUT — 死币早砍,连续时间覆盖
       // v3.32b: 可通过 EARLY_LOW_PEAK_CUT_ENABLED=0 禁用
-      if (process.env.EARLY_LOW_PEAK_CUT_ENABLED === '1') {
+      if (
+        config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+        process.env.EARLY_LOW_PEAK_CUT_ENABLED === '1'
+      ) {
       // 依据:6/2 LOW_PEAK_TIMEOUT 漏网 132 笔死币扛 18-20min 亏 -8~-11%
       // peak<1% 124笔 扛18.3min -11.5% -> 2min 该切
       // peak 1-2% 34笔 扛19.4min -8.2% -> 3min 该切
@@ -1489,6 +1514,26 @@ class PositionManager extends EventEmitter {
     pos._lastTickPrice = price;
     const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
 
+    const fdvFloorUsd = config.strategy.positionFdvExitUsd || 0;
+    const dynamicFdvUsd = (
+      Number.isFinite(price) &&
+      price > 0 &&
+      config.strategy.pumpTokenSupply > 0 &&
+      config.strategy.solPriceUsd > 0
+    )
+      ? price * config.strategy.pumpTokenSupply * config.strategy.solPriceUsd
+      : 0;
+    if (fdvFloorUsd > 0 && dynamicFdvUsd > 0 && dynamicFdvUsd < fdvFloorUsd) {
+      pos.removeAfterExit = true;
+      console.warn(
+        `[PositionManager] FDV_FLOOR_EXIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
+        `fdv=$${Math.round(dynamicFdvUsd)}<$${Math.round(fdvFloorUsd)} ` +
+        `pnl=${pnlPct.toFixed(2)}%; sell then remove`,
+      );
+      this._exitForCondition(pos, price, 'FDV_FLOOR_EXIT');
+      return;
+    }
+
     // Absolute loss cap: no stabilization or legacy emergency-stop grace delay.
     const fixedStopPct = config.strategy.fixedStopLossPct;
     if (fixedStopPct < 0 && pnlPct <= fixedStopPct) {
@@ -1720,7 +1765,8 @@ class PositionManager extends EventEmitter {
     // Buy price broke below pre-buy 5min range support + PnL < -10% + trailing not armed
     // v3.24: disabled via RANGE_STOP_ENABLED=0
     {
-      const rangeStopEnabled = parseInt(process.env.RANGE_STOP_ENABLED || '0', 10);
+      const rangeStopEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+        parseInt(process.env.RANGE_STOP_ENABLED || '0', 10);
       const rangeSupportPct = parseFloat(process.env.RANGE_STOP_SUPPORT_TOLERANCE_PCT || '3');
       const rangeStopPnlThreshold = parseFloat(process.env.RANGE_STOP_PNL_THRESHOLD_PCT || '-10');
       if (rangeStopEnabled && pos.rangeSupport && pos.rangeSupport > 0 && !pos.trailingArmed &&
@@ -1744,7 +1790,8 @@ class PositionManager extends EventEmitter {
     // Price breaks below 5-minute moving average + PnL < threshold + trailing not armed
     // Data: break+PnL<-8% saves avg 0.7% vs holding, 66% of broken-trend trades continue falling
     {
-      const trendStopEnabled = process.env.TREND_STOP_ENABLED === '1';
+      const trendStopEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+        process.env.TREND_STOP_ENABLED === '1';
       const trendStopPnlThreshold = parseFloat(process.env.TREND_STOP_PNL_THRESHOLD_PCT || '-8');
       const trendStopMaWindow = parseInt(process.env.TREND_STOP_MA_WINDOW_SEC || '300') * 1000; // default 5min
       const trendStopMinAge = parseInt(process.env.TREND_STOP_MIN_AGE_SEC || '120') * 1000; // default 2min
@@ -1782,7 +1829,8 @@ class PositionManager extends EventEmitter {
     // 目的：捕获5-10%的"脉冲后回撤"行情，防止涨了不到10%就跌回来
     // 不在窗口内或涨幅超过10%的交给trailing stop处理
     {
-      const timedTpEnabled = process.env.TIMED_TP_ENABLED === '1';
+      const timedTpEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+        process.env.TIMED_TP_ENABLED === '1';
       if (timedTpEnabled && !pos.trailingArmed) {
         // 阶梯阈值：越晚持仓时间，阈值越高（给拉盘更多空间触发trailing）
         const windows = [

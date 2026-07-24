@@ -16,8 +16,9 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
-// Keep the production AGE limit fixed even when an older .env still says 0 or 0.5.
-const maxMintAgeHours = 1;
+// Production only trades the first ten minutes after confirmed migration.
+const maxMintAgeMinutes = 10;
+const maxMintAgeHours = maxMintAgeMinutes / 60;
 
 const config = {
   // ============ Mode ============
@@ -25,6 +26,7 @@ const config = {
 
   // ============ Strategy ============
   strategy: {
+    exitMode: 'AGE3_TRAILING_V7',
     // 触发条件（DumpDetector）
     // v3.17.20 用户调参：MIN_SELL_SOL 6.0, MIN_PRICE_IMPACT_PCT 10.0
     minSellSol: parseFloat(process.env.MIN_SELL_SOL || '20'),
@@ -57,7 +59,7 @@ const config = {
     // 当前固定止盈：达到 TAKE_PROFIT_PCT 立即卖，不等双确认。
     //   优先级高于移动止盈（_checkExit 里先检查 TP 再检查 trailing）。
     //   tpConfirmCount/tpConfirmMinGapMs 保留字段但已不在固定止盈路径使用。
-    takeProfitPct: parseFloat(process.env.TAKE_PROFIT_PCT || '100'),
+    takeProfitPct: 0,
     tpConfirmCount: parseInt(process.env.TP_CONFIRM_COUNT || '2', 10),
     tpConfirmMinGapMs: parseInt(process.env.TP_CONFIRM_MIN_GAP_MS || '300', 10),
 
@@ -66,8 +68,8 @@ const config = {
     //   trailingDrawdownPct: armed 后，价格从 HWM 回撤此 % 立即 SELL
     //   trailingMinHwmAgeMs: HWM 必须稳定至少此毫秒数（防单 tick 污染）
     //   设 trailingActivatePct=0 或 trailingDrawdownPct=0 可禁用移动止盈
-    trailingActivatePct: parseFloat(process.env.TRAILING_ACTIVATE_PCT || '20'),
-    trailingDrawdownPct: parseFloat(process.env.TRAILING_DRAWDOWN_PCT || '10'),
+    trailingActivatePct: 50,
+    trailingDrawdownPct: 10,
     trailingMinHwmAgeMs: parseInt(process.env.TRAILING_MIN_HWM_AGE_MS || '2000', 10),
 
     // RSI 超买退出：使用当前未收盘的 1 分钟 RSI，便于在 swap 到达时立即响应。
@@ -97,22 +99,20 @@ const config = {
     //   - 从峰值真的跌此 % 才认作灾难（不是简单的相对 entryPrice 跌幅）
     //   - 20% 既能放过"自买入回归"（通常 ≤ 10-12%），又能抓真的暴跌
     //   设 0 禁用 stabilization 期内的 emergency_stop（极端 dangerous，不推荐）
-    stabilizationEmergencyDrawdownPct: parseFloat(
-      process.env.STABILIZATION_EMERGENCY_DRAWDOWN_PCT || '0',
-    ),
+    stabilizationEmergencyDrawdownPct: 0,
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: parseFloat(process.env.FIXED_STOP_LOSS_PCT || '-20'),
-    emergencyStopLossPct: parseFloat(process.env.EMERGENCY_STOP_LOSS_PCT || '0'),
+    fixedStopLossPct: 0,
+    emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
     // 智能规则: trailing已armed时不触发(trailing自行处理回撤), 只救trailing永远不armed的死扛仓位
     // stabilization期内不触发, 持仓>5min后才触发
     // 0=禁用, 负数=止损百分比(如-25表示跌破-25%止损)
-    volLowEmergencyStopPct: parseFloat(process.env.VOL_LOW_EMERGENCY_STOP_PCT || '0'),
-    volMidEmergencyStopPct: parseFloat(process.env.VOL_MID_EMERGENCY_STOP_PCT || '0'),
-    volHighEmergencyStopPct: parseFloat(process.env.VOL_HIGH_EMERGENCY_STOP_PCT || '0'),
+    volLowEmergencyStopPct: 0,
+    volMidEmergencyStopPct: 0,
+    volHighEmergencyStopPct: 0,
     // 智能止损最小持仓时间(ms) — 避免刚买入就被止损
     smartStopGraceMs: parseInt(process.env.SMART_STOP_GRACE_MS || '300000', 10),  // 默认5min
 
@@ -122,16 +122,16 @@ const config = {
     //   v3.17.20: 设 0 禁用 TIMEOUT 卖出，持仓靠 TP/Trailing/Emergency 退出
     //   v3.17.32: 恢复为 4h 强制退出(数据回测: 4h+ 只有 30% 胜率, 平均亏 -13%)
     // Activity strategies hard timeout: close every remaining position after 180 seconds.
-    maxHoldMs: parseInt(process.env.MAX_HOLD_MS || '180000', 10),
+    maxHoldMs: 0,
 
     // Activity strategies exit quiet positions before the hard 180s timeout.
-    noBounceExitEnabled: (process.env.NO_BOUNCE_EXIT_ENABLED ?? 'true').toLowerCase() === 'true',
+    noBounceExitEnabled: false,
     noBounceExitMs: parseInt(process.env.NO_BOUNCE_EXIT_MS || '90000', 10),
     noBounceMaxPeakPnlPct: parseFloat(process.env.NO_BOUNCE_MAX_PEAK_PNL_PCT || '5'),
     noBounceFlowWindowMs: parseInt(process.env.NO_BOUNCE_FLOW_WINDOW_MS || '30000', 10),
-    lowPeakTimeoutMs: parseInt(process.env.LOW_PEAK_TIMEOUT_MS || '0', 10),
+    lowPeakTimeoutMs: 0,
     // Exit when two closed 15-second net-flow values turn positive to negative.
-    flowReversalExitEnabled: true,
+    flowReversalExitEnabled: false,
     flowReversalExitMode: 'FLOW_TURN_15S',
     flowReversalExitRequireSellerBreadth:
       (process.env.FLOW_REVERSAL_EXIT_REQUIRE_SELLER_BREADTH ?? 'true').toLowerCase() === 'true',
@@ -159,10 +159,10 @@ const config = {
     //   defenseActivateMs: 持仓超过此时间后激活防御模式 (默认 20min)
     //   defenseTrailingDrawdownPct: 防御 trailing 回撤阈值 (默认 3%)
     //   defenseStopLossPct: 防御模式止损 (PnL% 低于此值立即卖出, 默认 -10%)
-    defenseActivateMs: parseInt(process.env.DEFENSE_ACTIVATE_MS || '0', 10),
-    defenseTrailingDrawdownPct: parseFloat(process.env.DEFENSE_TRAILING_DRAWDOWN_PCT || '0'),
-    defenseStopLossPct: parseFloat(process.env.DEFENSE_STOP_LOSS_PCT || '0'),
-    defenseProfitActivatePct: parseFloat(process.env.DEFENSE_PROFIT_ACTIVATE_PCT || '0'),
+    defenseActivateMs: 0,
+    defenseTrailingDrawdownPct: 0,
+    defenseStopLossPct: 0,
+    defenseProfitActivatePct: 0,
 
     // 滑点
     // BUY now uses buy_exact_quote_in. BUY_SLIPPAGE_BPS remains telemetry-only;
@@ -216,7 +216,11 @@ const config = {
     maxWatchDurationMs: parseInt(process.env.MAX_WATCH_DURATION_MS || '0', 10),
     // AGE is measured from the confirmed Pump migration time. Unknown AGE is retained.
     maxMintAgeHours,
+    maxMintAgeMinutes,
     maxTokenAgeMs: maxMintAgeHours * 60 * 60 * 1000,
+    positionFdvExitUsd: 20000,
+    pumpTokenSupply: parseFloat(process.env.PUMP_TOKEN_SUPPLY || '1000000000'),
+    solPriceUsd: solPriceUsdForConfig,
     // v3.17.20: FDV lower bound in USD; refreshed once per minute by TokenWatchdog.
     minFdVUsd: parseFloat(process.env.MIN_FDV_USD || '15000'),
     // Birdeye liquidity in USD. Shared by discovery admission and watchdog removal.
@@ -227,15 +231,19 @@ const config = {
 
   // ============ Activity-flow entry ============
   activityFlow: {
-    // Strategy V6: arm on broad buyer participation, then confirm short-window breadth/acceleration.
-    enabled:
-      !activityFlowForceDisabled &&
-      (process.env.ACTIVITY_FLOW_ENABLED ?? process.env.ORDER_FLOW_ENABLED ?? 'true').toLowerCase() === 'true',
-    replaceDumpSignal:
-      !activityFlowForceDisabled &&
-      (process.env.ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL ?? process.env.ORDER_FLOW_REPLACE_DUMP_SIGNAL ?? 'true')
-        .toLowerCase() === 'true',
-    entryMode: String(process.env.ACTIVITY_FLOW_ENTRY_MODE || 'BREADTH_BURST_V6').toUpperCase(),
+    // Strategy V7: make one decision at migration AGE 3m.
+    // V7 is the live strategy, not a shadow feed. FORCE_DISABLED remains the emergency kill switch.
+    enabled: !activityFlowForceDisabled,
+    replaceDumpSignal: !activityFlowForceDisabled,
+    entryMode: 'AGE3_BREADTH_V7',
+    age3EntryTargetMs: parseInt(process.env.AGE3_ENTRY_TARGET_MS || '180000', 10),
+    age3EntryToleranceMs: parseInt(process.env.AGE3_ENTRY_TOLERANCE_MS || '15000', 10),
+    age3MinFdvUsd: parseFloat(process.env.AGE3_ENTRY_MIN_FDV_USD || '40000'),
+    age3MinUniqueBuyers1m: parseInt(
+      process.env.AGE3_ENTRY_MIN_UNIQUE_BUYERS_1M || '17',
+      10,
+    ),
+    age3TokenSupply: parseFloat(process.env.PUMP_TOKEN_SUPPLY || '1000000000'),
     minVolume1mUsd: parseFloat(process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_USD || '3000'),
     minVolume1mSol: parseFloat(
       process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_SOL || String(activityFlow1mMinVolumeSolDefault),

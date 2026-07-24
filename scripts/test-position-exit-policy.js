@@ -4,6 +4,11 @@ process.env.RSI_1M_EXIT_ENABLED = 'false';
 process.env.RSI_1M_EXIT_THRESHOLD = '80';
 process.env.ACTIVITY_FLOW_RSI_1M_MIN_BARS = '8';
 process.env.FIXED_STOP_LOSS_PCT = '-20';
+process.env.EMERGENCY_STOP_LOSS_PCT = '-15';
+process.env.RANGE_STOP_ENABLED = '1';
+process.env.TREND_STOP_ENABLED = '1';
+process.env.TIMED_TP_ENABLED = '1';
+process.env.EARLY_LOW_PEAK_CUT_ENABLED = '1';
 
 const assert = require('assert');
 const Module = require('module');
@@ -67,10 +72,14 @@ function rsiSnapshot(live, overrides = {}) {
 function run() {
   const mint = 'TestMint111111111111111111111111111111111';
   assert.strictEqual(config.strategy.rebuyCooldownMs, 300_000, 'default post-sale cooldown must be 5 minutes');
-  assert.strictEqual(config.strategy.trailingActivatePct, 20);
+  assert.strictEqual(config.strategy.exitMode, 'AGE3_TRAILING_V7');
+  assert.strictEqual(config.strategy.trailingActivatePct, 50);
   assert.strictEqual(config.strategy.trailingDrawdownPct, 10);
-  assert.strictEqual(config.strategy.takeProfitPct, 100);
-  assert.strictEqual(config.strategy.fixedStopLossPct, -20);
+  assert.strictEqual(config.strategy.takeProfitPct, 0);
+  assert.strictEqual(config.strategy.fixedStopLossPct, 0);
+  assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
+  assert.strictEqual(config.strategy.maxTokenAgeMs, 600_000);
+  assert.strictEqual(config.strategy.positionFdvExitUsd, 20_000);
 
   {
     const manager = managerWith();
@@ -92,11 +101,13 @@ function run() {
       stabilizing: true,
       _stabilizeSamples: [],
     });
-    const second = position('p2', mint, { entryPrice: 1, highWaterMark: 1 });
-    const manager = managerWith(first, second);
-    manager._checkExit('p1', 0.79);
-    assert.deepStrictEqual(manager._exitCalls.map((x) => x.id), ['p1', 'p2']);
-    assert(manager._exitCalls.every((x) => x.reason === 'FIXED_STOP_LOSS'));
+    const manager = managerWith(first);
+    manager._checkExit('p1', 0.5);
+    assert.strictEqual(
+      manager._exitCalls.length,
+      0,
+      'legacy fixed and emergency stops must stay disabled despite old environment values',
+    );
   }
 
   {
@@ -111,7 +122,7 @@ function run() {
     });
     const manager = managerWith(first);
     manager._checkExit('p1', 0.81);
-    assert.strictEqual(manager._exitCalls.length, 0, 'fixed stop must not trigger above -20%');
+    assert.strictEqual(manager._exitCalls.length, 0, 'fixed stop must remain disabled');
   }
 
   {
@@ -124,17 +135,46 @@ function run() {
     const now = Date.now();
     const first = position('p1', mint, {
       entryPrice: 1,
-      highWaterMark: 1.2,
+      highWaterMark: 1.5,
       openedAt: now - 10_000,
       reconciledAt: now - 10_000,
       trailingArmed: true,
-      _armedHwm: 1.2,
+      _armedHwm: 1.5,
       _armedHwmTs: now - 5_000,
     });
     const manager = managerWith(first);
-    manager._checkExit('p1', 1.079);
-    assert.strictEqual(manager._exitCalls.length, 1, '10% drawdown after +20% trailing arm should sell');
+    manager._checkExit('p1', 1.349);
+    assert.strictEqual(manager._exitCalls.length, 1, '10% drawdown after +50% trailing arm should sell');
     assert.strictEqual(manager._exitCalls[0].reason, 'TRAILING_STOP');
+  }
+
+  {
+    const first = position('p1', mint, {
+      entryPrice: 3e-7,
+      highWaterMark: 3e-7,
+      openedAt: Date.now(),
+    });
+    const manager = managerWith(first);
+    manager._checkExit('p1', 2.7e-7);
+    assert.strictEqual(manager._exitCalls[0].reason, 'FDV_FLOOR_EXIT');
+    assert.strictEqual(first.removeAfterExit, true);
+  }
+
+  {
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1,
+      openedAt: Date.now(),
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.9 };
+    manager.tokenRegistry = {
+      getToken: () => ({ migration_time: Date.now() - 600_100 }),
+    };
+    manager._fillPreVolFallback = () => {};
+    manager._tick();
+    assert.strictEqual(manager._exitCalls[0].reason, 'TOKEN_AGE_LIMIT');
+    assert.strictEqual(first.removeAfterExit, true);
   }
 
   {

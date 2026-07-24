@@ -1368,6 +1368,14 @@ ${snapshotColumnsSql},
     } catch (_) { return -1; }
   }
 
+  hasSuccessfulBuyForMint(mint) {
+    const row = this.db.prepare(
+      "SELECT 1 AS found FROM trades " +
+        "WHERE mint = ? AND side = 'BUY' AND success = 1 AND dry_run = 0 LIMIT 1",
+    ).get(mint);
+    return !!row;
+  }
+
   /**
    * Delete price samples older than cutoffMs
    */

@@ -3,6 +3,7 @@
 const EventEmitter = require('events');
 const { config } = require('../config');
 const { evaluateFlowAccelerationEntry } = require('./FlowCandleStrategy');
+const { normalizeUnixMs } = require('../utils/migrationTime');
 
 function boolEnv(name, fallback) {
   const raw = process.env[name];
@@ -59,8 +60,8 @@ class OrderFlowTracker extends EventEmitter {
       boolEnv('ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL', boolEnv('ORDER_FLOW_REPLACE_DUMP_SIGNAL', true));
 
     const requestedEntryMode = String(
-      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'BREADTH_BURST_V6') ||
-        'BREADTH_BURST_V6',
+      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'AGE3_BREADTH_V7') ||
+        'AGE3_BREADTH_V7',
     ).toUpperCase();
     // Existing production .env files still name V5. Remap them so deployment cannot silently keep old entry rules.
     this.entryMode = requestedEntryMode === 'ACTIVITY_BURST_V5' ? 'BREADTH_BURST_V6' : requestedEntryMode;
@@ -192,6 +193,26 @@ class OrderFlowTracker extends EventEmitter {
       opts.breadthWarmupMs ??
       flowConfig.breadthWarmupMs ??
       numEnv('BREADTH_BURST_WARMUP_MS', 60_000);
+    this.age3EntryTargetMs =
+      opts.age3EntryTargetMs ??
+      flowConfig.age3EntryTargetMs ??
+      numEnv('AGE3_ENTRY_TARGET_MS', 180_000);
+    this.age3EntryToleranceMs =
+      opts.age3EntryToleranceMs ??
+      flowConfig.age3EntryToleranceMs ??
+      numEnv('AGE3_ENTRY_TOLERANCE_MS', 15_000);
+    this.age3MinFdvUsd =
+      opts.age3MinFdvUsd ??
+      flowConfig.age3MinFdvUsd ??
+      numEnv('AGE3_ENTRY_MIN_FDV_USD', 40_000);
+    this.age3MinUniqueBuyers1m =
+      opts.age3MinUniqueBuyers1m ??
+      flowConfig.age3MinUniqueBuyers1m ??
+      numEnv('AGE3_ENTRY_MIN_UNIQUE_BUYERS_1M', 17);
+    this.age3TokenSupply =
+      opts.age3TokenSupply ??
+      flowConfig.age3TokenSupply ??
+      numEnv('PUMP_TOKEN_SUPPLY', 1_000_000_000);
     this.confirmMinBuyTrades5s =
       opts.confirmMinBuyTrades5s ??
       flowConfig.confirmMinBuyTrades5s ??
@@ -351,6 +372,7 @@ class OrderFlowTracker extends EventEmitter {
       this.entryMode === 'FLOW_ACCEL_15S' ||
       this.entryMode === 'ACTIVITY_BURST_V5' ||
       this.entryMode === 'BREADTH_BURST_V6' ||
+      this.entryMode === 'AGE3_BREADTH_V7' ||
       ev.side === 'BUY'
     ) {
       this._trySignal(state, ev);
@@ -369,6 +391,9 @@ class OrderFlowTracker extends EventEmitter {
     const summary = {
       active: 0,
       volumeReady: 0,
+      windowReady: 0,
+      fdvReady: 0,
+      buyersReady: 0,
       armReady: 0,
       armed: 0,
       waiting: 0,
@@ -389,7 +414,27 @@ class OrderFlowTracker extends EventEmitter {
       let armReady;
       let triggerReady;
       let trigger;
-      if (this.entryMode === 'BREADTH_BURST_V6') {
+      let age3 = null;
+      if (this.entryMode === 'AGE3_BREADTH_V7') {
+        age3 = this._age3Metrics(mint, latest.price, now, s60);
+        conditions = {
+          ageReady: age3.tokenAgeMs != null && age3.tokenAgeMs >= this.age3EntryTargetMs,
+          ageWindow:
+            age3.tokenAgeMs != null &&
+            age3.tokenAgeMs >= this.age3EntryTargetMs &&
+            age3.tokenAgeMs <= this.age3EntryTargetMs + this.age3EntryToleranceMs,
+          fdv: age3.fdvUsd >= this.age3MinFdvUsd,
+          buyers1m: s60.uniqueBuyers >= this.age3MinUniqueBuyers1m,
+        };
+        armReady = conditions.ageWindow && state.age3EvaluatedAt == null;
+        triggerReady = armReady && conditions.fdv && conditions.buyers1m;
+        trigger = {
+          tokenAgeMs: age3.tokenAgeMs,
+          fdvUsd: round(age3.fdvUsd, 2),
+          evaluatedAt: state.age3EvaluatedAt,
+          decision: state.age3Decision,
+        };
+      } else if (this.entryMode === 'BREADTH_BURST_V6') {
         const historyAgeMs = Math.max(0, now - (state.firstSeenTs ?? now));
         const breadth = this._breadthMetrics(s5, s10, s60, historyAgeMs);
         conditions = {
@@ -455,7 +500,13 @@ class OrderFlowTracker extends EventEmitter {
         state.lastArmCancelTs != null && now - state.lastArmCancelTs <= this.window15Ms;
 
       let stage = 'monitoring';
-      if (recentlySignaled) stage = 'signaled';
+      if (this.entryMode === 'AGE3_BREADTH_V7') {
+        if (state.age3Decision === 'signaled') stage = 'signaled';
+        else if (state.age3EvaluatedAt != null) stage = 'cancelled';
+        else if (conditions.ageWindow) stage = triggerReady ? 'ready' : 'waiting';
+        else if (!conditions.ageReady) stage = 'monitoring';
+        else stage = 'cancelled';
+      } else if (recentlySignaled) stage = 'signaled';
       else if (armed && state.triggerConfirmFirstTs != null && triggerReady) stage = 'confirming';
       else if (armed && state.lastArmWaitReason) stage = 'waiting';
       else if (armed) stage = 'armed';
@@ -464,6 +515,9 @@ class OrderFlowTracker extends EventEmitter {
 
       summary.active++;
       if (conditions.volume1m) summary.volumeReady++;
+      if (conditions.ageWindow) summary.windowReady++;
+      if (conditions.fdv) summary.fdvReady++;
+      if (conditions.buyers1m) summary.buyersReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
       if (stage === 'waiting') summary.waiting++;
@@ -484,6 +538,9 @@ class OrderFlowTracker extends EventEmitter {
         lastSignalTs: state.lastV5SignalTs || null,
         cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
         waitReason: armed ? state.lastArmWaitReason : null,
+        decision: state.age3Decision,
+        tokenAgeMs: age3?.tokenAgeMs ?? null,
+        fdvUsd: age3?.fdvUsd ?? null,
         conditions,
         s60: {
           ...this._compactStats(s60),
@@ -496,11 +553,20 @@ class OrderFlowTracker extends EventEmitter {
     }
 
     const stageRank = { signaled: 6, confirming: 5, waiting: 4, armed: 3, ready: 2, cancelled: 1, monitoring: 0 };
-    candidates.sort((a, b) =>
-      (stageRank[b.stage] - stageRank[a.stage]) ||
-      (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
-      (b.s60.volumeUsd - a.s60.volumeUsd) ||
-      (b.updatedAt - a.updatedAt));
+    candidates.sort((a, b) => {
+      const stageDelta = stageRank[b.stage] - stageRank[a.stage];
+      if (stageDelta) return stageDelta;
+      if (this.entryMode === 'AGE3_BREADTH_V7') {
+        const aDistance = Math.abs((a.tokenAgeMs ?? 0) - this.age3EntryTargetMs);
+        const bDistance = Math.abs((b.tokenAgeMs ?? 0) - this.age3EntryTargetMs);
+        return (aDistance - bDistance) ||
+          ((b.s60.uniqueBuyers || 0) - (a.s60.uniqueBuyers || 0)) ||
+          (b.updatedAt - a.updatedAt);
+      }
+      return (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
+        (b.s60.volumeUsd - a.s60.volumeUsd) ||
+        (b.updatedAt - a.updatedAt);
+    });
 
     return {
       mode: this.entryMode,
@@ -522,6 +588,10 @@ class OrderFlowTracker extends EventEmitter {
         confirmMinGapMs: this.triggerConfirmMinGapMs,
         confirmMaxGapMs: this.triggerConfirmMaxGapMs,
         buyers1m: this.breadthMinUniqueBuyers1m,
+        age3TargetMs: this.age3EntryTargetMs,
+        age3ToleranceMs: this.age3EntryToleranceMs,
+        age3MinFdvUsd: this.age3MinFdvUsd,
+        age3MinUniqueBuyers1m: this.age3MinUniqueBuyers1m,
         newBuyers1m: this.breadthMinNewBuyers1m,
         buyTrades1m: this.breadthMinBuyCount1m,
         breadthLargestBuyShare1m: this.breadthMaxLargestBuyShare1m,
@@ -562,6 +632,10 @@ class OrderFlowTracker extends EventEmitter {
         lastArmWaitTs: null,
         lastArmWaitReason: null,
         lastV5SignalTs: null,
+        age3EvaluatedAt: null,
+        age3Decision: null,
+        age3TokenAgeMs: null,
+        age3FdvUsd: null,
         firstBuySeen: new Map(),
         lastWalletPruneTs: 0,
       };
@@ -660,6 +734,21 @@ class OrderFlowTracker extends EventEmitter {
     };
   }
 
+  _age3Metrics(mint, price, now, s60 = null) {
+    const tokenInfo = this.tokenRegistry ? this.tokenRegistry.getToken(mint) : null;
+    const migrationTs = normalizeUnixMs(tokenInfo?.migration_time);
+    const tokenAgeMs = migrationTs ? Math.max(0, now - migrationTs) : null;
+    const fdvUsd = Number.isFinite(price) && price > 0
+      ? price * this.age3TokenSupply * this.solPriceUsd
+      : 0;
+    return {
+      migrationTs,
+      tokenAgeMs,
+      fdvUsd,
+      uniqueBuyers1m: s60?.uniqueBuyers || 0,
+    };
+  }
+
   _breadthMetrics(s5, s10, s60, historyAgeMs = Number.POSITIVE_INFINITY) {
     const previousBuy5s = Math.max(0, s10.buySol - s5.buySol);
     const previousSell5s = Math.max(0, s10.sellSol - s5.sellSol);
@@ -722,6 +811,11 @@ class OrderFlowTracker extends EventEmitter {
     const cooldownUntil = this.cooldowns.get(ev.mint) || 0;
     if (cooldownUntil > wallNow) return;
 
+    if (this.entryMode === 'AGE3_BREADTH_V7') {
+      this._tryAge3BreadthV7(state, ev);
+      return;
+    }
+
     if (this.entryMode === 'BREADTH_BURST_V6') {
       this._tryBreadthBurstV6(state, ev, wallNow);
       return;
@@ -762,6 +856,71 @@ class OrderFlowTracker extends EventEmitter {
       s60,
       poolQuoteSol,
       entryPattern,
+    });
+  }
+
+  _tryAge3BreadthV7(state, ev) {
+    if (state.age3EvaluatedAt != null) return;
+
+    const s5 = this._stats(state, ev.ts, this.window5Ms);
+    const s10 = this._stats(state, ev.ts, this.window10Ms);
+    const s15 = this._stats(state, ev.ts, this.window15Ms);
+    const s30 = this._stats(state, ev.ts, this.window30Ms);
+    const s60 = this._stats(state, ev.ts, this.window60Ms);
+    const age3 = this._age3Metrics(ev.mint, ev.price, ev.ts, s60);
+    if (age3.tokenAgeMs == null) {
+      this._debugReject(ev.mint, ev.ts, 'migration time unavailable', s5, s15, s30, s60);
+      return;
+    }
+    if (age3.tokenAgeMs < this.age3EntryTargetMs) return;
+
+    state.age3EvaluatedAt = ev.ts;
+    state.age3TokenAgeMs = age3.tokenAgeMs;
+    state.age3FdvUsd = age3.fdvUsd;
+
+    const latestAllowedAgeMs = this.age3EntryTargetMs + this.age3EntryToleranceMs;
+    if (age3.tokenAgeMs > latestAllowedAgeMs) {
+      state.age3Decision = 'missed_window';
+      console.log(
+        `[ActivityFlow] AGE3_SKIP ${state.symbol || ev.mint.slice(0, 6)} ` +
+        `age=${(age3.tokenAgeMs / 1000).toFixed(1)}s>` +
+        `${(latestAllowedAgeMs / 1000).toFixed(1)}s`,
+      );
+      return;
+    }
+    if (age3.fdvUsd < this.age3MinFdvUsd) {
+      state.age3Decision = 'fdv_below_min';
+      console.log(
+        `[ActivityFlow] AGE3_REJECT ${state.symbol || ev.mint.slice(0, 6)} ` +
+        `fdv=$${Math.round(age3.fdvUsd)}<$${Math.round(this.age3MinFdvUsd)}`,
+      );
+      return;
+    }
+    if (s60.uniqueBuyers < this.age3MinUniqueBuyers1m) {
+      state.age3Decision = 'buyers_below_min';
+      console.log(
+        `[ActivityFlow] AGE3_REJECT ${state.symbol || ev.mint.slice(0, 6)} ` +
+        `buyers60=${s60.uniqueBuyers}<${this.age3MinUniqueBuyers1m}`,
+      );
+      return;
+    }
+
+    const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
+    state.age3Decision = 'signaled';
+    state.lastV5SignalTs = ev.ts;
+    this._emitBuySignal(state, ev, {
+      s5,
+      s10,
+      s15,
+      s30,
+      s60,
+      poolQuoteSol,
+      age3Pattern: {
+        migrationTs: age3.migrationTs,
+        tokenAgeMs: age3.tokenAgeMs,
+        fdvUsd: age3.fdvUsd,
+        uniqueBuyers1m: s60.uniqueBuyers,
+      },
     });
   }
 
@@ -1064,7 +1223,18 @@ class OrderFlowTracker extends EventEmitter {
   _emitBuySignal(
     state,
     ev,
-    { s5, s10, s15, s30, s60, poolQuoteSol, entryPattern = null, v5Pattern = null, v6Pattern = null },
+    {
+      s5,
+      s10,
+      s15,
+      s30,
+      s60,
+      poolQuoteSol,
+      entryPattern = null,
+      v5Pattern = null,
+      v6Pattern = null,
+      age3Pattern = null,
+    },
   ) {
     const flow = {
       s5: this._compactStats(s5),
@@ -1075,11 +1245,18 @@ class OrderFlowTracker extends EventEmitter {
       entry15s: entryPattern ? this._compactEntryPattern(entryPattern) : null,
       entryV5: v5Pattern ? this._compactV5Pattern(v5Pattern) : null,
       entryV6: v6Pattern ? this._compactV6Pattern(v6Pattern) : null,
+      entryAge3: age3Pattern ? {
+        migrationTs: age3Pattern.migrationTs,
+        tokenAgeMs: round(age3Pattern.tokenAgeMs, 0),
+        fdvUsd: round(age3Pattern.fdvUsd, 2),
+        uniqueBuyers1m: age3Pattern.uniqueBuyers1m,
+      } : null,
     };
     const entryStats = this.entryMode === 'FLOW_ACCEL_15S' ||
       this.entryMode === 'VOLUME_RATIO_1M' ||
       this.entryMode === 'ACTIVITY_BURST_V5' ||
-      this.entryMode === 'BREADTH_BURST_V6' ? s60 : s15;
+      this.entryMode === 'BREADTH_BURST_V6' ||
+      this.entryMode === 'AGE3_BREADTH_V7' ? s60 : s15;
 
     const signal = {
       mint: ev.mint,
@@ -1097,15 +1274,24 @@ class OrderFlowTracker extends EventEmitter {
       priceBefore: entryStats.firstPrice || ev.price,
       _aggregated: true,
       _activityFlow: true,
+      _age3Entry: !!flow.entryAge3,
       _sellCount: entryStats.sellCount,
       _sellCount10s: entryStats.sellCount,
       _totalSellSol10s: round(entryStats.sellSol, 4),
       _sellers: [...new Set(entryStats.events.filter((x) => x.side === 'SELL').map((x) => x.signer).filter(Boolean))],
       _flow: flow,
-      _flowPattern: flow.entryV6 || flow.entryV5 || flow.entry15s,
+      _flowPattern: flow.entryAge3 || flow.entryV6 || flow.entryV5 || flow.entry15s,
     };
 
-    if (flow.entryV6) {
+    if (flow.entryAge3) {
+      console.log(
+        `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
+        `age=${(flow.entryAge3.tokenAgeMs / 1000).toFixed(1)}s ` +
+        `fdv=$${Math.round(flow.entryAge3.fdvUsd)} ` +
+        `buyers60=${flow.s60.uniqueBuyers} ` +
+        `volume60=$${Math.round(flow.s60.volumeSol * this.solPriceUsd)}`,
+      );
+    } else if (flow.entryV6) {
       console.log(
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
           `1m=${flow.s60.buyCount}buys/${flow.s60.volumeSol.toFixed(1)}SOL ` +

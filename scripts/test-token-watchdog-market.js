@@ -180,8 +180,8 @@ assert.strictEqual(
   );
   assert.strictEqual(
     watchdog.maxTokenAgeMs,
-    3_600_000,
-    'watchdog must expire tokens 60 minutes after migration',
+    600_000,
+    'watchdog must expire tokens 10 minutes after migration',
   );
   watchdog.minFdVUsd = 15_000;
   watchdog.minLiquidityUsd = 3_000;
@@ -196,7 +196,7 @@ assert.strictEqual(
 
   const staleToken = {
     ...token,
-    migration_time: now - 10 * 60_000,
+    migration_time: now - 5 * 60_000,
     fdv: 2_000,
     liquidity: 1_000,
     market_updated_at: now - 10 * 60_000,
@@ -257,7 +257,7 @@ assert.strictEqual(
   oldAgeWatchdog.maxWatchDurationMs = 0;
 
   await oldAgeWatchdog._check();
-  assert.strictEqual(oldAgeRemoved, true, 'migration AGE above 60 minutes must remove the token');
+  assert.strictEqual(oldAgeRemoved, true, 'migration AGE above 10 minutes must remove the token');
 
   let openAgeRemoved = false;
   const openAgeWatchdog = new TokenWatchdog({

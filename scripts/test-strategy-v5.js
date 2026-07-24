@@ -232,8 +232,7 @@ function runExitTests() {
     this._exitCalls.push({ pos, price, reason });
   };
   manager._tick();
-  assert.strictEqual(manager._exitCalls.length, 1);
-  assert.strictEqual(manager._exitCalls[0].reason, 'NO_BOUNCE_EXIT');
+  assert.strictEqual(manager._exitCalls.length, 0, '90s no-bounce exit is disabled');
 
   const timeout = Object.create(PositionManager.prototype);
   timeout.positions = new Map([["position-2", {
@@ -254,8 +253,7 @@ function runExitTests() {
   timeout._exitCalls = [];
   timeout._exitForCondition = manager._exitForCondition;
   timeout._tick();
-  assert.strictEqual(timeout._exitCalls.length, 1);
-  assert.strictEqual(timeout._exitCalls[0].reason, 'TIMEOUT_3M');
+  assert.strictEqual(timeout._exitCalls.length, 0, '3-minute hard timeout is disabled');
 }
 
 function runSlippageTests() {
@@ -279,16 +277,14 @@ function runSlippageTests() {
   assert.strictEqual(config.strategy.buyMaxPoolStateAgeMs, 500);
   assert.strictEqual(config.strategy.buyMaxEstimatedSlippagePct, 5);
   assert.strictEqual(config.strategy.noBounceExitMs, 90_000);
-  assert.strictEqual(config.strategy.maxHoldMs, 180_000);
+  assert.strictEqual(config.strategy.noBounceExitEnabled, false);
+  assert.strictEqual(config.strategy.maxHoldMs, 0);
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
-  assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
-  assert.strictEqual(config.activityFlow.breadthMinUniqueBuyers1m, 100);
-  assert.strictEqual(config.activityFlow.breadthMinNewBuyers1m, 30);
-  assert.strictEqual(config.activityFlow.breadthMaxAvgBuyPerWallet5sSol, 0.4);
-  assert.strictEqual(config.activityFlow.breadthMaxPriceChange60sPct, 20);
-  assert.strictEqual(config.activityFlow.breadthMinConfirmations, 3);
-  assert.strictEqual(config.activityFlow.breadthCooldownMs, 60_000);
-  assert.strictEqual(config.activityFlow.breadthWarmupMs, 60_000);
+  assert.strictEqual(config.activityFlow.entryMode, 'AGE3_BREADTH_V7');
+  assert.strictEqual(config.activityFlow.age3EntryTargetMs, 180_000);
+  assert.strictEqual(config.activityFlow.age3EntryToleranceMs, 15_000);
+  assert.strictEqual(config.activityFlow.age3MinFdvUsd, 40_000);
+  assert.strictEqual(config.activityFlow.age3MinUniqueBuyers1m, 17);
 }
 
 runEntryTests();

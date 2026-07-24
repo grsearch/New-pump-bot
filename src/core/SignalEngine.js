@@ -181,6 +181,9 @@ class SignalEngine extends EventEmitter {
     const _signalReceivedAt = Date.now();
     const { mint, symbol, sellSol, priceImpactPct, seller, signature, ts, slot } = signal;
 
+    if (signal._age3Entry) {
+      return this._handleAge3EntrySignal(signal, _signalReceivedAt);
+    }
 
     // 1. 自触发过滤
     if (signature && this.ourSignatures.has(signature)) {
@@ -763,6 +766,124 @@ class SignalEngine extends EventEmitter {
   //   出场：EMA9下穿EMA20清仓 / 20%止盈 / 10%激活3%回撤移动止盈
   //   加仓：首仓价跌>=15% 允许加仓1次，独立止盈
   //   无止损、无其他过滤
+  _handleAge3EntrySignal(signal, signalReceivedAt) {
+    const {
+      mint,
+      symbol,
+      signature,
+      ts,
+      slot,
+    } = signal;
+    if (!mint) return;
+
+    if (signature && this.ourSignatures.has(signature)) {
+      monitor.inc('SignalEngine.rejectedSelfTrigger', 1, 'SignalEngine');
+      this._logReject(signal, 'self-triggered');
+      return;
+    }
+
+    const maxPushLagMs = config.strategy.maxPushLagMs || 0;
+    const pushLagMs = ts ? Date.now() - ts : 0;
+    if (maxPushLagMs > 0 && pushLagMs > maxPushLagMs) {
+      monitor.inc('SignalEngine.rejectedPushLag', 1, 'SignalEngine');
+      this._logReject(signal, `AGE3 signal stale: ${pushLagMs}ms>${maxPushLagMs}ms`);
+      return;
+    }
+
+    const age3 = signal._flow?.entryAge3;
+    if (!age3) {
+      this._logReject(signal, 'AGE3 metrics missing');
+      return;
+    }
+
+    try {
+      if (this.tradeLogger?.hasSuccessfulBuyForMint?.(mint)) {
+        monitor.inc('SignalEngine.rejectedPermanentMintBuy', 1, 'SignalEngine');
+        this._logReject(signal, 'same mint already has a successful BUY');
+        return;
+      }
+    } catch (err) {
+      monitor.recordError('SignalEngine', err, { phase: 'age3_buy_history', mint });
+      this._logReject(signal, 'cannot verify permanent BUY history');
+      return;
+    }
+
+    const openCount = this.positionManager.openPositionCount();
+    const inflightCount = this.inflightBuys.size;
+    if (openCount + inflightCount >= config.strategy.maxConcurrentPositions) {
+      monitor.inc('SignalEngine.rejectedMaxConcurrent', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `max concurrent (${openCount} open + ${inflightCount} inflight / ` +
+          `${config.strategy.maxConcurrentPositions})`,
+      );
+      return;
+    }
+
+    const protectionRemainingMs = this._getMintProtectionRemainingMs(mint);
+    if (protectionRemainingMs > 0) {
+      monitor.inc('SignalEngine.rejectedRebuyCooldown', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `MINT_PROTECTION_COOLDOWN: ${Math.round(protectionRemainingMs / 1000)}s remaining`,
+      );
+      return;
+    }
+    if (this.inflightBuys.has(mint)) {
+      monitor.inc('SignalEngine.rejectedInflightBuy', 1, 'SignalEngine');
+      this._logReject(signal, 'buy in-flight');
+      return;
+    }
+    if (this.positionManager.hasOpenPosition(mint)) {
+      monitor.inc('SignalEngine.rejectedSameMintOpen', 1, 'SignalEngine');
+      this._logReject(signal, 'same mint already has open position');
+      return;
+    }
+
+    const volume60Usd = (signal._flow?.s60?.volumeSol || 0) *
+      (config.strategy.solPriceUsd || 0);
+    const reason =
+      `age3_breadth_v7: age=${(age3.tokenAgeMs / 1000).toFixed(1)}s ` +
+      `fdv=$${Math.round(age3.fdvUsd)} buyers60=${age3.uniqueBuyers1m} ` +
+      `volume60=$${Math.round(volume60Usd)}`;
+
+    monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');
+    this.inflightBuys.add(mint);
+    this.lastTriggerTs.set(mint, Date.now());
+    this.emit('buyOrder', {
+      ...signal,
+      reason,
+      sizeSol: config.strategy.positionSizeSol,
+      _signalReceivedAt: signalReceivedAt,
+    });
+
+    console.log(
+      `[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}`,
+    );
+    setImmediate(() => {
+      try {
+        this.tradeLogger.logSignal({
+          ts,
+          mint,
+          symbol,
+          kind: 'BUY_SIGNAL',
+          sellSol: signal.sellSol || 0,
+          priceImpactPct: signal.priceImpactPct || 0,
+          seller: null,
+          sellerTx: signature,
+          notes: reason,
+          accepted: true,
+        });
+      } catch (err) {
+        monitor.recordError('SignalEngine', err, { phase: 'age3_log_signal', mint });
+      }
+    });
+
+    const inSignalEngineMs = Date.now() - signalReceivedAt;
+    monitor.set('SignalEngine.lastInEngineMs', inSignalEngineMs, 'SignalEngine');
+    monitor.set('SignalEngine.lastAge3Slot', slot || 0, 'SignalEngine');
+  }
+
   async _handleEmaStrategy(signal, _signalReceivedAt) {
     const { mint, symbol, sellSol, priceImpactPct, seller, signature, ts, slot } = signal;
 

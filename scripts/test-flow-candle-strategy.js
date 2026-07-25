@@ -47,8 +47,8 @@ function candleEvents(bucketTs, open, close, buySol, sellSol) {
 
 function run() {
   assert.strictEqual(config.activityFlow.minVolume1mUsd, 3000);
-  assert.strictEqual(config.activityFlow.entryMode, 'BREADTH_BURST_V6');
-  assert.strictEqual(config.strategy.flowReversalExitEnabled, true);
+  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.strategy.flowReversalExitEnabled, false);
   assert.strictEqual(config.strategy.flowReversalExitMode, 'FLOW_TURN_15S');
 
   const entryEvents = [
@@ -146,8 +146,7 @@ function run() {
     status: 'open',
   };
   manager._maybeFlowReversalExit(pos, 2.20, exitNow);
-  assert.strictEqual(manager._exitCalls.length, 1);
-  assert.strictEqual(manager._exitCalls[0].reason, 'FLOW_REVERSAL_EXIT');
+  assert.strictEqual(manager._exitCalls.length, 0, 'V8 must keep the legacy 15s flow exit disabled');
 
   console.log('15s flow candle strategy tests: PASS');
 }

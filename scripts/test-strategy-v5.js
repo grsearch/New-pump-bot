@@ -215,7 +215,7 @@ function runExitTests() {
     symbol: 'TEST',
     entryPrice: 1,
     highWaterMark: 1.04,
-    openedAt: now - 91_000,
+    openedAt: now - 10_000,
     reconciled: true,
     dryRun: false,
     exiting: false,
@@ -232,7 +232,7 @@ function runExitTests() {
     this._exitCalls.push({ pos, price, reason });
   };
   manager._tick();
-  assert.strictEqual(manager._exitCalls.length, 0, '90s no-bounce exit is disabled');
+  assert.strictEqual(manager._exitCalls.length, 0, 'no-bounce exit must stay disabled before the hard timeout');
 
   const timeout = Object.create(PositionManager.prototype);
   timeout.positions = new Map([["position-2", {
@@ -241,7 +241,7 @@ function runExitTests() {
     symbol: 'TEST',
     entryPrice: 1,
     highWaterMark: 1.10,
-    openedAt: now - 181_000,
+    openedAt: now - 20_100,
     reconciled: true,
     dryRun: false,
     exiting: false,
@@ -253,7 +253,8 @@ function runExitTests() {
   timeout._exitCalls = [];
   timeout._exitForCondition = manager._exitForCondition;
   timeout._tick();
-  assert.strictEqual(timeout._exitCalls.length, 0, '3-minute hard timeout is disabled');
+  assert.strictEqual(timeout._exitCalls.length, 1, 'V8 must close a remaining position after 20 seconds');
+  assert.strictEqual(timeout._exitCalls[0].reason, 'TIMEOUT_20S');
 }
 
 function runSlippageTests() {
@@ -278,9 +279,9 @@ function runSlippageTests() {
   assert.strictEqual(config.strategy.buyMaxEstimatedSlippagePct, 5);
   assert.strictEqual(config.strategy.noBounceExitMs, 90_000);
   assert.strictEqual(config.strategy.noBounceExitEnabled, false);
-  assert.strictEqual(config.strategy.maxHoldMs, 0);
+  assert.strictEqual(config.strategy.maxHoldMs, 20_000);
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
-  assert.strictEqual(config.activityFlow.entryMode, 'AGE3_BREADTH_V7');
+  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
   assert.strictEqual(config.activityFlow.age3EntryTargetMs, 180_000);
   assert.strictEqual(config.activityFlow.age3EntryToleranceMs, 15_000);
   assert.strictEqual(config.activityFlow.age3MinFdvUsd, 40_000);

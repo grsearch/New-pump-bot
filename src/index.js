@@ -52,13 +52,24 @@ async function main() {
   console.log(`Fixed TP: ${config.strategy.takeProfitPct > 0 ? `+${config.strategy.takeProfitPct}%` : 'disabled'}`);
   console.log(`Trailing: arm at +${config.strategy.trailingActivatePct}% / drawdown ${config.strategy.trailingDrawdownPct}%`);
   console.log('RSI exit: disabled');
-  console.log(
-    `Entry: ${config.activityFlow.entryMode} ` +
-      `(one-shot at AGE=${config.activityFlow.age3EntryTargetMs / 1000}s` +
-      `+${config.activityFlow.age3EntryToleranceMs / 1000}s tolerance, ` +
-      `FDV>=$${Math.round(config.activityFlow.age3MinFdvUsd)}, ` +
-      `buyers60>=${config.activityFlow.age3MinUniqueBuyers1m})`,
-  );
+  if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(drop=${config.activityFlow.reboundMinDropPct}%-<${config.activityFlow.reboundMaxDropPct}%/` +
+        `${config.activityFlow.reboundWindowMs}ms, ` +
+        `confirm=${config.activityFlow.reboundConfirmMinGapMs}-${config.activityFlow.reboundConfirmMaxGapMs}ms, ` +
+        `recovery=${config.activityFlow.reboundMinRecoveryPct}-${config.activityFlow.reboundMaxRecoveryPct}%, ` +
+        `buyers1>=${config.activityFlow.reboundMinUniqueBuyers1s})`,
+    );
+  } else {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(one-shot at AGE=${config.activityFlow.age3EntryTargetMs / 1000}s` +
+        `+${config.activityFlow.age3EntryToleranceMs / 1000}s tolerance, ` +
+        `FDV>=$${Math.round(config.activityFlow.age3MinFdvUsd)}, ` +
+        `buyers60>=${config.activityFlow.age3MinUniqueBuyers1m})`,
+    );
+  }
   console.log(config.strategy.flowReversalExitEnabled
     ? `Flow exit: ${config.strategy.flowReversalExitMode} ` +
       `(2 closed 15s net-flow values, + to -` +
@@ -73,7 +84,11 @@ async function main() {
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
   console.log(`Exit mode: ${config.strategy.exitMode}`);
-  console.log(`FDV exit: <$${Math.round(config.strategy.positionFdvExitUsd)} (sell then remove)`);
+  console.log(
+    `FDV exit: ${config.strategy.positionFdvExitUsd > 0
+      ? `<$${Math.round(config.strategy.positionFdvExitUsd)} (sell then remove)`
+      : 'disabled'}`,
+  );
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
@@ -232,14 +247,19 @@ async function main() {
       `jump<=${swapSanitizer.maxJumpRatio}x market<=${swapSanitizer.marketMaxRatio}x ` +
       `independentSources>=${swapSanitizer.confirmMinIndependentSources}`,
   );
-  console.log(
-    `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
-      `mode=${activityFlowTracker.entryMode} ` +
-      `age=${activityFlowTracker.age3EntryTargetMs / 1000}s` +
+  const activityFlowDescription = activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
+    ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
+      `${activityFlowTracker.reboundWindowMs}ms ` +
+      `recovery=${activityFlowTracker.reboundMinRecoveryPct}-${activityFlowTracker.reboundMaxRecoveryPct}% ` +
+      `confirm=${activityFlowTracker.reboundConfirmMinGapMs}-${activityFlowTracker.reboundConfirmMaxGapMs}ms ` +
+      `buyers1>=${activityFlowTracker.reboundMinUniqueBuyers1s}`
+    : `age=${activityFlowTracker.age3EntryTargetMs / 1000}s` +
       `+${activityFlowTracker.age3EntryToleranceMs / 1000}s ` +
       `fdv>=$${Math.round(activityFlowTracker.age3MinFdvUsd)} ` +
-      `buyers60>=${activityFlowTracker.age3MinUniqueBuyers1m} ` +
-      `entry=one-shot ` +
+      `buyers60>=${activityFlowTracker.age3MinUniqueBuyers1m}`;
+  console.log(
+    `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
+      `mode=${activityFlowTracker.entryMode} ${activityFlowDescription} ` +
       `replaceDump=${activityFlowTracker.replaceDumpSignal}`,
   );
   console.log(
@@ -268,851 +288,4 @@ async function main() {
   });
 
   // ============ æŠ¥å‘Š ============
-  const dailyReport = new DailyReport({ tradeLogger, tokenRegistry, competitorTracker });
-  dailyReport.start();
-
-  // ç«äº‰å¯¹æ‰‹å–å‡º â†’ å¯é€‰è·Ÿå–ï¼ˆé»˜è®¤ followSell=falseï¼Œä»…è®°å½•åˆ†æï¼‰ã€‚
-  //   ä¼˜å…ˆçº§æœ€é«˜ï¼šä»–ä»¬ä¸€å–ï¼Œæˆ‘ä»¬è‹¥æŒæœ‰åŒå¸ç«‹å³å–ï¼ˆæ—©äº TP/trailingï¼‰ï¼Œä½†ä»…å½“ eligible=true
-  //   ï¼ˆé«˜èƒœç‡ + è¶³å¤Ÿæ ·æœ¬çš„é’±åŒ…ï¼‰ä¸” COMPETITOR_FOLLOW_SELL=true æ—¶æ‰æ‰§è¡Œã€‚
-  competitorTracker.on('competitorSell', (sig) => {
-    if (!sig.eligible) return; // å…³é—­è·Ÿå– æˆ– è¯¥é’±åŒ…æœªè¾¾èƒœç‡/æ ·æœ¬é—¨æ§› â†’ åªè®°å½•ï¼Œä¸åŠ¨ä½œ
-    const pids = positionManager.byMint.get(sig.mint);
-    if (!pids || pids.size === 0) return; // æˆ‘ä»¬æ²¡æŒæœ‰è¿™ä¸ªå¸
-    console.log(
-      `[main] ğŸ” FOLLOW_SELL ${sig.symbol || sig.mint.slice(0, 6)}: competitor ${sig.wallet.slice(0, 6)}.. ` +
-        `(winRate ${sig.walletWinRatePct.toFixed(0)}%, n=${sig.walletClosedCount}) sold â†’ exiting our positions`,
-    );
-    for (const pid of pids) {
-      const pos = positionManager.positions.get(pid);
-      if (pos && !pos.exiting) {
-        const px = positionManager.priceTracker.getPrice(sig.mint) || pos.entryPrice;
-        positionManager._exitForCondition(pos, px, 'COMPETITOR_FOLLOW_SELL');
-      }
-    }
-  });
-
-  // ============ Signal Engine ============
-  const signalEngine = new SignalEngine({
-    tradeLogger,
-    positionManager,
-    tickStream,
-    dumpDetector,
-    rsiCalculator,  // v3.17.17: å¯ä¸º null,SignalEngine å†…éƒ¨ä¼šè·³è¿‡ RSI è¿‡æ»¤
-    poolStateCache: executor.poolStateCache || null,  // v3.17.21: ä¿¡å·è§¦å‘æ—¶ addHot
-    tokenRegistry,  // v3.26: æ–°å¸ç­–ç•¥ â€” æŒ‰ token age åŒºåˆ†è¿‡æ»¤é€»è¾‘
-  });
-  // v3.17.41: PositionManager blacklist needs signalEngine reference
-  positionManager.signalEngine = signalEngine;
-  activityFlowTracker.on('flowReversalSignal', (signal) => {
-    Promise.resolve(signalEngine.handleDumpSignal(signal)).catch((err) => {
-      console.error(`[ActivityFlow] SignalEngine error: ${err.message}`);
-    });
-  });
-
-  // ============ æœåŠ¡å™¨ ============
-  const server = new Server({
-    tokenRegistry,
-    tradeLogger,
-    positionManager,
-    signalEngine,
-    activityFlowTracker,
-    dailyReport,
-    competitorTracker,
-    onTokenListChanged: () => {
-      const mints = tokenRegistry.listActive().map((t) => t.mint);
-      tickStream.updateSubscription(mints);
-      // v2: åŒæ­¥ EMA ç›‘æ§åˆ—è¡¨
-    },
-    onTokenAdded: async (token) => {
-      // æ–°å¢ä»£å¸ â†’ åå°å¼‚æ­¥è¡¥ pool ä¿¡æ¯
-      if (config.autoFillPoolsOnStart) {
-        fillPoolForToken(tokenRegistry, token.mint).catch((err) => {
-          console.warn(`[onTokenAdded] fillPool failed for ${token.symbol || token.mint.slice(0,8)}: ${err.message}`);
-        });
-      }
-      // v2: æ–°å¸åŠ å…¥ EMA ç›‘æ§
-    },
-  });
-
-  const pumpDiscovery = new PumpGraduationDiscovery({
-    tokenRegistry,
-    onBeforeAdd: (mint) => server._evictIfNeeded(mint),
-    onMigrationDetected: (migration) => {
-      if (rsiCalculator) rsiCalculator.reset(migration.mint, 'pump_migration');
-    },
-    onTokenAdded: async ({ token, migration, screening, evicted }) => {
-      const mints = tokenRegistry.listActive().map((t) => t.mint);
-      tickStream.updateSubscription(mints);
-      if (migration.poolAddress && executor.poolStateCache) {
-        executor.poolStateCache.refreshOne(migration.poolAddress).catch(() => {});
-      }
-      server.broadcast({
-        type: 'tokenAdded',
-        token,
-        discovery: {
-          source: 'pump_graduation',
-          migrationTime: migration.migrationTime,
-          migrationTimeSource: migration.migrationTimeSource,
-          migrationSlot: migration.slot,
-          signature: migration.signature,
-          fdv: screening.market.fdv,
-          liquidity: screening.market.liquidity,
-        },
-        evicted,
-      });
-    },
-  });
-
-  // ============ å¯åŠ¨æ¢å¤æœªå¹³ä»“æŒä»“ ============
-  const restored = positionManager.restoreFromDb();
-  if (restored.length > 0) {
-    console.log(`[main] restored ${restored.length} open position(s) from db`);
-    monitor.inc('main.restoredPositions', restored.length, 'main');
-  }
-
-  // ============ Token Watchdogï¼ˆç›‘æ§è¶…æ—¶ + FDV/LP è‡ªåŠ¨ç§»é™¤ï¼‰ ============
-  const tokenWatchdog = new TokenWatchdog({
-    tokenRegistry,
-    positionManager,
-    poolStateCache: executor.poolStateCache || null,
-    tradeLogger: tradeLogger, // v3.17.41: 24h no-buy filter
-    onTokenRemoved: () => {
-      const mints = tokenRegistry.listActive().map((t) => t.mint);
-      tickStream.updateSubscription(mints);
-      // v2: åŒæ­¥ EMA ç›‘æ§åˆ—è¡¨
-    },
-  });
-  tokenWatchdog.start();
-
-  // Competitor stats periodic logging + cleanup (tracker created earlier, before Server)
-  setInterval(() => competitorTracker.cleanupExpiredLots(), 10 * 60_000);
-  setInterval(() => {
-    const stats = competitorTracker.getAllStats();
-    for (const s of stats) {
-      if (s.buyCount === 0 && s.sellCount === 0) continue;
-      console.log(
-        `[CompetitorTracker] ğŸ“Š ${s.wallet.slice(0, 8)}..${s.label ? ` (${s.label})` : ''}: ` +
-          `${s.closedCount} round-trips, win ${s.winRatePct.toFixed(0)}%, ` +
-          `totalPnL=${s.totalPnlSol >= 0 ? '+' : ''}${s.totalPnlSol.toFixed(3)} SOL, ` +
-          `avgPnL=${s.avgPnlPct.toFixed(1)}%, avgHold=${(s.avgHoldMs / 1000).toFixed(0)}s, ` +
-          `openLots=${s.openLots}`,
-      );
-      // è¿›åœºé˜ˆå€¼åæ¨ï¼ˆå¯¹ç…§æˆ‘ä»¬è‡ªå·±çš„ MIN_SELL_SOL / MIN_PRICE_IMPACT_PCTï¼‰
-      const e = competitorTracker.getEntryStats(s.wallet);
-      if (e && e.n > 0) {
-        const f = (x) => (x == null ? '?' : x.toFixed(1));
-        console.log(
-          `[CompetitorTracker] ğŸ”¬ entry(n=${e.n}): trigger sell ${f(e.triggerSellSol.min)}/${f(e.triggerSellSol.avg)}/${f(e.triggerSellSol.max)} SOL (min/avg/max), ` +
-            `impact ${f(e.triggerImpactPct.min)}/${f(e.triggerImpactPct.avg)}/${f(e.triggerImpactPct.max)}%, ` +
-            `poolLP avg ${f(e.poolLpSol.avg)} SOL, FDV avg $${e.fdvUsd.avg ? Math.round(e.fdvUsd.avg) : '?'}, ` +
-            `holders avg ${e.avgHolders ? Math.round(e.avgHolders) : '?'}` +
-            ` | our thresholds: MIN_SELL=${config.strategy.minSellSol} MIN_IMPACT=${config.strategy.minPriceImpactPct}%`,
-        );
-      }
-    }
-  }, 3600_000);
-
-  console.log(
-    `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeMinutes}min ` +
-    '(open positions are retained until exit)',
-  );
-
-  // ============ å®šæœŸè¡¥ç¼º pool ä¿¡æ¯ï¼ˆæ¯ 60 ç§’æ‰«æä¸€æ¬¡ï¼‰ ============
-  // é˜²æ­¢ onTokenAdded æ—¶ PoolFinder å¤±è´¥å¯¼è‡´ä»£å¸æ°¸è¿œæ²¡æœ‰ pool
-  setInterval(() => {
-    const missing = tokenRegistry.listActive().filter(needsPoolRepair);
-    if (missing.length === 0) return;
-    console.log(`[pool-refill] ${missing.length} token(s) missing pool info, filling...`);
-    for (const t of missing) {
-      fillPoolForToken(tokenRegistry, t.mint).then(() => {
-        const fresh = tokenRegistry.getToken(t.mint);
-        if (fresh?.pool_address) {
-          console.log(`[pool-refill] ${t.symbol || t.mint.slice(0,8)} pool filled`);
-        }
-      }).catch(() => {});
-    }
-  }, 60_000);
-
-  // ============ å¥åº·ç›‘æ§ / å‘Šè­¦ ============
-  const alertChecker = new AlertChecker({
-    monitor,
-    tickStream,
-    executor,
-    positionManager,
-    tokenRegistry,
-    config,
-  });
-  alertChecker.start();
-
-  monitor.on('alert', (alert) => {
-    console.error(`[ALERT] [${alert.severity.toUpperCase()}] ${alert.name}: ${alert.message}`);
-    server.broadcast({ type: 'alert', alert });
-  });
-  monitor.on('alertCleared', (alert) => {
-    console.log(`[ALERT] cleared: ${alert.name}`);
-    server.broadcast({ type: 'alertCleared', alert });
-  });
-
-  // ============ äº‹ä»¶è¿çº¿ ============
-
-  tickStream.on('transaction', (tx) => dumpDetector.handleTransaction(tx));
-
-  // ============ v3.17.23: VaultBalanceWatcher ============
-  // ç›´æ¥æŸ¥é“¾ä¸Š vault ä½™é¢å˜åŒ–æ£€æµ‹ç ¸å•ï¼Œä¸å— Jupiter èšåˆè·¯ç”±å½±å“
-  if (!config.DRY_RUN && executor.rpc) {
-    const VaultBalanceWatcher = require('./core/VaultBalanceWatcher');
-    const vaultWatcher = new VaultBalanceWatcher({
-      connection: executor.rpc,
-      tokenRegistry,
-      poolStateCache: executor.poolStateCache || null,
-    });
-    vaultWatcher.on('vaultSell', (info) => {
-      // v3.17.23: VaultWatcher æ£€æµ‹åˆ°çš„å–å•ä½œä¸ºè¾…åŠ©ä¿¡å·
-      // ä¸ç›´æ¥è§¦å‘ä¹°å…¥ï¼VaultWatcher çš„ impact è®¡ç®—æ˜¯åŸºäºå¿«ç…§é—´éš”å†…çš„ç´¯è®¡å˜åŒ–ï¼Œ
-      // æ— æ³•åŒºåˆ†å•ç¬”å¤§å–å•å’Œå¤šç¬”å°å–å•ç´¯ç§¯ï¼Œå¯¼è‡´ impact è™šé«˜ã€‚
-      // åªåš priceTick å–‚ä»· + PoolStateCache é¢„çƒ­ + æ—¥å¿—è®°å½•
-      monitor.inc('VaultWatcher.vaultSellDetected', 1, 'VaultWatcher');
-
-      // å–‚ä»·ç»™ PriceTracker
-      if (info.priceAfter > 0) {
-        priceTracker.update(info.mint, info.priceAfter, info.ts, info.poolAddress, {
-          source: 'vault_watcher',
-          rawPrice: info.rawPriceAfter,
-          virtualQuoteReserveSol: info.virtualQuoteReserveSol,
-          effectiveQuoteReserveSol: info.effectiveQuoteReserveSol,
-        });
-      }
-
-      // é¢„çƒ­ PoolStateCache
-      if (executor.poolStateCache && info.poolAddress) {
-        executor.poolStateCache.refreshOne(info.poolAddress).catch(() => {});
-        // å¦‚æœä¸åœ¨ hotMints é‡Œï¼ŒåŠ è¿›å»ï¼ˆä½é¢‘åˆ·æ–°ï¼‰
-        if (!executor.poolStateCache.hotMints.has(info.mint)) {
-          executor.poolStateCache.addHot(info.mint, info.poolAddress, false); // isPosition=false â†’ ä¿¡å·å¸ä½é¢‘
-        }
-      }
-    });
-    vaultWatcher.start();
-    vaultWatcher.setTickStream(tickStream);
-    // token å˜åŒ–æ—¶åˆ·æ–° watch list
-    tokenRegistry.on?.('changed', () => vaultWatcher.markDirty());
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // v3.17.17: SS Pre-warm å¤„ç†å™¨
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // ShredStream æ¯” LaserStream å¿« 50-200ms (å®æµ‹ ssLeadCounters å·²æœ‰æ•°æ®)ã€‚
-  // SS è§£æå‡º sell instruction åç«‹å³è§¦å‘ pool state RPC refresh,
-  // ç­‰ LaserStream æ¨å®Œæ•´ tx è§¦å‘ BUY æ—¶,Executor è¯» cache å‡ ä¹ä¸€å®š hit,
-  // çœä¸‹ 80-150ms çš„ RPC æ—¶é—´ â†’ BUY ææ—© 1 ä¸ª slot è½é“¾ã€‚
-  //
-  // æ³¨æ„:
-  //   - ä¸è§¦å‘ buyOrder,åª refresh (SS æ¥çš„ tx æ—  meta,ä¸èƒ½å¯é åˆ¤æ–­ sellSol/impact)
-  //   - dedup 1s å†…åŒ pool ä¸é‡å¤ refresh (1 ä¸ª pool 1s å†…çš„å¤šç¬”å–å•å˜åŒ–å¾ˆå°)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const _prewarmDedup = new Map(); // poolAddress â†’ lastRefreshTs
-  const PREWARM_DEDUP_MS = parseInt(process.env.SS_PREWARM_DEDUP_MS || '1000', 10);
-
-  tickStream.on('prewarmSignal', (signal) => {
-    if (!executor.poolStateCache || !signal.poolAddress) return;
-    const now = Date.now();
-    const last = _prewarmDedup.get(signal.poolAddress) || 0;
-    if (now - last < PREWARM_DEDUP_MS) return;
-    _prewarmDedup.set(signal.poolAddress, now);
-
-    // å¼‚æ­¥ refresh,ä¸é˜»å¡ SS loop
-    executor.poolStateCache.refreshOne(signal.poolAddress).then(() => {
-      monitor.inc('main.prewarmHit', 1, 'main');
-    }).catch(() => {
-      // é™é»˜å¤±è´¥ (cache miss/RPC æš‚æ—¶ä¸é€š,åç»­ 5s è½®è¯¢ä¹Ÿä¼šåˆ·)
-      monitor.inc('main.prewarmFail', 1, 'main');
-    });
-
-    if (process.env.SS_PREWARM_DEBUG === 'true') {
-      console.log(
-        `[main] ğŸ”¥ SS pre-warm â†’ refresh pool ${signal.poolAddress.slice(0, 6)}.. ` +
-        `(${signal.symbol || signal.mint.slice(0, 6)}, min_quote=${signal.minQuoteOutSol.toFixed(2)} SOL)`,
-      );
-    }
-  });
-
-  // v3.34: SS è‡ªåŠ¨å‘ç°æ–°å¸ â€” ShredStream æ”¶åˆ°æœªçŸ¥ mint çš„ Pump AMM å–å•æ—¶
-  // è‡ªåŠ¨æ·»åŠ åˆ° tokenRegistry + æ›´æ–° LS è®¢é˜…ï¼Œè®©åç»­ä¿¡å·èµ°å®æ—¶è·¯å¾„
-  // é˜ˆå€¼: åªè‡ªåŠ¨æ·»åŠ å–å• â‰¥ MIN_SELL_SOL çš„æ–°å¸ï¼ˆé¿å…æ·»åŠ åƒåœ¾å¸ï¼‰
-  const SS_NEW_MINT_MIN_SELL_SOL = parseFloat(process.env.SS_NEW_MINT_MIN_SELL_SOL || process.env.MIN_SELL_SOL || '20');
-  const _newMintDedup = new Map(); // mint â†’ lastAddTs
-  const NEW_MINT_DEDUP_MS = 60000; // åŒä¸€ mint 60s å†…ä¸é‡å¤ add
-  tickStream.on('newMintDiscovered', (info) => {
-    if (!info.mint) return;
-    // åªè‡ªåŠ¨æ·»åŠ å¤§é¢ç ¸å•ï¼ˆå’Œå°é¢å–å•ä¸å€¼å¾—ç›‘æ§ï¼‰
-    if (info.minQuoteOutSol < SS_NEW_MINT_MIN_SELL_SOL) return;
-    const now = Date.now();
-    const lastAdd = _newMintDedup.get(info.mint) || 0;
-    if (now - lastAdd < NEW_MINT_DEDUP_MS) return;
-    _newMintDedup.set(info.mint, now);
-
-    // å¦‚æœå·²åœ¨ tokenRegistry é‡Œï¼Œåªæ›´æ–° LS è®¢é˜…ï¼ˆå¯èƒ½æ²¡æœ‰ pool ä¿¡æ¯ï¼‰
-    const existing = tokenRegistry.getToken(info.mint);
-    if (existing?.pool_address) {
-      // å·²æœ‰å®Œæ•´ä¿¡æ¯ï¼Œä¸éœ€è¦é‡æ–°æ·»åŠ 
-      return;
-    }
-
-    console.log(
-      `[main] ğŸ†• SS discovered new mint: ${info.mint.slice(0, 8)}.. ` +
-      `pool=${info.poolAddress?.slice(0, 6)}.. min_quote=${info.minQuoteOutSol.toFixed(2)} SOL slot=${info.slot}`,
-    );
-
-    // ç«‹å³ prewarm pool cacheï¼ˆä¸ç­‰ addToken å®Œæˆï¼‰
-    // è¿™æ · VaultWatcher æ£€æµ‹åˆ° dump æ—¶ï¼Œbuy è·¯å¾„å·²ç» ready
-    if (info.poolAddress && executor.poolStateCache) {
-      executor.poolStateCache.refreshOne(info.poolAddress).catch(() => {});
-    }
-
-    // å¼‚æ­¥æ·»åŠ åˆ° tokenRegistry
-    tokenRegistry.addToken(info.mint, {
-      symbol: null, // SS æ²¡æœ‰ç¬¦å·ä¿¡æ¯ï¼ŒaddToken ä¼šä» Helius DAS è·å–
-      source: 'shredstream',
-    }).then((token) => {
-      if (token) {
-        // SS å·²ä» sell instruction æå–äº† pool ä¿¡æ¯ï¼Œç›´æ¥å†™å…¥
-        if (info.poolAddress) {
-          tokenRegistry.setPoolInfo(info.mint, {
-            poolAddress: info.poolAddress,
-            poolBaseVault: info.poolBaseVault,
-            poolQuoteVault: info.poolQuoteVault,
-          });
-        }
-        const freshToken = tokenRegistry.getToken(info.mint);
-        console.log(
-          `[main] ğŸ†• SS auto-added ${freshToken?.symbol || info.mint.slice(0, 8)}.. to tokenRegistry ` +
-          `(pool=${freshToken?.pool_address?.slice(0, 6)}..)`,
-        );
-        // æ›´æ–° LS è®¢é˜…ï¼Œè®©åç»­ dump ä¿¡å·èµ°å®æ—¶è·¯å¾„
-        const mints = tokenRegistry.listActive().map(t => t.mint);
-        tickStream.updateSubscription(mints);
-        // é€šçŸ¥ VaultWatcher åˆ·æ–°
-        vaultWatcher?.markDirty?.();
-      }
-    }).catch((err) => {
-      console.warn(`[main] ğŸ†• SS auto-add failed for ${info.mint.slice(0, 8)}..: ${err.message}`);
-    });
-  });
-
-  // å®šæœŸæ¸…ç† prewarmDedup + newMintDedup (é¿å…å†…å­˜æ³„æ¼)
-  setInterval(() => {
-    const now = Date.now();
-    for (const [k, ts] of _prewarmDedup) {
-      if (now - ts > PREWARM_DEDUP_MS * 5) _prewarmDedup.delete(k);
-    }
-    for (const [k, ts] of _newMintDedup) {
-      if (now - ts > NEW_MINT_DEDUP_MS * 5) _newMintDedup.delete(k);
-    }
-  }, 30_000);
-
-  // v3.17.21: äº‹ä»¶å¾ªç¯å»¶è¿Ÿæ£€æµ‹ï¼ˆæ¯ 60 ç§’é‡‡æ ·ä¸€æ¬¡ï¼‰
-  let _lastLoopTick = Date.now();
-  setInterval(() => { _lastLoopTick = Date.now(); }, 1000);
-
-  // v3.17.21: å†…å­˜åˆ†ç±»ç›‘æ§ â€” æ¯ 10 ç§’æ‰“å°ä¸€æ¬¡,å®šä½æ³„æ¼æº
-  // v3.17.26: é‡‡æ ·é—´éš” 60sâ†’10sï¼ˆRSS é£™å‡æå¿«,60s å¯èƒ½æ¼æ£€ï¼‰
-  // v3.17.26: ç©ºä»“é‡å¯é˜ˆå€¼ 1500MBâ†’800MBï¼ˆä¹‹å‰ 1500 å¤ªæ™š,Rust æ³„æ¼åˆ° 2GB æ‰ OOM killï¼‰
-  // v3.17.26: åŠ  rss>500MB å‘Šè­¦
-  setInterval(() => {
-    const u = process.memoryUsage();
-    const rssMB = Math.round(u.rss / 1e6);
-    const posCount = positionManager?.positions?.size ?? 0;
-    const loopLagMs = Math.max(0, Date.now() - _lastLoopTick - 1000);  // é¢„æœŸ 1s å†…æ›´æ–°,è¶…å‡ºå³å»¶è¿Ÿ
-    console.log(
-      `[MEM] rss=${rssMB}MB heap=${(u.heapUsed/1e6).toFixed(0)}MB ` +
-      `ext=${(u.external/1e6).toFixed(0)}MB arrBuf=${(u.arrayBuffers/1e6).toFixed(0)}MB ` +
-      `poolCache=${executor?.poolStateCache?.cache?.size ?? '?'} ` +
-      `hotMints=${executor?.poolStateCache?.hotMints?.size ?? '?'} ` +
-      `recentSells=${dumpDetector?._recentSells?.size ?? '?'} ` +
-      `slotSells=${dumpDetector?._slotSells?.size ?? '?'} ` +
-      `prices=${priceTracker?.prices?.size ?? '?'} ` +
-      `suspicious=${priceTracker?.suspicious?.size ?? '?'} ` +
-      `dedup=${tickStream?.dedup?.size() ?? '?'} ` +
-      `queue=${tickStream?._msgQueue?.length ?? '?'} ` +
-      `queueDrop=${tickStream?._queueDropped ?? '?'} ` +
-      `openLots=${competitorTracker?.openLots?.size ?? '?'} ` +
-      `positions=${posCount} ` +
-      `loopLag=${loopLagMs}ms`
-    );
-    // v3.17.26â†’v3.27: RSS é˜ˆå€¼è°ƒæ•´ â€” 7ä¸ªgRPCè¿æ¥åŸºçº¿~550MB, æ—§é˜ˆå€¼600MBç­‰äºå¯åŠ¨å³å‘Šè­¦
-    // å‘Šè­¦é˜ˆå€¼ 700MBï¼ˆåŸºçº¿550 + 150MBä½™é‡ï¼Œè¶…è¿‡è¯´æ˜Rustæ³„æ¼å·²å¼€å§‹ï¼‰
-    if (rssMB > 700) {
-      console.error(`[MEM] âš ï¸  rss=${rssMB}MB > 700MB â€” Rust native å†…å­˜å¯èƒ½æ³„æ¼,ç›‘æ§ä¸­`);
-      monitor.fireAlert('main.rss_high', 'warn', `rss=${rssMB}MB > 700MB, Rust native å†…å­˜å¯èƒ½æ³„æ¼`, { rssMB });
-    } else {
-      monitor.clearAlert('main.rss_high');
-    }
-    // ç©ºä»“é‡å¯é˜ˆå€¼ 800MBï¼ˆåŸºçº¿550 + 250MBå¢é•¿ï¼Œçº¦3-4å°æ—¶æ­£å¸¸æ³„æ¼é‡ï¼‰
-    // æœ‰æŒä»“ç¡¬ä¸Šé™ 1000MBï¼ˆé¿å…OOM killï¼Œé‡å¯åä»DBæ¢å¤æŒä»“ï¼‰
-    if (rssMB > 1000 && posCount > 0) {
-      console.log(`[MEM] ğŸ”„ rss=${rssMB}MB > 1000MB ä¸”æœ‰ ${posCount} ä¸ªæŒä»“,å¼ºåˆ¶ä¼˜é›…é‡å¯ï¼ˆOOM å‰æ¸…é›¶,æŒä»“ä¼šä» DB æ¢å¤ï¼‰`);
-      process.exit(0);
-    }
-    if (rssMB > 800 && posCount === 0) {
-      console.log(`[MEM] ğŸ”„ rss=${rssMB}MB > 800MB ä¸”ç©ºä»“,ä¼˜é›…é‡å¯ä»¥é‡Šæ”¾ Rust å †å¤–å†…å­˜`);
-      process.exit(0);  // systemd Restart=always ä¼šè‡ªåŠ¨æ‹‰èµ·
-    }
-  }, 10_000);
-
-  dumpDetector.on('priceTick', ({
-    mint,
-    price,
-    ts,
-    poolAddress,
-    side,
-    solVolume,
-    poolQuoteAfter,
-    rawPrice,
-    virtualQuoteReserveSol,
-    effectiveQuoteReserveSol,
-  }) => {
-    priceTracker.update(mint, price, ts, poolAddress, {
-      source: 'chain_swap',
-      rawPrice,
-      virtualQuoteReserveSol,
-      effectiveQuoteReserveSol,
-    });
-    // v3.17.41: é‡‡æ ·ä»·æ ¼åˆ°é•¿çª—å£ç¼“å­˜ (æ¯” handleDumpSignal æ›´é¢‘ç¹ï¼Œè¦†ç›–æ‰€æœ‰ priceTick)
-    signalEngine._sampleLongPrice(mint, priceTracker.getPrice(mint));
-    // v3.17.17: å–‚ RSI - ç”¨ feedTrade å¸¦ä¸Š volume,RSI èƒ½åš volume-weighted aggregation
-    if (rsiCalculator) {
-      // v3.17.38-fix: poolQuoteAfter=0 æ—¶ç”¨ tokenRegistry.liquidity æ¨ç®—
-      //   CPI/balanceOnly è·¯å¾„ç®—ä¸å‡º poolQuoteAfter â†’ 0
-      //   å¯¼è‡´ RSI çš„ lastPoolQuoteSol æ°¸è¿œä¸º null â†’ rsi_pre_dump ä¸ç¼“å­˜
-      let effectivePoolQuoteSol = effectiveQuoteReserveSol || poolQuoteAfter;
-      if ((!effectivePoolQuoteSol || effectivePoolQuoteSol <= 0) && tokenRegistry) {
-        const ti = tokenRegistry.getToken(mint);
-        if (ti && ti.liquidity) {
-          effectivePoolQuoteSol = ti.liquidity / 170; // USD â†’ SOL
-        }
-      }
-      if (side && solVolume > 0) {
-        rsiCalculator.feedTrade(mint, price, solVolume, side.toLowerCase(), ts, effectivePoolQuoteSol);
-      } else {
-        rsiCalculator.feedTick(mint, price, ts);
-      }
-
-    }
-  });
-
-  // v3.17.17: æ—§ sellAnalyzed â†’ feedTrade æ¥çº¿å·²ç»åˆå¹¶åˆ° priceTick è·¯å¾„(priceTick åŒ…å«æ‰€æœ‰ swap)
-  // ä¸éœ€è¦å•ç‹¬çš„ sellAnalyzed â†’ RSI ç›‘å¬
-
-  // sellAnalyzed: åªè®°å½•"æ¥è¿‘è§¦å‘"çš„ï¼ˆåŠé˜ˆå€¼ï¼‰ï¼Œé¿å…å†™å…¥é£æš´
-  dumpDetector.on('sellAnalyzed', (info) => {
-    if (activityFlowTracker.enabled && activityFlowTracker.replaceDumpSignal) return;
-    if (info.passSize && info.passImpact && info.passLiquidity) return; // å·² dumpSignal
-    const halfSize = config.strategy.minSellSol * 0.5;
-    const halfImpact = config.strategy.minPriceImpactPct * 0.5;
-    if (info.sellSol < halfSize || info.priceImpactPct < halfImpact) return;
-    // æ„é€ å¯è¯»çš„æ‹’ç»åŸå› 
-    const reasons = [];
-    if (!info.passSize) reasons.push(`size:${info.sellSol.toFixed(1)}<${config.strategy.minSellSol}`);
-    if (!info.passImpact) {
-      if (info.priceImpactPct < config.strategy.minPriceImpactPct) {
-        reasons.push(`impact:${info.priceImpactPct.toFixed(1)}%<${config.strategy.minPriceImpactPct}%`);
-      } else {
-        reasons.push(`impact:${info.priceImpactPct.toFixed(1)}%>${config.strategy.maxPriceImpactPct}% (pool dead?)`);
-      }
-    }
-    if (!info.passLiquidity) {
-      reasons.push(`liq:${(info.poolQuoteAfter ?? 0).toFixed(0)} SOL<${config.strategy.minPoolQuoteSol}`);
-    }
-    tradeLogger.logSignal({
-      ts: info.ts,
-      mint: info.mint,
-      symbol: info.symbol,
-      kind: 'DUMP_DETECTED',
-      sellSol: info.sellSol,
-      priceImpactPct: info.priceImpactPct,
-      seller: info.seller,
-      sellerTx: info.signature,
-      notes: `near-miss: ${reasons.join(', ')}`,
-      accepted: false,
-      rejectReason: reasons.join('; '),
-    });
-  });
-
-  dumpDetector.on('dumpSignal', (signal) => {
-    // v3.17.16: ç§»é™¤ refreshOne è°ƒç”¨
-    //   handleDumpSignal â†’ buyOrder â†’ executor.buy éƒ½åœ¨åŒä¸€ microtask é“¾å®Œæˆ,
-    //   refreshOne çš„ RPC(30-100ms)æ°¸è¿œè¿½ä¸ä¸Šå½“æ¬¡ BUY,å¯¹å½“å‰ä¿¡å·æ— æ„ä¹‰ã€‚
-    //   PoolStateCache åå°æ»šåŠ¨åˆ·æ–°(POOL_STATE_REFRESH_MS=5000)å·²ç»ä¿è¯ cache æ–°é²œã€‚
-    //   å¦‚æœå¸Œæœ›ç ¸ç›˜ç¬é—´æ± å­çŠ¶æ€æ›´æ–°,æŠŠ POOL_STATE_REFRESH_MS è°ƒåˆ° 2000-3000ã€‚
-    if (activityFlowTracker.enabled && activityFlowTracker.replaceDumpSignal) {
-      activityFlowTracker.noteSuppressedDumpSignal(signal);
-      return;
-    }
-    signalEngine.handleDumpSignal(signal);
-  });
-
-  // v3.17.15: RUG ä¿¡å· â€” åŒ slot 5+ ç¬”å–å‡ºã€åˆè®¡ > 5 SOL â†’ æŒä»“ç«‹å³å–å‡º
-  //   v3.17.27: ç”¨æˆ·è¦æ±‚å…³é—­ RUG_PULL_EXITï¼Œæ”¹ä¸ºä»…è®°å½•ä¸å–å‡º
-  dumpDetector.on('rugSignal', (rug) => {
-    const mint = rug.mint;
-    const pids = positionManager.byMint.get(mint);
-    if (!pids || pids.size === 0) return; // æ— æŒä»“ï¼Œå¿½ç•¥
-    console.log(
-      `[RUG] ğŸš¨ RUG PULL detected on ${rug.symbol || mint.slice(0,6)}: ${rug.sellCount} sells, ${rug.sellSol.toFixed(1)} SOL, ${rug.sellers.length} sellers â€” RUG_PULL_EXIT disabled, skipping`,
-    );
-    // RUG_PULL_EXIT å·²å…³é—­ â€” ä¸å†å¼ºåˆ¶å–å‡ºï¼Œè®© trailing/TP ç­‰å…¶ä»–æœºåˆ¶å¤„ç†
-    // for (const pid of pids) {
-    //   const pos = positionManager.positions.get(pid);
-    //   if (pos && !pos.exiting) {
-    //     const px = positionManager.priceTracker.getPrice(mint) || pos.entryPrice;
-    //     positionManager._exit(pos, px, 'RUG_PULL_EXIT');
-    //   }
-    // }
-  });
-
-  // ============ buyOrder â†’ BUY â†’ register position ============
-  signalEngine.on('buyOrder', async (order) => {
-    console.log(`[main] buyOrder received: ${order.symbol || order.mint.slice(0,6)} mint=${order.mint.slice(0,8)}.. reason=${order.reason} sig=${order.signature?.slice(0,12)}..`);
-    const _t0 = Date.now();
-    const tokenInfo = tokenRegistry.getToken(order.mint);
-    const _t1 = Date.now();
-
-    // ç”¨åŒä¸€ä¸ª positionId è´¯ç©¿ BUY trade / position è¡¨
-    const positionId = crypto.randomUUID();
-
-    // æ ‡è®°æ­¤ mint æ­£åœ¨ buy ä¸­ï¼Œè®©åç»­å¹¶å‘ dumpSignal çœ‹åˆ°è¿™ä¸ªæ§½ä½è¢«å 
-    signalEngine.markBuyInflight(order.mint);
-
-    // Record the current chain slot on BUY for execution metadata.
-    executor.setLatestSlot(tickStream.latestSlot || 0);
-
-    const _t2 = Date.now();
-    let buyResult;
-    try {
-      buyResult = await executor.buy({
-        mint: order.mint,
-        symbol: order.symbol,
-        sizeSol: order.sizeSol,
-        priceAfter: order.priceAfter, // ç”¨äº DRY_RUN æ¨¡æ‹Ÿ
-        baseDecimals: order.baseDecimals ?? tokenInfo?.decimals ?? 6,
-        poolAddress: tokenInfo?.pool_address, // Pump SDK éœ€è¦ pool address
-      });
-    } finally {
-      signalEngine.markBuyDone(order.mint);
-    }
-    if (order._signalReceivedAt && buyResult && buyResult.success) {
-      console.log('[main] buyOrder_timing: getToken=%dms preBuy=%dms buy=%dms', _t1-_t0, _t2-_t1, Date.now()-_t2);
-    }
-
-    // v3.17.16: ç«¯åˆ°ç«¯å»¶è¿Ÿç›‘æ§ â€” è¿™æ˜¯ã€Œèƒ½å¦ç´§è·Ÿç€ç ¸å•ä¹°å…¥ã€çš„æ ¸å¿ƒæŒ‡æ ‡
-    //   signalToBuyMs: ä»ç ¸ç›˜ tx æ—¶é—´æˆ³åˆ° BUY æäº¤çš„æ€»è€—æ—¶
-    //   inEngineMs: ç ¸ç›˜ tx è¿›å…¥ SignalEngine åˆ° emit buyOrder
-    //   buyLatencyMs: executor.buy å†…éƒ¨è€—æ—¶(è¯» cache + æ„é€  + å‘é€)
-    //   ç†æƒ³: signalToBuyMs â‰¤ 400ms (1 slot), buyLatencyMs â‰¤ 150ms
-    if (order._signalReceivedAt && buyResult.success) {
-      const signalToBuyMs = Date.now() - order._signalReceivedAt;
-      const fromDumpTsMs = order.ts ? Date.now() - order.ts : null;
-      console.log(
-        `[main] â±  ${order.symbol || order.mint.slice(0, 6)} latency: ` +
-        `signalâ†’BUY=${signalToBuyMs}ms` +
-        (fromDumpTsMs !== null ? ` dumpTsâ†’BUY=${fromDumpTsMs}ms` : '') +
-        ` (buy.latency=${buyResult.latencyMs}ms, state=${buyResult.stateLatencyMs}ms, send=${buyResult.sendLatencyMs}ms)`,
-      );
-    }
-
-    // è®°å½• BUY tradeï¼ˆç”¨åŒä¸€ positionIdï¼‰
-    if (order._signalReceivedAt && buyResult) {
-      const signalToBuyMs = Date.now() - order._signalReceivedAt;
-      const fromDumpTsMs = order.ts ? Date.now() - order.ts : null;
-      try {
-        featureRecorder.recordLatency({
-          ts: Date.now(),
-          mint: order.mint,
-          symbol: order.symbol,
-          signature: buyResult.signature || order.signature,
-          phase: 'buy',
-          latencyDetectMs: fromDumpTsMs,
-          latencyDecisionMs: signalToBuyMs,
-          latencySendMs: buyResult.sendLatencyMs,
-          latencyConfirmMs: buyResult.latencyMs,
-          details: {
-            success: !!buyResult.success,
-            reason: order.reason,
-            stateLatencyMs: buyResult.stateLatencyMs,
-            error: buyResult.error || null,
-            configuredSlippagePct: buyResult.configuredSlippagePct,
-            effectiveSlippagePct: buyResult.effectiveSlippagePct,
-            signalPrice: buyResult.signalPrice,
-            expectedPrice: buyResult.expectedPrice,
-            maxPrice: buyResult.maxPrice,
-            maxQuoteSol: buyResult.maxQuoteSol,
-            cacheAgeBeforeMs: buyResult.cacheAgeBeforeMs,
-            cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
-            stateSource: buyResult.stateSource,
-            failureStage: buyResult.failureStage,
-            buyMode: buyResult.buyMode,
-            minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
-            virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
-          },
-        });
-      } catch (_) { /* analytics only */ }
-    }
-
-    if (!order.mint) {
-      console.error(`[main] BUG: buyOrder with null mint! order=`, JSON.stringify(order).slice(0, 200));
-      return;
-    }
-    tradeLogger.logTrade({
-      positionId,
-      ts: Date.now(),
-      mint: order.mint,
-      symbol: order.symbol,
-      side: 'BUY',
-      solAmount: buyResult.solIn ?? order.sizeSol,
-      tokenAmount: buyResult.tokenAmount,
-      price: buyResult.price,
-      signature: buyResult.signature,
-      success: buyResult.success,
-      dryRun: config.DRY_RUN,
-      reason: order.reason,
-      latencyMs: buyResult.latencyMs,
-      error: buyResult.error,
-      configuredSlippagePct: buyResult.configuredSlippagePct ?? (config.strategy.buySlippageBps / 100),
-      effectiveSlippagePct: buyResult.effectiveSlippagePct,
-      signalPrice: buyResult.signalPrice ?? order.priceAfter,
-      expectedPrice: buyResult.expectedPrice,
-      maxPrice: buyResult.maxPrice,
-      maxQuoteSol: buyResult.maxQuoteSol,
-      cacheAgeBeforeMs: buyResult.cacheAgeBeforeMs,
-      cacheAgeAtBuildMs: buyResult.cacheAgeAtBuildMs,
-      stateSource: buyResult.stateSource,
-      buyMode: buyResult.buyMode,
-      minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
-      virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
-    });
-
-    if (!buyResult.success) {
-      console.error(
-        `[main] BUY failed for ${order.symbol || order.mint.slice(0, 6)}: ${buyResult.error}`,
-      );
-      // Protect only explicit execution/pool failures. Local price-guard rejects
-      // spend no fee and do not create a strategy cooldown.
-      const poolFailure = buyResult.poolDead || buyResult.poolLowLiquidity || buyResult.poolMintMismatch;
-      if (buyResult.chainFailure || poolFailure) {
-        const cooldownMs = buyResult.chainFailure
-          ? parseInt(process.env.BUY_FAILED_REBUY_COOLDOWN_MS || '86400000', 10)
-          : parseInt(process.env.POOL_FAIL_REBUY_COOLDOWN_MS || '86400000', 10);
-        signalEngine._exitCooldowns.set(order.mint, Date.now() + cooldownMs);
-        console.log(
-          `[main] ğŸ”’ ${buyResult.chainFailure ? 'BUY_CHAIN_FAILED' : 'Pool fail'} cooldown ` +
-            `${order.symbol || order.mint.slice(0, 6)} for ${Math.round(cooldownMs / 3600000)}h`,
-        );
-      }
-      return;
-    }
-
-    // ç”¨çœŸå®æˆäº¤ä»·åˆå§‹åŒ– entry_priceï¼ˆå…³é”®ä¿®å¤ v1 bugï¼šä¹‹å‰ç”¨ trigger ä»·ï¼‰
-    // v3.17.21: ä¹°å…¥ç¬é—´çš„ FDV / pool / liquidityï¼ˆç”¨äºäº‹ååˆ†æå…¥åœºè´¨é‡ï¼‰
-    const entryFdv = tokenInfo?.fdv ?? null;
-    const entryLiquidity = tokenInfo?.liquidity ?? null;
-    const entryPoolSol = order.poolQuoteAfter ?? tokenInfo?.liquidity ?? null; // dumpSignal.poolQuoteAfter æœ€å‡†ç¡®
-
-    // v3.17.39: è®¡ç®—é¦–ä¿¡å·åˆ°ä¹°å…¥çš„ç§’æ•°ï¼ˆç”¨äºå›æµ‹å…¥åœºæ—¶æœºï¼‰
-    let mintAgeAtBuySec = null;
-    try {
-      const firstSignal = tradeLogger.db.prepare(
-        'SELECT MIN(ts) as ts FROM signals WHERE mint = ?'
-      ).get(order.mint);
-      if (firstSignal && firstSignal.ts) {
-        mintAgeAtBuySec = Math.round((Date.now() - firstSignal.ts) / 1000);
-      }
-    } catch (_) {}
-
-    positionManager.registerOpen({
-      positionId,
-      mint: order.mint,
-      symbol: order.symbol,
-      entrySol: buyResult.solIn ?? order.sizeSol,
-      entryPrice: buyResult.price,         // çœŸå®æˆäº¤ä»·
-      tokenAmount: buyResult.tokenAmount,  // çœŸå®ä¹°åˆ°çš„æ•°é‡
-      dryRun: config.DRY_RUN,
-      signature: buyResult.signature,
-      buyFeeLamports: buyResult.priorityFeeLamports || 0,  // v3.4: ç”¨äºçœŸå® PnL
-      buySlot: buyResult.buySlot || 0,  // v3.17.11: BUY æ—¶çš„é“¾ä¸Š slot
-      dumpSlot: order.slot || 0,        // v3.17.19: ç ¸å•çš„ slot,ç”¨äºç®— BUY è½é“¾é¢†å…ˆå‡ ä¸ª slot
-      entryFdv,                          // v3.17.21: ä¹°å…¥ç¬é—´ FDV
-      entryPoolSol,                      // v3.17.21: ä¹°å…¥ç¬é—´æ± å­ SOL
-      entryLiquidity,                    // v3.17.21: ä¹°å…¥ç¬é—´æµåŠ¨æ€§ USD
-      sellCount10s: order._sellCount10s || 1,   // v3.17.36: è¿ç¯æ‹”å›æµ‹
-      totalSellSol10s: order._totalSellSol10s || order.sellSol, // v3.17.36: è¿ç¯æ‹”å›æµ‹
-      mintAgeAtBuySec,                           // v3.17.39: é¦–ä¿¡å·åˆ°ä¹°å…¥ç§’æ•°
-      rsiPreDump: order.rsiPreDump,              // v3.17.38: ç ¸å•å‰ RSI5s
-      rsi1sPreDump: order.rsi1sPreDump,          // v3.17.38: ç ¸å•å‰ RSI1s
-      rsi30sPreDump: order.rsi30sPreDump,        // v3.17.42: ç ¸å•å‰ RSI30s
-      isEmaStrategy: false,  // EMA removed
-      isAddOn: order._isAddOn || false,                 // åŠ ä»“æ ‡è®°
-    });
-
-
-    // ç«‹å³åŒæ­¥ PriceTrackerï¼Œç”¨çœŸå®æˆäº¤ä»·åš entry baseline
-    // ï¼ˆé¿å…ä¸‹ä¸€ç¬” LaserStream tx æ¨ä¸€ä¸ªæ—§ä»·æ ¼è§¦å‘å‡ TPï¼‰
-    priceTracker.forceSet(order.mint, buyResult.price);
-
-    if (buyResult.signature) signalEngine.registerOurSignature(buyResult.signature);
-  });
-
-  positionManager.on('opened', (pos) =>
-    server.broadcast({ type: 'positionOpened', position: pos }),
-  );
-  positionManager.on('closed', (pos) => {
-    // Start cooldown from confirmed close. Sequential add-on exits extend the
-    // same mint cooldown from the latest completed sale.
-    signalEngine.lastTriggerTs.set(pos.mint, Date.now());
-    if (config.strategy.rebuyCooldownMs > 0) {
-      signalEngine._exitCooldowns.set(pos.mint, Date.now() + config.strategy.rebuyCooldownMs);
-    }
-    if (pos.removeAfterExit && !positionManager.hasOpenPosition(pos.mint)) {
-      tokenRegistry.removeToken(pos.mint);
-      tickStream.updateSubscription(tokenRegistry.listActive().map((token) => token.mint));
-      server.broadcast({
-        type: 'tokenRemoved',
-        mint: pos.mint,
-        reason: pos.exitReason,
-      });
-      console.log(
-        `[main] removed ${pos.symbol || pos.mint.slice(0, 6)} after ${pos.exitReason}`,
-      );
-    }
-    server.broadcast({ type: 'positionClosed', position: pos });
-  });
-
-  // ============ å¯åŠ¨æœåŠ¡å™¨ ============
-  server.start();
-
-  // ============ å¯åŠ¨å‰è¡¥å…… pool ä¿¡æ¯ï¼ˆå¼‚æ­¥åå°ï¼‰ ============
-  if (config.autoFillPoolsOnStart) {
-    backgroundFillPools(tokenRegistry).catch((err) =>
-      console.error(`[main] backgroundFillPools error: ${err.message}`),
-    );
-  }
-
-  // ============ å¯åŠ¨æ•°æ®æµ ============
-  const initialMints = tokenRegistry.listActive().map((t) => t.mint);
-  console.log(`[main] starting LaserStream with ${initialMints.length} initial tokens`);
-  await tickStream.start(initialMints);
-  pumpDiscovery.start();
-
-  // ============ ä¼˜é›…é€€å‡º ============
-  const shutdown = async (signal) => {
-    console.log(`\n[main] ${signal} received, shutting down gracefully...`);
-    try {
-      pumpDiscovery.stop();
-      await tickStream.stop();
-      postExitTracker.shutdown();
-      positionManager.stop();
-      tokenWatchdog.stop();
-      dumpDetector.shutdown && dumpDetector.shutdown();
-      alertChecker.stop();
-      monitor.stop();
-      executor.stop && executor.stop();
-      await new Promise((r) => setTimeout(r, 200));
-    } catch (err) {
-      console.error(`[main] shutdown error: ${err.message}`);
-    }
-    process.exit(0);
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-  process.on('uncaughtException', (err) => {
-    if (err.code === 'EADDRINUSE') { console.warn('[main] port conflict, dashboard disabled - continuing'); return; }
-    monitor.recordError('main', err, { phase: 'uncaughtException' });
-    monitor.inc('main.uncaughtExceptions', 1, 'main');
-    console.error('[main] uncaughtException:', err);
-  });
-  process.on('unhandledRejection', (reason) => {
-    monitor.recordError('main', reason instanceof Error ? reason : new Error(String(reason)), {
-      phase: 'unhandledRejection',
-    });
-    monitor.inc('main.unhandledRejections', 1, 'main');
-    console.error('[main] unhandledRejection:', reason);
-  });
-
-  console.log('[main] startup complete');
-
-  // v3.27: å®šæ—¶3å°æ—¶è‡ªåŠ¨é‡å¯ï¼Œé˜²æ­¢ Rust native ç¼“æ…¢æ³„æ¼å¯¼è‡´ slot gap æ¶åŒ–
-  // åŸºçº¿RSS ~550MB (7ä¸ªgRPCè¿æ¥)ï¼Œ3å°æ—¶æ³„æ¼åˆ° ~800MB æ—¶ slot gap å°±å¼€å§‹æ¶åŒ–
-  // é‡å¯å restoreFromDb æ¢å¤æŒä»“ï¼Œæœ‰ä»“æ—¶å»¶è¿Ÿåˆ°ç©ºä»“æˆ–RSS>1000MBå†é‡å¯
-  const MAX_UPTIME_MS = parseInt(process.env.MAX_UPTIME_MS || '10800000', 10); // é»˜è®¤3å°æ—¶
-  const startTime = Date.now();
-  setInterval(() => {
-    const uptimeMs = Date.now() - startTime;
-    const posCount = positionManager?.positions?.size ?? 0;
-    if (uptimeMs > MAX_UPTIME_MS && posCount === 0) {
-      console.log(`[MEM] ğŸ”„ uptime=${Math.round(uptimeMs/60000)}min > ${Math.round(MAX_UPTIME_MS/60000)}min ä¸”ç©ºä»“, å®šæ—¶é‡å¯é‡Šæ”¾ Rust native å†…å­˜`);
-      process.exit(0);
-    } else if (uptimeMs > MAX_UPTIME_MS && posCount > 0) {
-      console.log(`[MEM] â³ uptime=${Math.round(uptimeMs/60000)}min > ${Math.round(MAX_UPTIME_MS/60000)}min ä½†æœ‰ ${posCount} ä¸ªæŒä»“, ç­‰ RSS è¾¾åˆ°é˜ˆå€¼æˆ–ç©ºä»“åé‡å¯`);
-    }
-  }, 60_000);
-}
-
-/**
- * åå°æ‰«ææ‰€æœ‰ç¼ºå¤± pool ä¿¡æ¯çš„ä»£å¸ï¼Œé€ä¸ªè¡¥ä¸Šã€‚
- * èŠ‚æµï¼šæ¯ä¸ª 250msã€‚
- */
-async function backgroundFillPools(tokenRegistry) {
-  const targets = tokenRegistry
-    .listAll()
-    .filter((t) => t.is_active && needsPoolRepair(t));
-
-  if (targets.length === 0) return;
-  console.log(`[main] auto-fill pool for ${targets.length} tokens (background)`);
-
-  const finder = new PoolFinder({});
-  let ok = 0;
-  let fail = 0;
-
-  for (const t of targets) {
-    try {
-      const result = await finder.findPoolForMint(t.mint);
-      if (result) {
-        tokenRegistry.setPoolInfo(t.mint, result);
-        ok += 1;
-      } else {
-        fail += 1;
-      }
-    } catch (err) {
-      fail += 1;
-      console.warn(`[fill-pools] ${t.symbol || t.mint.slice(0, 6)}: ${err.message}`);
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  console.log(`[main] auto-fill pool done: ${ok} OK, ${fail} failed`);
-}
-
-async function fillPoolForToken(tokenRegistry, mint) {
-  try {
-    const finder = new PoolFinder({});
-    const result = await finder.findPoolForMint(mint);
-    if (result) {
-      tokenRegistry.setPoolInfo(mint, result);
-      console.log(
-        `[fill-pools] ${mint.slice(0, 6)}: pool=${result.poolAddress.slice(0, 6)}..`,
-      );
-    }
-  } catch (err) {
-    console.warn(`[fill-pools] ${mint.slice(0, 6)}: ${err.message}`);
-  }
-}
-
-main().catch((err) => {
-  console.error('[main] fatal error:', err);
-  process.exit(1);
-});
-
-// v3.32b: å †å¤–å†…å­˜ç›‘æ§ â€” åŒºåˆ† heap vs external vs arrayBuffers
-setInterval(() => {
-  const m = process.memoryUsage();
-  console.log(`[MEM] rss=${(m.rss/1048576)|0}MB heapUsed=${(m.heapUsed/1048576)|0}MB external=${(m.external/1048576)|0}MB arrayBuffers=${(m.arrayBuffers/1048576)|0}MB`);
-}, 30000);
+  const dailyReport = new Dailï¾7¶‰ËkºwµçZHÉ•¥ÍÑ•ÈÁ½Í¥Ñ¥½¸€ôôôôôôôôôôôô4(€Í¥¹…±¹¥¹”¹½¸ ‰Õå=É‘•Èœ°…Íå¹Œ€¡½É‘•È¤€ôøì4(€€€½¹Í½±”¹±½œ¡mµ…¥¹t‰Õå=É‘•ÈÉ••¥Ù•è€‘í½É‘•È¹Íåµ‰½°ñğ½É‘•È¹µ¥¹Ğ¹Í±¥” À°Ø¥ôµ¥¹Ğô‘í½É‘•È¹µ¥¹Ğ¹Í±¥” À°à¥ô¸¸É•…Í½¸ô‘í½É‘•È¹É•…Í½¹ôÍ¥œô‘í½É‘•È¹Í¥¹…ÑÕÉ”ü¹Í±¥” À°ÄÈ¥ô¸¹€¤ì4(€€€½¹ÍĞ}ĞÀ€ô…Ñ”¹¹½Ü ¤ì4(€€€½¹ÍĞÑ½­•¹%¹™¼€ôÑ½­•¹I•¥ÍÑÉä¹•ÑQ½­•¸¡½É‘•È¹µ¥¹Ğ¤ì4(€€€½¹ÍĞ}ĞÄ€ô…Ñ”¹¹½Ü ¤ì4(4(€€€€¼¼ƒR£–B3’â’â¨Á½Í¥Ñ¥½¹%ƒ¢Ò¿¦ü	UdÑÉ…‘”€¼Á½Í¥Ñ¥½¸ƒ¢† 4(€€€½¹ÍĞÁ½Í¥Ñ¥½¹%€ôÉåÁÑ¼¹É…¹‘½µUU% ¤ì4(4(€€€€¼¼ƒš‚¢ºÃš¶µ¥¹Ğƒš¶–r ‰Õäƒ’â·¾ò3¢º§–B;î·–æÛ–>D‘ÕµÁM¥¹…°ƒr/–"Ã¢şg’â«š÷’ö7¢Š¯–6€4(€€€Í¥¹…±¹¥¹”¹µ…É­	Õå%¹™±¥¡Ğ¡½É‘•È¹µ¥¹Ğ¤ì4(4(€€€€¼¼I•½ÉÑ¡”ÕÉÉ•¹Ğ¡…¥¸Í±½Ğ½¸	Ud™½È•á•ÕÑ¥½¸µ•Ñ…‘…Ñ„¸4(€€€•á•ÕÑ½È¹Í•Ñ1…Ñ•ÍÑM±½Ğ¡Ñ¥­MÑÉ•…´¹±…Ñ•ÍÑM±½Ğñğ€À¤ì4(4(€€€½¹ÍĞ}ĞÈ€ô…Ñ”¹¹½Ü ¤ì4(€€€±•Ğ‰ÕåI•ÍÕ±Ğì4(€€€ÑÉäì4(€€€€€‰ÕåI•ÍÕ±Ğ€ô…İ…¥Ğ•á•ÕÑ½È¹‰Õä¡ì4(€€€€€€€µ¥¹Ğè½É‘•È¹µ¥¹Ğ°4(€€€€€€€Íåµ‰½°è½É‘•È¹Íåµ‰½°°4(€€€€€€€Í¥é•M½°è½É‘•È¹Í¥é•M½°°4(€€€€€€€ÁÉ¥•™Ñ•Èè½É‘•È¹ÁÉ¥•™Ñ•È°€¼¼ƒR£’ê8Ie}IU8ƒš¢‡š.|4(€€€€€€€‰…Í••¥µ…±Ìè½É‘•È¹‰…Í••¥µ…±Ì€üüÑ½­•¹%¹™¼ü¹‘•¥µ…±Ì€üü€Ø°4(€€€€€€€Á½½±‘‘É•ÍÌèÑ½­•¹%¹™¼ü¹Á½½±}…‘‘É•ÍÌ°€¼¼AÕµÀM,ƒ¦r¢šÁ½½°…‘‘É•ÍÌ4(€€€€€ô¤ì4(€€€ô™¥¹…±±äì4(€€€€€Í¥¹…±¹¥¹”¹µ…É­	Õå½¹”¡½É‘•È¹µ¥¹Ğ¤ì4(€€€ô4(€€€¥˜€¡½É‘•È¹}Í¥¹…±I••¥Ù•‘Ğ€˜˜‰ÕåI•ÍÕ±Ğ€˜˜‰ÕåI•ÍÕ±Ğ¹ÍÕ•ÍÌ¤ì4(€€€€€½¹Í½±”¹±½œ mµ…¥¹t‰Õå=É‘•É}Ñ¥µ¥¹œè•ÑQ½­•¸ô•‘µÌÁÉ•	Õäô•‘µÌ‰Õäô•‘µÌœ°}ĞÄµ}ĞÀ°}ĞÈµ}ĞÄ°…Ñ”¹¹½Ü ¤µ}ĞÈ¤ì4(€€€ô4(4(€€€€¼¼ØÌ¸ÄÜ¸ÄØèƒ®¿–"Ã®¿–îÛ¢şnGš:œƒŠPƒ¢şgšb¿3¢÷–B›ÒŸ¢Şv‚ã–6W’æÃ–—7jš‚ã–şš2š‚4(€€€€¼¼€€Í¥¹…±Q½	Õå5Ìèƒ’î;‚ãn`Ñàƒš^Û¦^Óš"Ï–"À	Udƒš>C’ê“jšï¢_š^Ø4(€€€€¼¼€€¥¹¹¥¹•5Ìèƒ‚ãn`Ñàƒ¢şo–”M¥¹…±¹¥¹”ƒ–"À•µ¥Ğ‰Õå=É‘•È4(€€€€¼¼€€‰Õå1…Ñ•¹å5Ìè•á•ÕÑ½È¹‰Õäƒ–¦£¢_š^Ø£¢¾ì…¡”€¬ƒšz¦€€¬ƒ–>G¦¤4(€€€€¼¼€€ƒBšÌèÍ¥¹…±Q½	Õå5ÌƒŠ&€ĞÀÁµÌ€ ÄÍ±½Ğ¤°‰Õå1…Ñ•¹å5ÌƒŠ&€ÄÔÁµÌ4(€€€¥˜€¡½É‘•È¹}Í¥¹…±I••¥Ù•‘Ğ€˜˜‰ÕåI•ÍÕ±Ğ¹ÍÕ•ÍÌ¤ì4(€€€€€½¹ÍĞÍ¥¹…±Q½	Õå5Ì€ô…Ñ”¹¹½Ü ¤€´½É‘•È¹}Í¥¹…±I••¥Ù•‘Ğì4(€€€€€½¹ÍĞ™É½µÕµÁQÍ5Ì€ô½É‘•È¹ÑÌ€ü…Ñ”¹¹½Ü ¤€´½É‘•È¹ÑÌ€è¹Õ±°ì4(€€€€€½¹Í½±”¹±½œ 4(€€€€€€€mµ…¥¹tƒŠ>Ä€€‘í½É‘•È¹Íåµ‰½°ñğ½É‘•È¹µ¥¹Ğ¹Í±¥” À°€Ø¥ô±…Ñ•¹äè€€¬4(€€€€€€€Í¥¹…³ŠI	Udô‘íÍ¥¹…±Q½	Õå5ÍõµÍ€€¬4(€€€€€€€€¡™É½µÕµÁQÍ5Ì€„ôô¹Õ±°€ü€‘ÕµÁQÏŠI	Udô‘í™É½µÕµÁQÍ5ÍõµÍ€€è€œœ¤€¬4(€€€€€€€€€¡‰Õä¹±…Ñ•¹äô‘í‰ÕåI•ÍÕ±Ğ¹±…Ñ•¹å5ÍõµÌ°ÍÑ…Ñ”ô‘í‰ÕåI•ÍÕ±Ğ¹ÍÑ…Ñ•1…Ñ•¹å5ÍõµÌ°Í•¹ô‘í‰ÕåI•ÍÕ±Ğ¹Í•¹‘1…Ñ•¹å5ÍõµÌ¥€°4(€€€€€€¤ì4(€€€ô4(4(€€€€¼¼ƒ¢ºÃ–öT	UdÑÉ…‘—¾ò#R£–B3’â Á½Í¥Ñ¥½¹%“¾ò$4(€€€¥˜€¡½É‘•È¹}Í¥¹…±I••¥Ù•‘Ğ€˜˜‰ÕåI•ÍÕ±Ğ¤ì4(€€€€€½¹ÍĞÍ¥¹…±Q½	Õå5Ì€ô…Ñ”¹¹½Ü ¤€´½É‘•È¹}Í¥¹…±I••¥Ù•‘Ğì4(€€€€€½¹ÍĞ™É½µÕµÁQÍ5Ì€ô½É‘•È¹ÑÌ€ü…Ñ”¹¹½Ü ¤€´½É‘•È¹ÑÌ€è¹Õ±°ì4(€€€€€ÑÉäì4(€€€€€€€™•…ÑÕÉ•I•½É‘•È¹É•½É‘1…Ñ•¹ä¡ì4(€€€€€€€€€ÑÌè…Ñ”¹¹½Ü ¤°4(€€€€€€€€€µ¥¹Ğè½É‘•È¹µ¥¹Ğ°4(€€€€€€€€€Íåµ‰½°è½É‘•È¹Íåµ‰½°°4(€€€€€€€€€Í¥¹…ÑÕÉ”è‰ÕåI•ÍÕ±Ğ¹Í¥¹…ÑÕÉ”ñğ½É‘•È¹Í¥¹…ÑÕÉ”°4(€€€€€€€€€Á¡…Í”è€‰Õäœ°4(€€€€€€€€€±…Ñ•¹å•Ñ•Ñ5Ìè™É½µÕµÁQÍ5Ì°4(€€€€€€€€€±…Ñ•¹å•¥Í¥½¹5ÌèÍ¥¹…±Q½	Õå5Ì°4(€€€€€€€€€±…Ñ•¹åM•¹‘5Ìè‰ÕåI•ÍÕ±Ğ¹Í•¹‘1…Ñ•¹å5Ì°4(€€€€€€€€€±…Ñ•¹å½¹™¥Éµ5Ìè‰ÕåI•ÍÕ±Ğ¹±…Ñ•¹å5Ì°4(€€€€€€€€€‘•Ñ…¥±Ìèì4(€€€€€€€€€€€ÍÕ•ÍÌè€„…‰ÕåI•ÍÕ±Ğ¹ÍÕ•ÍÌ°4(€€€€€€€€€€€É•…Í½¸è½É‘•È¹É•…Í½¸°4(€€€€€€€€€€€ÍÑ…Ñ•1…Ñ•¹å5Ìè‰ÕåI•ÍÕ±Ğ¹ÍÑ…Ñ•1…Ñ•¹å5Ì°4(€€€€€€€€€€€•ÉÉ½Èè‰ÕåI•ÍÕ±Ğ¹•ÉÉ½Èñğ¹Õ±°°4(€€€€€€€€€€€½¹™¥ÕÉ•‘M±¥ÁÁ…•AĞè‰ÕåI•ÍÕ±Ğ¹½¹™¥ÕÉ•‘M±¥ÁÁ…•AĞ°4(€€€€€€€€€€€•™™•Ñ¥Ù•M±¥ÁÁ…•AĞè‰ÕåI•ÍÕ±Ğ¹•™™•Ñ¥Ù•M±¥ÁÁ…•AĞ°4(€€€€€€€€€€€Í¥¹…±AÉ¥”è‰ÕåI•ÍÕ±Ğ¹Í¥¹…±AÉ¥”°4(€€€€€€€€€€€•áÁ•Ñ•‘AÉ¥”è‰ÕåI•ÍÕ±Ğ¹•áÁ•Ñ•‘AÉ¥”°4(€€€€€€€€€€€µ…áAÉ¥”è‰ÕåI•ÍÕ±Ğ¹µ…áAÉ¥”°4(€€€€€€€€€€€µ…áEÕ½Ñ•M½°è‰ÕåI•ÍÕ±Ğ¹µ…áEÕ½Ñ•M½°°4(€€€€€€€€€€€…¡••	•™½É•5Ìè‰ÕåI•ÍÕ±Ğ¹…¡••	•™½É•5Ì°4(€€€€€€€€€€€…¡••Ñ	Õ¥±‘5Ìè‰ÕåI•ÍÕ±Ğ¹…¡••Ñ	Õ¥±‘5Ì°4(€€€€€€€€€€€ÍÑ…Ñ•M½ÕÉ”è‰ÕåI•ÍÕ±Ğ¹ÍÑ…Ñ•M½ÕÉ”°4(€€€€€€€€€€€™…¥±ÕÉ•MÑ…”è‰ÕåI•ÍÕ±Ğ¹™…¥±ÕÉ•MÑ…”°4(€€€€€€€€€€€‰Õå5½‘”è‰ÕåI•ÍÕ±Ğ¹‰Õå5½‘”°4(€€€€€€€€€€€µ¥¹	…Í•µ½Õ¹Ñ=ÕÑI…Üè‰ÕåI•ÍÕ±Ğ¹µ¥¹	…Í•µ½Õ¹Ñ=ÕÑI…Ü°4(€€€€€€€€€€€Ù¥ÉÑÕ…±EÕ½Ñ•I•Í•ÉÙ•ÍI…Üè‰ÕåI•ÍÕ±Ğ¹Ù¥ÉÑÕ…±EÕ½Ñ•I•Í•ÉÙ•ÍI…Ü°4(€€€€€€€€€ô°4(€€€€€€€ô¤ì4(€€€€€ô…Ñ €¡|¤ì€¼¨…¹…±åÑ¥Ì½¹±ä€¨¼ô4(€€€ô4(4(€€€¥˜€ …½É‘•È¹µ¥¹Ğ¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È¡mµ…¥¹t	Uè‰Õå=É‘•Èİ¥Ñ ¹Õ±°µ¥¹Ğ„½É‘•Èõ€°)M=8¹ÍÑÉ¥¹¥™ä¡½É‘•È¤¹Í±¥” À°€ÈÀÀ¤¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(€€€ÑÉ…‘•1½•È¹±½QÉ…‘”¡ì4(€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€ÑÌè…Ñ”¹¹½Ü ¤°4(€€€€€µ¥¹Ğè½É‘•È¹µ¥¹Ğ°4(€€€€€Íåµ‰½°è½É‘•È¹Íåµ‰½°°4(€€€€€Í¥‘”è€	Udœ°4(€€€€€Í½±µ½Õ¹Ğè‰ÕåI•ÍÕ±Ğ¹Í½±%¸€üü½É‘•È¹Í¥é•M½°°4(€€€€€Ñ½­•¹µ½Õ¹Ğè‰ÕåI•ÍÕ±Ğ¹Ñ½­•¹µ½Õ¹Ğ°4(€€€€€ÁÉ¥”è‰ÕåI•ÍÕ±Ğ¹ÁÉ¥”°4(€€€€€Í¥¹…ÑÕÉ”è‰ÕåI•ÍÕ±Ğ¹Í¥¹…ÑÕÉ”°4(€€€€€ÍÕ•ÍÌè‰ÕåI•ÍÕ±Ğ¹ÍÕ•ÍÌ°4(€€€€€‘ÉåIÕ¸è½¹™¥œ¹Ie}IU8°4(€€€€€É•…Í½¸è½É‘•È¹É•…Í½¸°4(€€€€€±…Ñ•¹å5Ìè‰ÕåI•ÍÕ±Ğ¹±…Ñ•¹å5Ì°4(€€€€€•ÉÉ½Èè‰ÕåI•ÍÕ±Ğ¹•ÉÉ½È°4(€€€€€½¹™¥ÕÉ•‘M±¥ÁÁ…•AĞè‰ÕåI•ÍÕ±Ğ¹½¹™¥ÕÉ•‘M±¥ÁÁ…•AĞ€üü€¡½¹™¥œ¹ÍÑÉ…Ñ•ä¹‰ÕåM±¥ÁÁ…•	ÁÌ€¼€ÄÀÀ¤°4(€€€€€•™™•Ñ¥Ù•M±¥ÁÁ…•AĞè‰ÕåI•ÍÕ±Ğ¹•™™•Ñ¥Ù•M±¥ÁÁ…•AĞ°4(€€€€€Í¥¹…±AÉ¥”è‰ÕåI•ÍÕ±Ğ¹Í¥¹…±AÉ¥”€üü½É‘•È¹ÁÉ¥•™Ñ•È°4(€€€€€•áÁ•Ñ•‘AÉ¥”è‰ÕåI•ÍÕ±Ğ¹•áÁ•Ñ•‘AÉ¥”°4(€€€€€µ…áAÉ¥”è‰ÕåI•ÍÕ±Ğ¹µ…áAÉ¥”°4(€€€€€µ…áEÕ½Ñ•M½°è‰ÕåI•ÍÕ±Ğ¹µ…áEÕ½Ñ•M½°°4(€€€€€…¡••	•™½É•5Ìè‰ÕåI•ÍÕ±Ğ¹…¡••	•™½É•5Ì°4(€€€€€…¡••Ñ	Õ¥±‘5Ìè‰ÕåI•ÍÕ±Ğ¹…¡••Ñ	Õ¥±‘5Ì°4(€€€€€ÍÑ…Ñ•M½ÕÉ”è‰ÕåI•ÍÕ±Ğ¹ÍÑ…Ñ•M½ÕÉ”°4(€€€€€‰Õå5½‘”è‰ÕåI•ÍÕ±Ğ¹‰Õå5½‘”°4(€€€€€µ¥¹	…Í•µ½Õ¹Ñ=ÕÑI…Üè‰ÕåI•ÍÕ±Ğ¹µ¥¹	…Í•µ½Õ¹Ñ=ÕÑI…Ü°4(€€€€€Ù¥ÉÑÕ…±EÕ½Ñ•I•Í•ÉÙ•ÍI…Üè‰ÕåI•ÍÕ±Ğ¹Ù¥ÉÑÕ…±EÕ½Ñ•I•Í•ÉÙ•ÍI…Ü°4(€€€ô¤ì4(4(€€€¥˜€ …‰ÕåI•ÍÕ±Ğ¹ÍÕ•ÍÌ¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È 4(€€€€€€€mµ…¥¹t	Ud™…¥±•™½È€‘í½É‘•È¹Íåµ‰½°ñğ½É‘•È¹µ¥¹Ğ¹Í±¥” À°€Ø¥ôè€‘í‰ÕåI•ÍÕ±Ğ¹•ÉÉ½Éõ€°4(€€€€€€¤ì4(€€€€€€¼¼AÉ½Ñ•Ğ½¹±ä•áÁ±¥¥Ğ•á•ÕÑ¥½¸½Á½½°™…¥±ÕÉ•Ì¸1½…°ÁÉ¥”µÕ…ÉÉ•©•ÑÌ4(€€€€€€¼¼ÍÁ•¹¹¼™•”…¹‘¼¹½ĞÉ•…Ñ”„ÍÑÉ…Ñ•ä½½±‘½İ¸¸4(€€€€€½¹ÍĞÁ½½±…¥±ÕÉ”€ô‰ÕåI•ÍÕ±Ğ¹Á½½±•…ñğ‰ÕåI•ÍÕ±Ğ¹Á½½±1½İ1¥ÅÕ¥‘¥Ñäñğ‰ÕåI•ÍÕ±Ğ¹Á½½±5¥¹Ñ5¥Íµ…Ñ ì4(€€€€€¥˜€¡‰ÕåI•ÍÕ±Ğ¹¡…¥¹…¥±ÕÉ”ñğÁ½½±…¥±ÕÉ”¤ì4(€€€€€€€½¹ÍĞ½½±‘½İ¹5Ì€ô‰ÕåI•ÍÕ±Ğ¹¡…¥¹…¥±ÕÉ”4(€€€€€€€€€€üÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹	Ue}%1}I	Ue}==1=]9}5Lñğ€œàØĞÀÀÀÀÀœ°€ÄÀ¤4(€€€€€€€€€€èÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹A==1}%1}I	Ue}==1=]9}5Lñğ€œàØĞÀÀÀÀÀœ°€ÄÀ¤ì4(€€€€€€€Í¥¹…±¹¥¹”¹}•á¥Ñ½½±‘½İ¹Ì¹Í•Ğ¡½É‘•È¹µ¥¹Ğ°…Ñ”¹¹½Ü ¤€¬½½±‘½İ¹5Ì¤ì4(€€€€€€€½¹Í½±”¹±½œ 4(€€€€€€€€€mµ…¥¹tƒÂ~RH€‘í‰ÕåI•ÍÕ±Ğ¹¡…¥¹…¥±ÕÉ”€ü€	Ue}!%9}%1œ€è€A½½°™…¥°ô½½±‘½İ¸€€¬4(€€€€€€€€€€€€‘í½É‘•È¹Íåµ‰½°ñğ½É‘•È¹µ¥¹Ğ¹Í±¥” À°€Ø¥ô™½È€‘í5…Ñ ¹É½Õ¹¡½½±‘½İ¹5Ì€¼€ÌØÀÀÀÀÀ¥õ¡€°4(€€€€€€€€¤ì4(€€€€€ô4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€€¼¼ƒR£r–º{š"C’ê“’îß–"w–/–2X•¹ÑÉå}ÁÉ¥—¾ò#–Ï¦R»’ş»–’4ØÄ‰ÕŸ¾òk’æ/–&7R ÑÉ¥•Èƒ’îß¾ò$4(€€€€¼¼ØÌ¸ÄÜ¸ÈÄèƒ’æÃ–—z³¦^ÓjX€¼Á½½°€¼±¥ÅÕ¥‘¥Ñç¾ò#R£’ê;’ê/–B;–"šzC–—–rë¢Ò£¦?¾ò$4(€€€½¹ÍĞ•¹ÑÉå‘Ø€ôÑ½­•¹%¹™¼ü¹™‘Ø€üü¹Õ±°ì4(€€€½¹ÍĞ•¹ÑÉå1¥ÅÕ¥‘¥Ñä€ôÑ½­•¹%¹™¼ü¹±¥ÅÕ¥‘¥Ñä€üü¹Õ±°ì4(€€€½¹ÍĞ•¹ÑÉåA½½±M½°€ô½É‘•È¹Á½½±EÕ½Ñ•™Ñ•È€üüÑ½­•¹%¹™¼ü¹±¥ÅÕ¥‘¥Ñä€üü¹Õ±°ì€¼¼‘ÕµÁM¥¹…°¹Á½½±EÕ½Ñ•™Ñ•Èƒšr–†¸4(4(€€€€¼¼ØÌ¸ÄÜ¸Ìäèƒ¢º‡º_¦š[’ş‡–>ß–"Ã’æÃ–—jKšVÃ¾ò#R£’ê;–n{šÖ/–—–rëš^Ûšrë¾ò$4(€€€±•Ğµ¥¹Ñ•Ñ	ÕåM•Œ€ô¹Õ±°ì4(€€€ÑÉäì4(€€€€€½¹ÍĞ™¥ÉÍÑM¥¹…°€ôÑÉ…‘•1½•È¹‘ˆ¹ÁÉ•Á…É” 4(€€€€€€€€M1P5%8¡ÑÌ¤…ÌÑÌI=4Í¥¹…±Ì]!Iµ¥¹Ğ€ô€üœ4(€€€€€€¤¹•Ğ¡½É‘•È¹µ¥¹Ğ¤ì4(€€€€€¥˜€¡™¥ÉÍÑM¥¹…°€˜˜™¥ÉÍÑM¥¹…°¹ÑÌ¤ì4(€€€€€€€µ¥¹Ñ•Ñ	ÕåM•Œ€ô5…Ñ ¹É½Õ¹ ¡…Ñ”¹¹½Ü ¤€´™¥ÉÍÑM¥¹…°¹ÑÌ¤€¼€ÄÀÀÀ¤ì4(€€€€€ô4(€€€ô…Ñ €¡|¤íô4(4(€€€Á½Í¥Ñ¥½¹5…¹…•È¹É•¥ÍÑ•É=Á•¸¡ì4(€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€µ¥¹Ğè½É‘•È¹µ¥¹Ğ°4(€€€€€Íåµ‰½°è½É‘•È¹Íåµ‰½°°4(€€€€€•¹ÑÉåM½°è‰ÕåI•ÍÕ±Ğ¹Í½±%¸€üü½É‘•È¹Í¥é•M½°°4(€€€€€•¹ÑÉåAÉ¥”è‰ÕåI•ÍÕ±Ğ¹ÁÉ¥”°€€€€€€€€€¼¼ƒr–º{š"C’ê“’îÜ4(€€€€€Ñ½­•¹µ½Õ¹Ğè‰ÕåI•ÍÕ±Ğ¹Ñ½­•¹µ½Õ¹Ğ°€€¼¼ƒr–º{’æÃ–"ÃjšVÃ¦<4(€€€€€‘ÉåIÕ¸è½¹™¥œ¹Ie}IU8°4(€€€€€Í¥¹…ÑÕÉ”è‰ÕåI•ÍÕ±Ğ¹Í¥¹…ÑÕÉ”°4(€€€€€‰Õå••1…µÁ½ÉÑÌè‰ÕåI•ÍÕ±Ğ¹ÁÉ¥½É¥Ñå••1…µÁ½ÉÑÌñğ€À°€€¼¼ØÌ¸ĞèƒR£’ê;r–ºxA¹04(€€€€€‰ÕåM±½Ğè‰ÕåI•ÍÕ±Ğ¹‰ÕåM±½Ğñğ€À°€€¼¼ØÌ¸ÄÜ¸ÄÄè	Udƒš^Ûj¦Nû’â(Í±½Ğ4(€€€€€‘ÕµÁM±½Ğè½É‘•È¹Í±½Ğñğ€À°€€€€€€€€¼¼ØÌ¸ÄÜ¸Ääèƒ‚ã–6WjÍ±½Ğ³R£’ê;º\	Udƒ¢B÷¦Nû¦Š–#–ƒ’â¨Í±½Ğ4(€€€€€•¹ÑÉå‘Ø°€€€€€€€€€€€€€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸ÈÄèƒ’æÃ–—z³¦^ĞX4(€€€€€•¹ÑÉåA½½±M½°°€€€€€€€€€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸ÈÄèƒ’æÃ–—z³¦^ÓšÆƒ–¶@M=04(€€€€€•¹ÑÉå1¥ÅÕ¥‘¥Ñä°€€€€€€€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸ÈÄèƒ’æÃ–—z³¦^ÓšÖ–*£šœUM4(€€€€€Í•±±½Õ¹ĞÄÁÌè½É‘•È¹}Í•±±½Õ¹ĞÄÁÌñğ€Ä°€€€¼¼ØÌ¸ÄÜ¸ÌØèƒ¢ş{:¿š.S–n{šÖ,4(€€€€€Ñ½Ñ…±M•±±M½°ÄÁÌè½É‘•È¹}Ñ½Ñ…±M•±±M½°ÄÁÌñğ½É‘•È¹Í•±±M½°°€¼¼ØÌ¸ÄÜ¸ÌØèƒ¢ş{:¿š.S–n{šÖ,4(€€€€€µ¥¹Ñ•Ñ	ÕåM•Œ°€€€€€€€€€€€€€€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸Ìäèƒ¦š[’ş‡–>ß–"Ã’æÃ–—KšVÀ4(€€€€€ÉÍ¥AÉ•ÕµÀè½É‘•È¹ÉÍ¥AÉ•ÕµÀ°€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸Ìàèƒ‚ã–6W–&4IM$ÕÌ4(€€€€€ÉÍ¤ÅÍAÉ•ÕµÀè½É‘•È¹ÉÍ¤ÅÍAÉ•ÕµÀ°€€€€€€€€€€¼¼ØÌ¸ÄÜ¸Ìàèƒ‚ã–6W–&4IM$ÅÌ4(€€€€€ÉÍ¤ÌÁÍAÉ•ÕµÀè½É‘•È¹ÉÍ¤ÌÁÍAÉ•ÕµÀ°€€€€€€€€¼¼ØÌ¸ÄÜ¸ĞÈèƒ‚ã–6W–&4IM$ÌÁÌ4(€€€€€¥Íµ…MÑÉ…Ñ•äè™…±Í”°€€¼¼5É•µ½Ù•4(€€€€€¥Í‘‘=¸è½É‘•È¹}¥Í‘‘=¸ñğ™…±Í”°€€€€€€€€€€€€€€€€€¼¼ƒ–*ƒ’îOš‚¢ºÀ4(€€€ô¤ì4(4(4(€€€€¼¼ƒ®/–6Ï–B3š¶”AÉ¥•QÉ…­•Ë¾ò3R£r–º{š"C’ê“’îß–h•¹ÑÉä‰…Í•±¥¹”4(€€€€¼¼ƒ¾ò#¦ÿ–7’â/’â²P1…Í•ÉMÑÉ•…´Ñàƒš:£’â’â«š^Ÿ’îßš‚ó¢›–>G–QC¾ò$4(€€€ÁÉ¥•QÉ…­•È¹™½É•M•Ğ¡½É‘•È¹µ¥¹Ğ°‰ÕåI•ÍÕ±Ğ¹ÁÉ¥”¤ì4(4(€€€¥˜€¡‰ÕåI•ÍÕ±Ğ¹Í¥¹…ÑÕÉ”¤Í¥¹…±¹¥¹”¹É•¥ÍÑ•É=ÕÉM¥¹…ÑÕÉ”¡‰ÕåI•ÍÕ±Ğ¹Í¥¹…ÑÕÉ”¤ì4(€ô¤ì4(4(€Á½Í¥Ñ¥½¹5…¹…•È¹½¸ ½Á•¹•œ°€¡Á½Ì¤€ôø4(€€€Í•ÉÙ•È¹‰É½…‘…ÍĞ¡ìÑåÁ”è€Á½Í¥Ñ¥½¹=Á•¹•œ°Á½Í¥Ñ¥½¸èÁ½Ìô¤°4(€€¤ì4(€Á½Í¥Ñ¥½¹5…¹…•È¹½¸ ±½Í•œ°€¡Á½Ì¤€ôøì(€€€€¼¼MÑ…ÉĞ½½±‘½İ¸™É½´½¹™¥Éµ•±½Í”¸M•ÅÕ•¹Ñ¥…°…‘µ½¸•á¥ÑÌ•áÑ•¹Ñ¡”4(€€€€¼¼Í…µ”µ¥¹Ğ½½±‘½İ¸™É½´Ñ¡”±…Ñ•ÍĞ½µÁ±•Ñ•Í…±”¸4(€€€Í¥¹…±¹¥¹”¹±…ÍÑQÉ¥•ÉQÌ¹Í•Ğ¡Á½Ì¹µ¥¹Ğ°…Ñ”¹¹½Ü ¤¤ì4(€€€¥˜€¡½¹™¥œ¹ÍÑÉ…Ñ•ä¹É•‰Õå½½±‘½İ¹5Ì€ø€À¤ì(€€€€€Í¥¹…±¹¥¹”¹}•á¥Ñ½½±‘½İ¹Ì¹Í•Ğ¡Á½Ì¹µ¥¹Ğ°…Ñ”¹¹½Ü ¤€¬½¹™¥œ¹ÍÑÉ…Ñ•ä¹É•‰Õå½½±‘½İ¹5Ì¤ì(€€€ô(€€€¥˜€¡Á½Ì¹É•µ½Ù•™Ñ•Éá¥Ğ€˜˜€…Á½Í¥Ñ¥½¹5…¹…•È¹¡…Í=Á•¹A½Í¥Ñ¥½¸¡Á½Ì¹µ¥¹Ğ¤¤ì(€€€€€Ñ½­•¹I•¥ÍÑÉä¹É•µ½Ù•Q½­•¸¡Á½Ì¹µ¥¹Ğ¤ì(€€€€€Ñ¥­MÑÉ•…´¹ÕÁ‘…Ñ•MÕ‰ÍÉ¥ÁÑ¥½¸¡Ñ½­•¹I•¥ÍÑÉä¹±¥ÍÑÑ¥Ù” ¤¹µ…À ¡Ñ½­•¸¤€ôøÑ½­•¸¹µ¥¹Ğ¤¤ì(€€€€€Í•ÉÙ•È¹‰É½…‘…ÍĞ¡ì(€€€€€€€ÑåÁ”è€Ñ½­•¹I•µ½Ù•œ°(€€€€€€€µ¥¹ĞèÁ½Ì¹µ¥¹Ğ°(€€€€€€€É•…Í½¸èÁ½Ì¹•á¥ÑI•…Í½¸°(€€€€€ô¤ì(€€€€€½¹Í½±”¹±½œ (€€€€€€€mµ…¥¹tÉ•µ½Ù•€‘íÁ½Ì¹Íåµ‰½°ñğÁ½Ì¹µ¥¹Ğ¹Í±¥” À°€Ø¥ô…™Ñ•È€‘íÁ½Ì¹•á¥ÑI•…Í½¹õ€°(€€€€€€¤ì(€€€ô(€€€Í•ÉÙ•È¹‰É½…‘…ÍĞ¡ìÑåÁ”è€Á½Í¥Ñ¥½¹±½Í•œ°Á½Í¥Ñ¥½¸èÁ½Ìô¤ì(€ô¤ì(4(€€¼¼€ôôôôôôôôôôôôƒ–B¿–*£šr7–*‡–f €ôôôôôôôôôôôô4(€Í•ÉÙ•È¹ÍÑ…ÉĞ ¤ì4(4(€€¼¼€ôôôôôôôôôôôôƒ–B¿–*£–&7¢†—–Á½½°ƒ’ş‡š¿¾ò#–òš¶—–B;–>Ã¾ò$€ôôôôôôôôôôôô4(€¥˜€¡½¹™¥œ¹…ÕÑ½¥±±A½½±Í=¹MÑ…ÉĞ¤ì4(€€€‰…­É½Õ¹‘¥±±A½½±Ì¡Ñ½­•¹I•¥ÍÑÉä¤¹…Ñ  ¡•ÉÈ¤€ôø4(€€€€€½¹Í½±”¹•ÉÉ½È¡mµ…¥¹t‰…­É½Õ¹‘¥±±A½½±Ì•ÉÉ½Èè€‘í•ÉÈ¹µ•ÍÍ…•õ€¤°4(€€€€¤ì4(€ô4(4(€€¼¼€ôôôôôôôôôôôôƒ–B¿–*£šVÃš6»šÖ€ôôôôôôôôôôôô4(€½¹ÍĞ¥¹¥Ñ¥…±5¥¹ÑÌ€ôÑ½­•¹I•¥ÍÑÉä¹±¥ÍÑÑ¥Ù” ¤¹µ…À ¡Ğ¤€ôøĞ¹µ¥¹Ğ¤ì4(€½¹Í½±”¹±½œ¡mµ…¥¹tÍÑ…ÉÑ¥¹œ1…Í•ÉMÑÉ•…´İ¥Ñ €‘í¥¹¥Ñ¥…±5¥¹ÑÌ¹±•¹Ñ¡ô¥¹¥Ñ¥…°Ñ½­•¹Í€¤ì4(€…İ…¥ĞÑ¥­MÑÉ•…´¹ÍÑ…ÉĞ¡¥¹¥Ñ¥…±5¥¹ÑÌ¤ì4(€ÁÕµÁ¥Í½Ù•Éä¹ÍÑ…ÉĞ ¤ì4(4(€€¼¼€ôôôôôôôôôôôôƒ’òc¦n¦–è€ôôôôôôôôôôôô4(€½¹ÍĞÍ¡ÕÑ‘½İ¸€ô…Íå¹Œ€¡Í¥¹…°¤€ôøì4(€€€½¹Í½±”¹±½œ¡q¹mµ…¥¹t€‘íÍ¥¹…±ôÉ••¥Ù•°Í¡ÕÑÑ¥¹œ‘½İ¸É…•™Õ±±ä¸¸¹€¤ì4(€€€ÑÉäì4(€€€€€ÁÕµÁ¥Í½Ù•Éä¹ÍÑ½À ¤ì4(€€€€€…İ…¥ĞÑ¥­MÑÉ•…´¹ÍÑ½À ¤ì4(€€€€€Á½ÍÑá¥ÑQÉ…­•È¹Í¡ÕÑ‘½İ¸ ¤ì4(€€€€€Á½Í¥Ñ¥½¹5…¹…•È¹ÍÑ½À ¤ì4(€€€€€Ñ½­•¹]…Ñ¡‘½œ¹ÍÑ½À ¤ì4(€€€€€‘ÕµÁ•Ñ•Ñ½È¹Í¡ÕÑ‘½İ¸€˜˜‘ÕµÁ•Ñ•Ñ½È¹Í¡ÕÑ‘½İ¸ ¤ì4(€€€€€…±•ÉÑ¡•­•È¹ÍÑ½À ¤ì4(€€€€€µ½¹¥Ñ½È¹ÍÑ½À ¤ì4(€€€€€•á•ÕÑ½È¹ÍÑ½À€˜˜•á•ÕÑ½È¹ÍÑ½À ¤ì4(€€€€€…İ…¥Ğ¹•ÜAÉ½µ¥Í” ¡È¤€ôøÍ•ÑQ¥µ•½ÕĞ¡È°€ÈÀÀ¤¤ì4(€€€ô…Ñ €¡•ÉÈ¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È¡mµ…¥¹tÍ¡ÕÑ‘½İ¸•ÉÉ½Èè€‘í•ÉÈ¹µ•ÍÍ…•õ€¤ì4(€€€ô4(€€€ÁÉ½•ÍÌ¹•á¥Ğ À¤ì4(€ôì4(€ÁÉ½•ÍÌ¹½¸ M%%9Pœ°€ ¤€ôøÍ¡ÕÑ‘½İ¸ M%%9Pœ¤¤ì4(€ÁÉ½•ÍÌ¹½¸ M%QI4œ°€ ¤€ôøÍ¡ÕÑ‘½İ¸ M%QI4œ¤¤ì4(4(€ÁÉ½•ÍÌ¹½¸ Õ¹…Õ¡Ñá•ÁÑ¥½¸œ°€¡•ÉÈ¤€ôøì4(€€€¥˜€¡•ÉÈ¹½‘”€ôôô€I%9UMœ¤ì½¹Í½±”¹İ…É¸ mµ…¥¹tÁ½ÉĞ½¹™±¥Ğ°‘…Í¡‰½…É‘¥Í…‰±•€´½¹Ñ¥¹Õ¥¹œœ¤ìÉ•ÑÕÉ¸ìô4(€€€µ½¹¥Ñ½È¹É•½É‘ÉÉ½È µ…¥¸œ°•ÉÈ°ìÁ¡…Í”è€Õ¹…Õ¡Ñá•ÁÑ¥½¸œô¤ì4(€€€µ½¹¥Ñ½È¹¥¹Œ µ…¥¸¹Õ¹…Õ¡Ñá•ÁÑ¥½¹Ìœ°€Ä°€µ…¥¸œ¤ì4(€€€½¹Í½±”¹•ÉÉ½È mµ…¥¹tÕ¹…Õ¡Ñá•ÁÑ¥½¸èœ°•ÉÈ¤ì4(€ô¤ì4(€ÁÉ½•ÍÌ¹½¸ Õ¹¡…¹‘±•‘I•©•Ñ¥½¸œ°€¡É•…Í½¸¤€ôøì4(€€€µ½¹¥Ñ½È¹É•½É‘ÉÉ½È µ…¥¸œ°É•…Í½¸¥¹ÍÑ…¹•½˜ÉÉ½È€üÉ•…Í½¸€è¹•ÜÉÉ½È¡MÑÉ¥¹œ¡É•…Í½¸¤¤°ì4(€€€€€Á¡…Í”è€Õ¹¡…¹‘±•‘I•©•Ñ¥½¸œ°4(€€€ô¤ì4(€€€µ½¹¥Ñ½È¹¥¹Œ µ…¥¸¹Õ¹¡…¹‘±•‘I•©•Ñ¥½¹Ìœ°€Ä°€µ…¥¸œ¤ì4(€€€½¹Í½±”¹•ÉÉ½È mµ…¥¹tÕ¹¡…¹‘±•‘I•©•Ñ¥½¸èœ°É•…Í½¸¤ì4(€ô¤ì4(4(€½¹Í½±”¹±½œ mµ…¥¹tÍÑ…ÉÑÕÀ½µÁ±•Ñ”œ¤ì4(4(€€¼¼ØÌ¸ÈÜèƒ–ºkš^ØÏ–Â?š^Û¢«–*£¦7–B¿¾ò3¦bËš¶ˆIÕÍĞ¹…Ñ¥Ù”ƒòOš‹šÎšò?–¾ó¢ĞÍ±½Ğ…ÀƒšÛ–2X4(€€¼¼ƒ–~ëêıIMLøÔÔÁ5€ ß’â©IA¢ş{š:”§¾ò0Ï–Â?š^ÛšÎšò?–"ÀøàÀÁ5ƒš^ØÍ±½Ğ…Àƒ–ÂÇ–ò–/šÛ–2X4(€€¼¼ƒ¦7–B¿–B8É•ÍÑ½É•É½µˆƒš‹–’7š2’îO¾ò3šr'’îOš^Û–îÛ¢ş–"Ã¦ë’îOš"YIMLøÄÀÀÁ5–7¦7–B¼4(€½¹ÍĞ5a}UAQ%5}5L€ôÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹5a}UAQ%5}5Lñğ€œÄÀàÀÀÀÀÀœ°€ÄÀ¤ì€¼¼ƒ¦îc¢ºÏ–Â?š^Ø4(€½¹ÍĞÍÑ…ÉÑQ¥µ”€ô…Ñ”¹¹½Ü ¤ì4(€Í•Ñ%¹Ñ•ÉÙ…°  ¤€ôøì4(€€€½¹ÍĞÕÁÑ¥µ•5Ì€ô…Ñ”¹¹½Ü ¤€´ÍÑ…ÉÑQ¥µ”ì4(€€€½¹ÍĞÁ½Í½Õ¹Ğ€ôÁ½Í¥Ñ¥½¹5…¹…•Èü¹Á½Í¥Ñ¥½¹Ìü¹Í¥é”€üü€Àì4(€€€¥˜€¡ÕÁÑ¥µ•5Ì€ø5a}UAQ%5}5L€˜˜Á½Í½Õ¹Ğ€ôôô€À¤ì4(€€€€€½¹Í½±”¹±½œ¡m55tƒÂ~RÕÁÑ¥µ”ô‘í5…Ñ ¹É½Õ¹¡ÕÁÑ¥µ•5Ì¼ØÀÀÀÀ¥õµ¥¸€ø€‘í5…Ñ ¹É½Õ¹¡5a}UAQ%5}5L¼ØÀÀÀÀ¥õµ¥¸ƒ’âS¦ë’îL°ƒ–ºkš^Û¦7–B¿¦+šRøIÕÍĞ¹…Ñ¥Ù”ƒ––¶a€¤ì4(€€€€€ÁÉ½•ÍÌ¹•á¥Ğ À¤ì4(€€€ô•±Í”¥˜€¡ÕÁÑ¥µ•5Ì€ø5a}UAQ%5}5L€˜˜Á½Í½Õ¹Ğ€ø€À¤ì4(€€€€€½¹Í½±”¹±½œ¡m55tƒŠ>ÌÕÁÑ¥µ”ô‘í5…Ñ ¹É½Õ¹¡ÕÁÑ¥µ•5Ì¼ØÀÀÀÀ¥õµ¥¸€ø€‘í5…Ñ ¹É½Õ¹¡5a}UAQ%5}5L¼ØÀÀÀÀ¥õµ¥¸ƒ’öšr$€‘íÁ½Í½Õ¹Ñôƒ’â«š2’îL°ƒ¶$IMLƒ¢úû–"Ã¦b#–óš"[¦ë’îO–B;¦7–B½€¤ì4(€€€ô4(€ô°€ØÁ|ÀÀÀ¤ì4)ô4(4(¼¨¨4(€¨ƒ–B;–>Ãš&¯š>?š&šr'òë–’ÄÁ½½°ƒ’ş‡š¿j’î–â¾ò3¦C’â«¢†—’â+4(€¨ƒ¢*šÖ¾òkš¾?’â¨€ÈÔÁµÏ4(€¨¼4)…Íå¹Œ™Õ¹Ñ¥½¸‰…­É½Õ¹‘¥±±A½½±Ì¡Ñ½­•¹I•¥ÍÑÉä¤ì4(€½¹ÍĞÑ…É•ÑÌ€ôÑ½­•¹I•¥ÍÑÉä4(€€€€¹±¥ÍÑ±° ¤4(€€€€¹™¥±Ñ•È ¡Ğ¤€ôøĞ¹¥Í}…Ñ¥Ù”€˜˜¹••‘ÍA½½±I•Á…¥È¡Ğ¤¤ì4(4(€¥˜€¡Ñ…É•ÑÌ¹±•¹Ñ €ôôô€À¤É•ÑÕÉ¸ì4(€½¹Í½±”¹±½œ¡mµ…¥¹t…ÕÑ¼µ™¥±°Á½½°™½È€‘íÑ…É•ÑÌ¹±•¹Ñ¡ôÑ½­•¹Ì€¡‰…­É½Õ¹¥€¤ì4(4(€½¹ÍĞ™¥¹‘•È€ô¹•ÜA½½±¥¹‘•È¡íô¤ì4(€±•Ğ½¬€ô€Àì4(€±•Ğ™…¥°€ô€Àì4(4(€™½È€¡½¹ÍĞĞ½˜Ñ…É•ÑÌ¤ì4(€€€ÑÉäì4(€€€€€½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ™¥¹‘•È¹™¥¹‘A½½±½É5¥¹Ğ¡Ğ¹µ¥¹Ğ¤ì4(€€€€€¥˜€¡É•ÍÕ±Ğ¤ì4(€€€€€€€Ñ½­•¹I•¥ÍÑÉä¹Í•ÑA½½±%¹™¼¡Ğ¹µ¥¹Ğ°É•ÍÕ±Ğ¤ì4(€€€€€€€½¬€¬ô€Äì4(€€€€€ô•±Í”ì4(€€€€€€€™…¥°€¬ô€Äì4(€€€€€ô4(€€€ô…Ñ €¡•ÉÈ¤ì4(€€€€€™…¥°€¬ô€Äì4(€€€€€½¹Í½±”¹İ…É¸¡m™¥±°µÁ½½±Ít€‘íĞ¹Íåµ‰½°ñğĞ¹µ¥¹Ğ¹Í±¥” À°€Ø¥ôè€‘í•ÉÈ¹µ•ÍÍ…•õ€¤ì4(€€€ô4(€€€…İ…¥Ğ¹•ÜAÉ½µ¥Í” ¡È¤€ôøÍ•ÑQ¥µ•½ÕĞ¡È°€ÈÔÀ¤¤ì4(€ô4(€½¹Í½±”¹±½œ¡mµ…¥¹t…ÕÑ¼µ™¥±°Á½½°‘½¹”è€‘í½­ô=,°€‘í™…¥±ô™…¥±•‘€¤ì4)ô4(4)…Íå¹Œ™Õ¹Ñ¥½¸™¥±±A½½±½ÉQ½­•¸¡Ñ½­•¹I•¥ÍÑÉä°µ¥¹Ğ¤ì4(€ÑÉäì4(€€€½¹ÍĞ™¥¹‘•È€ô¹•ÜA½½±¥¹‘•È¡íô¤ì4(€€€½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ™¥¹‘•È¹™¥¹‘A½½±½É5¥¹Ğ¡µ¥¹Ğ¤ì4(€€€¥˜€¡É•ÍÕ±Ğ¤ì4(€€€€€Ñ½­•¹I•¥ÍÑÉä¹Í•ÑA½½±%¹™¼¡µ¥¹Ğ°É•ÍÕ±Ğ¤ì4(€€€€€½¹Í½±”¹±½œ 4(€€€€€€€m™¥±°µÁ½½±Ít€‘íµ¥¹Ğ¹Í±¥” À°€Ø¥ôèÁ½½°ô‘íÉ•ÍÕ±Ğ¹Á½½±‘‘É•ÍÌ¹Í±¥” À°€Ø¥ô¸¹€°4(€€€€€€¤ì4(€€€ô4(€ô…Ñ €¡•ÉÈ¤ì4(€€€½¹Í½±”¹İ…É¸¡m™¥±°µÁ½½±Ít€‘íµ¥¹Ğ¹Í±¥” À°€Ø¥ôè€‘í•ÉÈ¹µ•ÍÍ…•õ€¤ì4(€ô4)ô4(4)µ…¥¸ ¤¹…Ñ  ¡•ÉÈ¤€ôøì4(€½¹Í½±”¹•ÉÉ½È mµ…¥¹t™…Ñ…°•ÉÉ½Èèœ°•ÉÈ¤ì4(€ÁÉ½•ÍÌ¹•á¥Ğ Ä¤ì4)ô¤ì4(4(¼¼ØÌ¸ÌÉˆèƒ–‚–’[––¶cnGš:œƒŠPƒ–2ë–"¡•…ÀÙÌ•áÑ•É¹…°ÙÌ…ÉÉ…å	Õ™™•ÉÌ4)Í•Ñ%¹Ñ•ÉÙ…°  ¤€ôøì4(€½¹ÍĞ´€ôÁÉ½•ÍÌ¹µ•µ½ÉåUÍ…” ¤ì4(€½¹Í½±”¹±½œ¡m55tÉÍÌô‘ì¡´¹ÉÍÌ¼ÄÀĞàÔÜØ¥ğÁõ5¡•…ÁUÍ•ô‘ì¡´¹¡•…ÁUÍ•¼ÄÀĞàÔÜØ¥ğÁõ5•áÑ•É¹…°ô‘ì¡´¹•áÑ•É¹…°¼ÄÀĞàÔÜØ¥ğÁõ5…ÉÉ…å	Õ™™•ÉÌô‘ì¡´¹…ÉÉ…å	Õ™™•ÉÌ¼ÄÀĞàÔÜØ¥ğÁõ5	€¤ì4)ô°€ÌÀÀÀÀ¤ì4(

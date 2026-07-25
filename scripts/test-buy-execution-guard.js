@@ -160,6 +160,52 @@ async function main() {
   config.strategy.rebuyCooldownMs = originalRebuyCooldownMs;
 
   const Executor = require('../src/core/Executor');
+  const diagnosticExecutor = Object.create(Executor.prototype);
+  diagnosticExecutor.computeUnitLimit = 250000;
+  diagnosticExecutor.rpc = {
+    getTransaction: async () => ({
+      slot: 123,
+      transaction: {
+        message: {
+          staticAccountKeys: ['User111', 'Pump111'],
+          compiledInstructions: [
+            {}, {}, {}, {}, {}, {},
+            { programIdIndex: 1 },
+          ],
+        },
+      },
+      meta: {
+        err: { InstructionError: [6, { Custom: 1 }] },
+        loadedAddresses: { writable: [], readonly: [] },
+        computeUnitsConsumed: 180000,
+        logMessages: [
+          'Program Pump111 invoke [1]',
+          'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]',
+          'Program log: Error: insufficient funds',
+          'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA failed: custom program error: 0x1',
+          'Program Pump111 failed: custom program error: 0x1',
+        ],
+      },
+    }),
+  };
+  const failureDiagnostics = await diagnosticExecutor.fetchTxFailureDiagnostics(
+    'FailureSignature',
+    { InstructionError: [6, { Custom: 1 }] },
+    122,
+  );
+  assert.strictEqual(
+    failureDiagnostics.errorClass,
+    'TOKEN_PROGRAM_INSUFFICIENT_FUNDS',
+  );
+  assert.strictEqual(failureDiagnostics.instructionIndex, 6);
+  assert.strictEqual(failureDiagnostics.instructionProgramId, 'Pump111');
+  assert.strictEqual(
+    failureDiagnostics.failedProgramId,
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  );
+  assert.strictEqual(failureDiagnostics.computeUnitsConsumed, 180000);
+  assert.strictEqual(failureDiagnostics.slot, 123);
+
   const executor = Object.create(Executor.prototype);
   const poolAddress = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
   const mint = '11111111111111111111111111111111';

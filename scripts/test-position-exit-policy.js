@@ -9,6 +9,12 @@ process.env.RANGE_STOP_ENABLED = '1';
 process.env.TREND_STOP_ENABLED = '1';
 process.env.TIMED_TP_ENABLED = '1';
 process.env.EARLY_LOW_PEAK_CUT_ENABLED = '1';
+process.env.TRAILING_ACTIVATE_PCT = '50';
+process.env.TRAILING_DRAWDOWN_PCT = '10';
+process.env.MAX_HOLD_MS = '0';
+process.env.POSITION_FDV_EXIT_USD = '20000';
+process.env.MAX_MINT_AGE_MINUTES = '10';
+process.env.REBUY_COOLDOWN_MS = '300000';
 
 const assert = require('assert');
 const Module = require('module');
@@ -71,15 +77,16 @@ function rsiSnapshot(live, overrides = {}) {
 
 function run() {
   const mint = 'TestMint111111111111111111111111111111111';
-  assert.strictEqual(config.strategy.rebuyCooldownMs, 300_000, 'default post-sale cooldown must be 5 minutes');
-  assert.strictEqual(config.strategy.exitMode, 'AGE3_TRAILING_V7');
-  assert.strictEqual(config.strategy.trailingActivatePct, 50);
-  assert.strictEqual(config.strategy.trailingDrawdownPct, 10);
+  assert.strictEqual(config.strategy.rebuyCooldownMs, 60_000, 'default post-sale cooldown must be 60 seconds');
+  assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.strategy.trailingActivatePct, 8);
+  assert.strictEqual(config.strategy.trailingDrawdownPct, 3);
   assert.strictEqual(config.strategy.takeProfitPct, 0);
-  assert.strictEqual(config.strategy.fixedStopLossPct, 0);
+  assert.strictEqual(config.strategy.fixedStopLossPct, -25);
   assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
-  assert.strictEqual(config.strategy.maxTokenAgeMs, 600_000);
-  assert.strictEqual(config.strategy.positionFdvExitUsd, 20_000);
+  assert.strictEqual(config.strategy.maxHoldMs, 20_000);
+  assert.strictEqual(config.strategy.maxTokenAgeMs, 7_200_000);
+  assert.strictEqual(config.strategy.positionFdvExitUsd, 0);
 
   {
     const manager = managerWith();
@@ -103,11 +110,7 @@ function run() {
     });
     const manager = managerWith(first);
     manager._checkExit('p1', 0.5);
-    assert.strictEqual(
-      manager._exitCalls.length,
-      0,
-      'legacy fixed and emergency stops must stay disabled despite old environment values',
-    );
+    assert.strictEqual(manager._exitCalls[0].reason, 'FIXED_STOP_LOSS');
   }
 
   {
@@ -122,7 +125,7 @@ function run() {
     });
     const manager = managerWith(first);
     manager._checkExit('p1', 0.81);
-    assert.strictEqual(manager._exitCalls.length, 0, 'fixed stop must remain disabled');
+    assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 25% must stay open');
   }
 
   {
@@ -135,16 +138,16 @@ function run() {
     const now = Date.now();
     const first = position('p1', mint, {
       entryPrice: 1,
-      highWaterMark: 1.5,
+      highWaterMark: 1.1,
       openedAt: now - 10_000,
       reconciledAt: now - 10_000,
       trailingArmed: true,
-      _armedHwm: 1.5,
+      _armedHwm: 1.1,
       _armedHwmTs: now - 5_000,
     });
     const manager = managerWith(first);
-    manager._checkExit('p1', 1.349);
-    assert.strictEqual(manager._exitCalls.length, 1, '10% drawdown after +50% trailing arm should sell');
+    manager._checkExit('p1', 1.066);
+    assert.strictEqual(manager._exitCalls.length, 1, '3% drawdown after +8% trailing arm should sell');
     assert.strictEqual(manager._exitCalls[0].reason, 'TRAILING_STOP');
   }
 
@@ -156,8 +159,7 @@ function run() {
     });
     const manager = managerWith(first);
     manager._checkExit('p1', 2.7e-7);
-    assert.strictEqual(manager._exitCalls[0].reason, 'FDV_FLOOR_EXIT');
-    assert.strictEqual(first.removeAfterExit, true);
+    assert.strictEqual(manager._exitCalls.length, 0, 'V8 must not use an FDV floor exit');
   }
 
   {
@@ -169,12 +171,26 @@ function run() {
     const manager = managerWith(first);
     manager.priceTracker = { getPrice: () => 0.9 };
     manager.tokenRegistry = {
-      getToken: () => ({ migration_time: Date.now() - 600_100 }),
+      getToken: () => ({ migration_time: Date.now() - 7_200_100 }),
     };
     manager._fillPreVolFallback = () => {};
     manager._tick();
     assert.strictEqual(manager._exitCalls[0].reason, 'TOKEN_AGE_LIMIT');
     assert.strictEqual(first.removeAfterExit, true);
+  }
+
+  {
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1.05,
+      openedAt: Date.now() - 20_100,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 1.02 };
+    manager.tokenRegistry = { getToken: () => null };
+    manager._fillPreVolFallback = () => {};
+    manager._tick();
+    assert.strictEqual(manager._exitCalls[0].reason, 'TIMEOUT_20S');
   }
 
   {

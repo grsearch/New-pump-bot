@@ -62,6 +62,16 @@ class AlertChecker {
   _checkBuyChainFailures() {
     const cuNearLimit = this.monitor.getCounter('PositionManager.cuNearLimit') || 0;
     const buyChainFail = this.monitor.getCounter('PositionManager.buyChainFail') || 0;
+    const buyChainFailCompute =
+      this.monitor.getCounter('PositionManager.buyChainFail_COMPUTE_LIMIT') || 0;
+    const buyChainFailSlippage =
+      this.monitor.getCounter('PositionManager.buyChainFail_PRICE_PROTECTION_SLIPPAGE') || 0;
+    const buyChainFailFunds =
+      this.monitor.getCounter('PositionManager.buyChainFail_TOKEN_PROGRAM_INSUFFICIENT_FUNDS') || 0;
+    const buyChainFailFundsUnknown =
+      this.monitor.getCounter('PositionManager.buyChainFail_INSUFFICIENT_FUNDS_UNCLASSIFIED') || 0;
+    const buyChainFailCustom1 =
+      this.monitor.getCounter('PositionManager.buyChainFail_CUSTOM_1_UNCLASSIFIED') || 0;
     const reconcileWatchdog = this.monitor.getCounter('PositionManager.reconcileWatchdog') || 0;
 
     // CU 接近上限 — 还能成功但下一笔可能爆
@@ -81,8 +91,19 @@ class AlertChecker {
       this.monitor.fireAlert(
         'executor.buy_chain_failed',
         'error',
-        `${buyChainFail} 笔 BUY ProgramFailedToComplete,fee 已烧但 token 没买到。立刻调大 COMPUTE_UNIT_LIMIT`,
-        { buyChainFail },
+        `${buyChainFail} BUY chain failures: compute=${buyChainFailCompute}, ` +
+          `priceGuard=${buyChainFailSlippage}, tokenFunds=${buyChainFailFunds}, ` +
+          `fundsUnknown=${buyChainFailFundsUnknown}, custom1Unknown=${buyChainFailCustom1}. ` +
+          `Check chain diagnostics; ` +
+          `only raise COMPUTE_UNIT_LIMIT for compute-classified failures.`,
+        {
+          buyChainFail,
+          buyChainFailCompute,
+          buyChainFailSlippage,
+          buyChainFailFunds,
+          buyChainFailFundsUnknown,
+          buyChainFailCustom1,
+        },
       );
     } else {
       this.monitor.clearAlert('executor.buy_chain_failed');

@@ -433,4 +433,993 @@ ${snapshotColumnsSql},
         created_at INTEGER,
         UNIQUE(mint, event_type, event_key)
       );
-      CREATE INDEX IF ïŸw¶‰ËkºwµçAñğ€……¹‘±”¹Ñ¥µ•™É…µ”ñğ€……¹‘±”¹‰Õ­•Ñ}ÑÌ¤É•ÑÕÉ¸ì4(€€€½¹ÍĞÉ½Ü€ôì4(€€€€€Ñ¥µ•™É…µ”è…¹‘±”¹Ñ¥µ•™É…µ”°4(€€€€€‰Õ­•Ñ}ÑÌè…¹‘±”¹‰Õ­•Ñ}ÑÌ°4(€€€€€µ¥¹Ğè…¹‘±”¹µ¥¹Ğ°4(€€€€€Íåµ‰½°è…¹‘±”¹Íåµ‰½°ñğ¹Õ±°°4(€€€€€½Á•¸èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹½Á•¸¤°4(€€€€€¡¥ èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹¡¥ ¤°4(€€€€€±½ÜèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹±½Ü¤°4(€€€€€±½Í”èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹±½Í”¤°4(€€€€€Ù½±Õµ•}Í½°èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Ù½±Õµ•}Í½°¤°4(€€€€€‰Õå}Ù½±Õµ•}Í½°èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹‰Õå}Ù½±Õµ•}Í½°¤°4(€€€€€Í•±±}Ù½±Õµ•}Í½°èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Í•±±}Ù½±Õµ•}Í½°¤°4(€€€€€‰Õå}½Õ¹ĞèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹‰Õå}½Õ¹Ğ¤°4(€€€€€Í•±±}½Õ¹ĞèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Í•±±}½Õ¹Ğ¤°4(€€€€€Ñá}½Õ¹ĞèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Ñá}½Õ¹Ğ¤°4(€€€€€Õ¹¥ÅÕ•}‰Õå}İ…±±•ÑÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Õ¹¥ÅÕ•}‰Õå}İ…±±•ÑÌ¤°4(€€€€€Õ¹¥ÅÕ•}Í•±±}İ…±±•ÑÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹Õ¹¥ÅÕ•}Í•±±}İ…±±•ÑÌ¤°4(€€€€€™‘ØèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹™‘Ø¤°4(€€€€€±¥ÅÕ¥‘¥ÑäèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹±¥ÅÕ¥‘¥Ñä¤°4(€€€€€‘…Ñ…}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹‘…Ñ…}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸¤°4(€€€€€™¥±Ñ•É•‘}•Ù•¹Ñ}½Õ¹ĞèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹™¥±Ñ•É•‘}•Ù•¹Ñ}½Õ¹Ğ¤°4(€€€€€™¥±Ñ•É•‘}Ù½±Õµ•}Í½°èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡…¹‘±”¹™¥±Ñ•É•‘}Ù½±Õµ•}Í½°¤°4(€€€€€™•…ÑÕÉ•}ÅÕ…±¥Ñå}ÍÑ…ÑÕÌè…¹‘±”¹™•…ÑÕÉ•}ÅÕ…±¥Ñå}ÍÑ…ÑÕÌñğ¹Õ±°°4(€€€€€ÕÁ‘…Ñ•‘}…Ğè…¹‘±”¹ÕÁ‘…Ñ•‘}…Ğñğ…Ñ”¹¹½Ü ¤°4(€€€ôì4(€€€ÑÉäì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹ÕÁÍ•ÉÑQ½­•¹…¹‘±”¹ÉÕ¸¡É½Ü¤ì4(€€€ô…Ñ €¡|¤ì€¼¨…¹…±åÑ¥Ì½¹±ä€¨¼ô4(€ô4(4(€±½Q½­•¹Ù•¹Ğ¡•Ù•¹Ğ¤ì4(€€€¥˜€ …•Ù•¹Ğñğ€…•Ù•¹Ğ¹µ¥¹Ğñğ€…•Ù•¹Ğ¹•Ù•¹ÑQåÁ”¤É•ÑÕÉ¸ì4(€€€½¹ÍĞ‘•Ñ…¥±Ì€ô•Ù•¹Ğ¹‘•Ñ…¥±Í)Í½¸€„ô¹Õ±°4(€€€€€€ü•Ù•¹Ğ¹‘•Ñ…¥±Í)Í½¸4(€€€€€€è€¡•Ù•¹Ğ¹‘•Ñ…¥±Ì€ôô¹Õ±°€ü¹Õ±°€è)M=8¹ÍÑÉ¥¹¥™ä¡•Ù•¹Ğ¹‘•Ñ…¥±Ì¤¤ì4(€€€ÑÉäì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹¥¹Í•ÉÑQ½­•¹Ù•¹Ğ¹ÉÕ¸¡ì4(€€€€€€€ÑÌè•Ù•¹Ğ¹ÑÌñğ…Ñ”¹¹½Ü ¤°4(€€€€€€€µ¥¹Ğè•Ù•¹Ğ¹µ¥¹Ğ°4(€€€€€€€Íåµ‰½°è•Ù•¹Ğ¹Íåµ‰½°ñğ¹Õ±°°4(€€€€€€€•Ù•¹Ñ}ÑåÁ”è•Ù•¹Ğ¹•Ù•¹ÑQåÁ”°4(€€€€€€€•Ù•¹Ñ}­•äè•Ù•¹Ğ¹•Ù•¹Ñ-•äñğ€™¥ÉÍĞœ°4(€€€€€€€ÁÉ¥”èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹ÁÉ¥”¤°4(€€€€€€€™‘ØèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹™‘Ø¤°4(€€€€€€€±¥ÅÕ¥‘¥ÑäèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹±¥ÅÕ¥‘¥Ñä¤°4(€€€€€€€…•}µÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹…•5Ì¤°4(€€€€€€€Ù…±Õ”èÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹Ù…±Õ”¤°4(€€€€€€€‘•Ñ…¥±Í}©Í½¸è‘•Ñ…¥±Ì°4(€€€€€€€É•…Ñ•‘}…Ğè…Ñ”¹¹½Ü ¤°4(€€€€€ô¤ì4(€€€ô…Ñ €¡|¤ì€¼¨…¹…±åÑ¥Ì½¹±ä€¨¼ô4(€ô4(4(€±½	½Ñ1…Ñ•¹åÙ•¹Ğ¡•Ù•¹Ğ¤ì4(€€€¥˜€ …•Ù•¹Ğ¤É•ÑÕÉ¸ì4(€€€½¹ÍĞ‘•Ñ…¥±Ì€ô•Ù•¹Ğ¹‘•Ñ…¥±Í)Í½¸€„ô¹Õ±°4(€€€€€€ü•Ù•¹Ğ¹‘•Ñ…¥±Í)Í½¸4(€€€€€€è€¡•Ù•¹Ğ¹‘•Ñ…¥±Ì€ôô¹Õ±°€ü¹Õ±°€è)M=8¹ÍÑÉ¥¹¥™ä¡•Ù•¹Ğ¹‘•Ñ…¥±Ì¤¤ì4(€€€ÑÉäì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹¥¹Í•ÉÑ	½Ñ1…Ñ•¹åÙ•¹Ğ¹ÉÕ¸¡ì4(€€€€€€€ÑÌè•Ù•¹Ğ¹ÑÌñğ…Ñ”¹¹½Ü ¤°4(€€€€€€€µ¥¹Ğè•Ù•¹Ğ¹µ¥¹Ğñğ¹Õ±°°4(€€€€€€€Íåµ‰½°è•Ù•¹Ğ¹Íåµ‰½°ñğ¹Õ±°°4(€€€€€€€Í¥¹…ÑÕÉ”è•Ù•¹Ğ¹Í¥¹…ÑÕÉ”ñğ¹Õ±°°4(€€€€€€€Á¡…Í”è•Ù•¹Ğ¹Á¡…Í”ñğ¹Õ±°°4(€€€€€€€±…Ñ•¹å}‘•Ñ•Ñ}µÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹±…Ñ•¹å•Ñ•Ñ5Ì¤°4(€€€€€€€±…Ñ•¹å}‘•¥Í¥½¹}µÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹±…Ñ•¹å•¥Í¥½¹5Ì¤°4(€€€€€€€±…Ñ•¹å}Í•¹‘}µÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹±…Ñ•¹åM•¹‘5Ì¤°4(€€€€€€€±…Ñ•¹å}½¹™¥Éµ}µÌèÑ¡¥Ì¹}±•…¹‰Y…±Õ”¡•Ù•¹Ğ¹±…Ñ•¹å½¹™¥Éµ5Ì¤°4(€€€€€€€‘•Ñ…¥±Í}©Í½¸è‘•Ñ…¥±Ì°4(€€€€€ô¤ì4(€€€ô…Ñ €¡|¤ì€¼¨…¹…±åÑ¥Ì½¹±ä€¨¼ô4(€ô4(4(€•ÑM¹…ÁÍ¡½Ñ1…‰•±	…­±½œ¡ì¹½Ü€ô…Ñ”¹¹½Ü ¤°µ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸€ôMQIQe}1	}EU1%Qe}YIM%=8ô€ôíô¤ì4(€€€½¹ÍĞµ…á!½É¥é½¹5Ì€ô5…Ñ ¹µ…à ¸¸¹Ñ¡¥Ì¹}ÍÑÉ…Ñ•å1…‰!½É¥é½¹Ì ¤¤€¨€ÄÀÀÀì4(€€€½¹ÍĞÉ½Ü€ôÑ¡¥Ì¹ÍÑµÑÌ¹Í¹…ÁÍ¡½Ñ1…‰•±	…­±½œ¹•Ğ¡ì4(€€€€€µ¥¹}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸èµ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸°4(€€€€€µ…ÑÕÉ•}‰•™½É”è¹½Ü€´µ…á!½É¥é½¹5Ì°4(€€€ô¤ì4(€€€½¹ÍĞ½±‘•ÍÑQÌ€ô9Õµ‰•È¡É½Üü¹½±‘•ÍÑ}ÑÌ¤ñğ¹Õ±°ì4(€€€É•ÑÕÉ¸ì4(€€€€€½Õ¹Ğè9Õµ‰•È¡É½Üü¹½Õ¹Ğ¤ñğ€À°4(€€€€€½±‘•ÍÑQÌ°4(€€€€€¹•İ•ÍÑQÌè9Õµ‰•È¡É½Üü¹¹•İ•ÍÑ}ÑÌ¤ñğ¹Õ±°°4(€€€€€½±‘•ÍÑ•5Ìè½±‘•ÍÑQÌ€ü5…Ñ ¹µ…à À°¹½Ü€´µ…á!½É¥é½¹5Ì€´½±‘•ÍÑQÌ¤€è€À°4(€€€€€µ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸°4(€€€ôì4(€ô4(4(€‰…­™¥±±M¹…ÁÍ¡½Ñ1…‰•±Ì¡ì4(€€€¹½Ü€ô…Ñ”¹¹½Ü ¤°4(€€€‰…Ñ¡M¥é”€ô€ÄÀÀÀ°4(€€€µ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸€ôMQIQe}1	}EU1%Qe}YIM%=8°4(€ô€ôíô¤ì4(€€€½¹ÍĞ¡½É¥é½¹Ì€ôÑ¡¥Ì¹}ÍÑÉ…Ñ•å1…‰!½É¥é½¹Ì ¤ì4(€€€½¹ÍĞµ…á!½É¥é½¹5Ì€ô5…Ñ ¹µ…à ¸¸¹¡½É¥é½¹Ì¤€¨€ÄÀÀÀì4(€€€ÑÉäì4(€€€€€½¹ÍĞÁ•¹‘¥¹œ€ôÑ¡¥Ì¹ÍÑµÑÌ¹Á•¹‘¥¹M¹…ÁÍ¡½Ñ1…‰•±Ì¹…±°¡ì4(€€€€€€€µ¥¹}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸èµ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸°4(€€€€€€€µ…ÑÕÉ•}‰•™½É”è¹½Ü€´µ…á!½É¥é½¹5Ì°4(€€€€€€€±¥µ¥Ğè5…Ñ ¹µ…à Ä°5…Ñ ¹™±½½È¡‰…Ñ¡M¥é”¤¤°4(€€€€€ô¤ì4(€€€€€¥˜€¡Á•¹‘¥¹œ¹±•¹Ñ €ôôô€À¤É•ÑÕÉ¸€Àì4(4(€€€€€½¹ÍĞ‰å5¥¹Ğ€ô¹•Ü5…À ¤ì4(€€€€€™½È€¡½¹ÍĞÍ¹…À½˜Á•¹‘¥¹œ¤ì4(€€€€€€€¥˜€ …‰å5¥¹Ğ¹¡…Ì¡Í¹…À¹µ¥¹Ğ¤¤‰å5¥¹Ğ¹Í•Ğ¡Í¹…À¹µ¥¹Ğ°mt¤ì4(€€€€€€€‰å5¥¹Ğ¹•Ğ¡Í¹…À¹µ¥¹Ğ¤¹ÁÕÍ ¡Í¹…À¤ì4(€€€€€ô4(4(€€€€€½¹ÍĞÕÁ‘…Ñ•Ì€ômtì4(€€€€€™½È€¡½¹ÍĞmµ¥¹Ğ°Í¹…ÁÍ¡½ÑÍt½˜‰å5¥¹Ğ¤ì4(€€€€€€€Í¹…ÁÍ¡½ÑÌ¹Í½ÉĞ ¡±•™Ğ°É¥¡Ğ¤€ôø±•™Ğ¹ÑÌ€´É¥¡Ğ¹ÑÌ¤ì4(€€€€€€€½¹ÍĞÁÉ¥•Ì€ôÑ¡¥Ì¹ÍÑµÑÌ¹™ÕÑÕÉ•AÉ¥•Í½É1…‰•°¹…±°¡ì4(€€€€€€€€€µ¥¹Ğ°4(€€€€€€€€€™É½µ}ÑÌèÍ¹…ÁÍ¡½ÑÍlÁt¹ÑÌ°4(€€€€€€€€€Õ¹Ñ¥±}ÑÌèÍ¹…ÁÍ¡½ÑÍmÍ¹…ÁÍ¡½ÑÌ¹±•¹Ñ €´€Åt¹ÑÌ€¬µ…á!½É¥é½¹5Ì°4(€€€€€€€€€µ¥¹}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸èµ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸°4(€€€€€€€ô¤¹µ…À ¡É½Ü¤€ôø€¡ìÑÌè9Õµ‰•È¡É½Ü¹ÑÌ¤°ÁÉ¥”è9Õµ‰•È¡É½Ü¹ÁÉ¥”¤ô¤¤ì4(4(€€€€€€€™½È€¡½¹ÍĞÍ¹…À½˜Í¹…ÁÍ¡½ÑÌ¤ì4(€€€€€€€€€½¹ÍĞ‰…Í•AÉ¥”€ô9Õµ‰•È¡Í¹…À¹ÁÉ¥”¤ì4(€€€€€€€€€¥˜€ …9Õµ‰•È¹¥Í¥¹¥Ñ”¡‰…Í•AÉ¥”¤ñğ‰…Í•AÉ¥”€ğô€À¤½¹Ñ¥¹Õ”ì4(€€€€€€€€€½¹ÍĞÍÑ…ÉĞ€ôÕÁÁ•É	½Õ¹‘	åQÌ¡ÁÉ¥•Ì°Í¹…À¹ÑÌ¤ì4(€€€€€€€€€½¹ÍĞÁ…É…µÌ€ôì4(€€€€€€€€€€€¥èÍ¹…À¹¥°4(€€€€€€€€€€€±…‰•±}ÕÁ‘…Ñ•‘}…Ğè¹½Ü°4(€€€€€€€€€€€±…‰•±}ÍÑ…ÑÕÌè€½µÁ±•Ñ”œ°4(€€€€€€€€€€€±…‰•±}ÅÕ…±¥Ñå}Ù•ÉÍ¥½¸èµ¥¹EÕ…±¥ÑåY•ÉÍ¥½¸°4(€€€€€€€€€ôì4(4(€€€€€€€€€™½È€¡½¹ÍĞ¡½É¥é½¸½˜¡½É¥é½¹Ì¤ì4(€€€€€€€€€€€½¹ÍĞÕ¹Ñ¥°€ôÍ¹…À¹ÑÌ€¬¡½É¥é½¸€¨€ÄÀÀÀì4(€€€€€€€€€€€½¹ÍĞ•¹€ôÕÁÁ•É	½Õ¹‘	åQÌ¡ÁÉ¥•Ì°Õ¹Ñ¥°¤ì4(€€€€€€€€€€€±•Ğµ…áAÉ¥”€ô‰…Í•AÉ¥”ì4(€€€€€€€€€€€±•Ğµ¥¹AÉ¥”€ô‰…Í•AÉ¥”ì4(€€€€€€€€€€€±•Ğ±½Í•AÉ¥”€ô‰…Í•AÉ¥”ì4(€€€€€€€€€€€±•ĞÍ…µÁ±•½Õ¹Ğ€ô€Àì4(€€€€€€€€€€€™½È€¡±•Ğ¥¹‘•à€ôÍÑ…ÉĞì¥¹‘•à€ğ•¹ì¥¹‘•à¬¬¤ì4(€€€€€€€€€€€€€½¹ÍĞÁÉ¥”€ôÁÉ¥•Ím¥¹‘•át¹ÁÉ¥”ì4(€€€€€€€€€€€€€¥˜€ …9Õµ‰•È¹¥Í¥¹¥Ñ”¡ÁÉ¥”¤ñğÁÉ¥”€ğô€À¤½¹Ñ¥¹Õ”ì4(€€€€€€€€€€€€€µ…áAÉ¥”€ô5…Ñ ¹µ…à¡µ…áAÉ¥”°ÁÉ¥”¤ì4(€€€€€€€€€€€€€µ¥¹AÉ¥”€ô5…Ñ ¹µ¥¸¡µ¥¹AÉ¥”°ÁÉ¥”¤ì4(€€€€€€€€€€€€€±½Í•AÉ¥”€ôÁÉ¥”ì4(€€€€€€€€€€€€€Í…µÁ±•½Õ¹Ğ¬¬ì4(€€€€€€€€€€€ô4(€€€€€€€€€€€Á…É…µÍm™ÕÑÕÉ•}µ…á|‘í¡½É¥é½¹õÍ}ÁÑt€ô€ ¡µ…áAÉ¥”€´‰…Í•AÉ¥”¤€¼‰…Í•AÉ¥”¤€¨€ÄÀÀì4(€€€€€€€€€€€Á…É…µÍm™ÕÑÕÉ•}±½Í•|‘í¡½É¥é½¹õÍ}ÁÑt€ô€ ¡±½Í•AÉ¥”€´‰…Í•AÉ¥”¤€¼‰…Í•AÉ¥”¤€¨€ÄÀÀì4(€€€€€€€€€€€Á…É…µÍm™ÕÑÕÉ•}‘É…İ‘½İ¹|‘í¡½É¥é½¹õÍ}ÁÑt€ô€ ¡µ¥¹AÉ¥”€´‰…Í•AÉ¥”¤€¼‰…Í•AÉ¥”¤€¨€ÄÀÀì4(€€€€€€€€€€€Á…É…µÍm±…‰•±}Í…µÁ±•}½Õ¹Ñ|‘í¡½É¥é½¹õÍt€ôÍ…µÁ±•½Õ¹Ğì4(€€€€€€€€€ô4(€€€€€€€€€ÕÁ‘…Ñ•Ì¹ÁÕÍ ¡Á…É…µÌ¤ì4(€€€€€€€ô4(€€€€€ô4(4(€€€€€½¹ÍĞ…ÁÁ±åUÁ‘…Ñ•Ì€ô€ ¤€ôøì4(€€€€€€€™½È€¡½¹ÍĞÁ…É…µÌ½˜ÕÁ‘…Ñ•Ì¤Ñ¡¥Ì¹ÍÑµÑÌ¹ÕÁ‘…Ñ•M¹…ÁÍ¡½Ñ1…‰•±Ì¹ÉÕ¸¡Á…É…µÌ¤ì4(€€€€€ôì4(€€€€€¥˜€¡ÑåÁ•½˜Ñ¡¥Ì¹‘ˆ¹ÑÉ…¹Í…Ñ¥½¸€ôôô€™Õ¹Ñ¥½¸œ¤Ñ¡¥Ì¹‘ˆ¹ÑÉ…¹Í…Ñ¥½¸¡…ÁÁ±åUÁ‘…Ñ•Ì¤ ¤ì4(€€€€€•±Í”…ÁÁ±åUÁ‘…Ñ•Ì ¤ì4(€€€€€É•ÑÕÉ¸ÕÁ‘…Ñ•Ì¹±•¹Ñ ì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È¡MÑÉ…Ñ•ä1…ˆ±…‰•°‰…­™¥±°™…¥±•è€‘í•ÉÉ½È¹µ•ÍÍ…•õ€¤ì4(€€€ô4(€ô4(4(€€¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(€€¼¼A½Í¥Ñ¥½¸±¥™•å±”A$4(€€¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(4(€½Á•¹A½Í¥Ñ¥½¸¡ìÁ½Í¥Ñ¥½¹%°µ¥¹Ğ°Íåµ‰½°°½Á•¹•‘Ğ°•¹ÑÉåM½°°•¹ÑÉåAÉ¥”°Ñ½­•¹µ½Õ¹Ğ°4(€€€€€€€€€€€€€€€€‘ÉåIÕ¸°‰ÕåM¥¹…ÑÕÉ”°‰Õå••1…µÁ½ÉÑÌ°‰ÕåM±½Ğ°‘ÕµÁM±½Ğ°4(€€€€€€€€€€€€€€€€•¹ÑÉå‘Ø°•¹ÑÉåA½½±M½°°•¹ÑÉå1¥ÅÕ¥‘¥Ñä°4(€€€€€€€€€€€€€€€€Í•±±½Õ¹ĞÄÁÌ°Ñ½Ñ…±M•±±M½°ÄÁÌ°4(€€€€€€€€€€€€€€€€µ¥¹Ñ•Ñ	ÕåM•Œ°ÉÍ¥AÉ•ÕµÀ°ÉÍ¤ÅÍAÉ•ÕµÀ°ÉÍ¤ÌÁÍAÉ•ÕµÀ°4(€€€€€€€€€€€€€€€€¥Íµ…MÑÉ…Ñ•ä€ô€À°¥Í‘‘=¸€ô€Àô¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹½Á•¹A½Í¥Ñ¥½¸¹ÉÕ¸¡ì4(€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€µ¥¹Ğ°4(€€€€€Íåµ‰½°èÍåµ‰½°ñğ¹Õ±°°4(€€€€€½Á•¹•‘Ğè½Á•¹•‘Ğñğ…Ñ”¹¹½Ü ¤°4(€€€€€•¹ÑÉåM½°è•¹ÑÉåM½°€üü¹Õ±°°4(€€€€€•¹ÑÉåAÉ¥”è•¹ÑÉåAÉ¥”€üü¹Õ±°°4(€€€€€Ñ½­•¹µ½Õ¹ĞèÑ½­•¹µ½Õ¹Ğ€üü¹Õ±°°4(€€€€€‘ÉåIÕ¸è‘ÉåIÕ¸€ü€Ä€è€À°4(€€€€€‰ÕåM¥¹…ÑÕÉ”è‰ÕåM¥¹…ÑÕÉ”ñğ¹Õ±°°4(€€€€€‰Õå••1…µÁ½ÉÑÌè‰Õå••1…µÁ½ÉÑÌñğ€À°4(€€€€€‰ÕåM±½Ğè‰ÕåM±½Ğñğ€À°4(€€€€€‘ÕµÁM±½Ğè‘ÕµÁM±½Ğñğ€À°4(€€€€€•¹ÑÉå‘Øè•¹ÑÉå‘Ø€üü¹Õ±°°4(€€€€€•¹ÑÉåA½½±M½°è•¹ÑÉåA½½±M½°€üü¹Õ±°°4(€€€€€•¹ÑÉå1¥ÅÕ¥‘¥Ñäè•¹ÑÉå1¥ÅÕ¥‘¥Ñä€üü¹Õ±°°4(€€€€€Í•±±½Õ¹ĞÄÁÌèÍ•±±½Õ¹ĞÄÁÌ€üü¹Õ±°°€€€€€€€€¼¼ØÌ¸ÄÜ¸ÌØèƒ¢ş{:¿š.S–n{šÖ,4(€€€€€Ñ½Ñ…±M•±±M½°ÄÁÌèÑ½Ñ…±M•±±M½°ÄÁÌ€üü¹Õ±°°€€¼¼ØÌ¸ÄÜ¸ÌØèƒ¢ş{:¿š.S–n{šÖ,4(€€€€€µ¥¹Ñ•Ñ	ÕåM•Œèµ¥¹Ñ•Ñ	ÕåM•Œ€üü¹Õ±°°€€¼¼ØÌ¸ÄÜ¸Ìäèƒ¦š[’ş‡–>ß–"Ã’æÃ–—jKšVÀ4(€€€€€ÉÍ¥AÉ•ÕµÀèÉÍ¥AÉ•ÕµÀ€üü¹Õ±°°€€€€€€€€€€€€€€¼¼ØÌ¸ÄÜ¸Ìàèƒ‚ã–6W–&4IM$ÕÌ4(€€€€€ÉÍ¤ÅÍAÉ•ÕµÀèÉÍ¤ÅÍAÉ•ÕµÀ€üü¹Õ±°°€€€€€€€€€€¼¼ØÌ¸ÄÜ¸Ìàèƒ‚ã–6W–&4IM$ÅÌ4(€€€€€ÉÍ¤ÌÁÍAÉ•ÕµÀèÉÍ¤ÌÁÍAÉ•ÕµÀ€üü¹Õ±°°€€€€€€€€¼¼ØÌ¸ÄÜ¸ĞÈèƒ‚ã–6W–&4IM$ÌÁÌ4(€€€€€¥Íµ…MÑÉ…Ñ•äè¥Íµ…MÑÉ…Ñ•ä€üü€À°€€€€€€€€€€€€¼¼5¶[V—š‚¢ºÀ4(€€€€€¥Í‘‘=¸è¥Í‘‘=¸€üü€À°€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ–*ƒ’îOš‚¢ºÀ4(€€€ô¤ì4(€ô4(4(€ÕÁ‘…Ñ•A½Í¥Ñ¥½¹¹ÑÉä¡Á½Í¥Ñ¥½¹%°ì•¹ÑÉåM½°°•¹ÑÉåAÉ¥”°Ñ½­•¹µ½Õ¹Ğ°‰Õå••1…µÁ½ÉÑÌ°‰ÕåM±½Ğ°‘ÕµÁM±½Ğô¤ì4(€€€€¼¼ØÌ¸ÄÜ¸ÈÀµ™¥àèƒšR¿š2‰ÕåM±½Ğ½‘ÕµÁM±½ĞƒšnÓšZÀ4(€€€½¹ÍĞ¡…ÍM±½ÑUÁ‘…Ñ”€ô‰ÕåM±½Ğ€„ô¹Õ±°ñğ‘ÕµÁM±½Ğ€„ô¹Õ±°ì4(€€€¥˜€¡¡…ÍM±½ÑUÁ‘…Ñ”¤ì4(€€€€€Ñ¡¥Ì¹‘ˆ¹ÁÉ•Á…É”¡€4(€€€€€€€UAQÁ½Í¥Ñ¥½¹ÌMP4(€€€€€€€€€•¹ÑÉå}Í½°€ô•¹ÑÉåM½°°4(€€€€€€€€€•¹ÑÉå}ÁÉ¥”€ô•¹ÑÉåAÉ¥”°4(€€€€€€€€€Ñ½­•¹}…µ½Õ¹Ğ€ôÑ½­•¹µ½Õ¹Ğ°4(€€€€€€€€€‰Õå}™••}±…µÁ½ÉÑÌ€ô‰Õå••1…µÁ½ÉÑÌ°4(€€€€€€€€€‰Õå}Í±½Ğ€ô=1M¡‰ÕåM±½Ğ°‰Õå}Í±½Ğ¤°4(€€€€€€€€€‘ÕµÁ}Í±½Ğ€ô=1M¡‘ÕµÁM±½Ğ°‘ÕµÁ}Í±½Ğ¤4(€€€€€€€]!IÁ½Í¥Ñ¥½¹}¥€ôÁ½Í¥Ñ¥½¹%4(€€€€€€¤¹ÉÕ¸¡ì4(€€€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€€€•¹ÑÉåM½°è•¹ÑÉåM½°€üü¹Õ±°°4(€€€€€€€•¹ÑÉåAÉ¥”è•¹ÑÉåAÉ¥”€üü¹Õ±°°4(€€€€€€€Ñ½­•¹µ½Õ¹ĞèÑ½­•¹µ½Õ¹Ğ€üü¹Õ±°°4(€€€€€€€‰Õå••1…µÁ½ÉÑÌè‰Õå••1…µÁ½ÉÑÌ€üü€À°4(€€€€€€€‰ÕåM±½Ğè‰ÕåM±½Ğ€üü¹Õ±°°4(€€€€€€€‘ÕµÁM±½Ğè‘ÕµÁM±½Ğ€üü¹Õ±°°4(€€€€€ô¤ì4(€€€ô•±Í”ì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹ÕÁ‘…Ñ•¹ÑÉä¹ÉÕ¸¡ì4(€€€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€€€•¹ÑÉåM½°è•¹ÑÉåM½°€üü¹Õ±°°4(€€€€€€€•¹ÑÉåAÉ¥”è•¹ÑÉåAÉ¥”€üü¹Õ±°°4(€€€€€€€Ñ½­•¹µ½Õ¹ĞèÑ½­•¹µ½Õ¹Ğ€üü¹Õ±°°4(€€€€€€€‰Õå••1…µÁ½ÉÑÌè‰Õå••1…µÁ½ÉÑÌ€üü€À°4(€€€€€ô¤ì4(€€€ô4(€ô4(4(€±½Í•A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¹%°ì±½Í•‘Ğ°•á¥ÑAÉ¥”°•á¥ÑM½°°Á¹±M½°°Á¹±AĞ°•á¥ÑI•…Í½¸°Í•±±M¥¹…ÑÕÉ”°Á•…­A¹±AĞ°Á•…­AÉ¥”°Á•…­QÌ°Ñ¥µ•Q½A•…­5Ì°ÁÉ¥•Q¥­½Õ¹Ğô¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹±½Í•A½Í¥Ñ¥½¸¹ÉÕ¸¡ì4(€€€€€Á½Í¥Ñ¥½¹%°4(€€€€€±½Í•‘Ğè±½Í•‘Ğñğ…Ñ”¹¹½Ü ¤°4(€€€€€•á¥ÑAÉ¥”è•á¥ÑAÉ¥”€üü¹Õ±°°4(€€€€€•á¥ÑM½°è•á¥ÑM½°€üü¹Õ±°°4(€€€€€Á¹±M½°èÁ¹±M½°€üü¹Õ±°°4(€€€€€Á¹±AĞèÁ¹±AĞ€üü¹Õ±°°4(€€€€€•á¥ÑI•…Í½¸è•á¥ÑI•…Í½¸ñğ¹Õ±°°4(€€€€€Í•±±M¥¹…ÑÕÉ”èÍ•±±M¥¹…ÑÕÉ”ñğ¹Õ±°°4(€€€€€Á•…­A¹±AĞèÁ•…­A¹±AĞ€üü¹Õ±°°4(€€€€€Á•…­AÉ¥”èÁ•…­AÉ¥”€üü¹Õ±°°4(€€€€€Á•…­QÌèÁ•…­QÌ€üü¹Õ±°°4(€€€€€Ñ¥µ•Q½A•…­5ÌèÑ¥µ•Q½A•…­5Ì€üü¹Õ±°°4(€€€€€ÁÉ¥•Q¥­½Õ¹ĞèÁÉ¥•Q¥­½Õ¹Ğ€üü€À°4(€€€ô¤ì4(€ô4(4(€€¼¼ØÌ¸ÄÜ¸ÌÄèƒ–æÏ’îO–B;’îßš‚ó¢ş÷¢â«–g–”4(€É•½É‘A½ÍÑá¥ÑMÑ…ÑÌ¡ìÁ½Í¥Ñ¥½¹%°µ¥¹Ğ°•á¥ÑAÉ¥”°•á¥ÑQÌ°µ…áAÉ¥”°µ…áAÉ¥•QÌ°4(€€€µ…áAÕµÁAĞ°µ¥¹AÉ¥”°µ¥¹AÉ¥•QÌ°µ…áÕµÁAĞ°Í…µÁ±•½Õ¹Ğ°4(€€€Í¹…ÁÍ¡½ÑÌ°™¥¹…±¥é•‘Ğô¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÍÑµÑÌ¹É•½É‘A½ÍÑá¥ÑMÑ…ÑÌ¤ì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹É•½É‘A½ÍÑá¥ÑMÑ…ÑÌ€ôÑ¡¥Ì¹‘ˆ¹ÁÉ•Á…É”¡€4(€€€€€€€%9MIP=HIA1%9Q<Á½ÍÑ}•á¥Ñ}ÍÑ…ÑÌ€ 4(€€€€€€€€€Á½Í¥Ñ¥½¹}¥°µ¥¹Ğ°•á¥Ñ}ÁÉ¥”°•á¥Ñ}ÑÌ°4(€€€€€€€€€µ…á}ÁÉ¥”°µ…á}ÁÉ¥•}ÑÌ°µ…á}ÁÕµÁ}ÁĞ°4(€€€€€€€€€µ¥¹}ÁÉ¥”°µ¥¹}ÁÉ¥•}ÑÌ°µ…á}‘ÕµÁ}ÁĞ°4(€€€€€€€€€Í…µÁ±•}½Õ¹Ğ°Í¹…ÁÍ¡½ÑÌ°™¥¹…±¥é•‘}…Ğ4(€€€€€€€€¤Y1UL€ 4(€€€€€€€€€Á½Í¥Ñ¥½¹%°µ¥¹Ğ°•á¥ÑAÉ¥”°•á¥ÑQÌ°4(€€€€€€€€€µ…áAÉ¥”°µ…áAÉ¥•QÌ°µ…áAÕµÁAĞ°4(€€€€€€€€€µ¥¹AÉ¥”°µ¥¹AÉ¥•QÌ°µ…áÕµÁAĞ°4(€€€€€€€€€Í…µÁ±•½Õ¹Ğ°Í¹…ÁÍ¡½ÑÌ°™¥¹…±¥é•‘Ğ4(€€€€€€€€¤4(€€€€€€¤ì4(€€€ô4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹É•½É‘A½ÍÑá¥ÑMÑ…ÑÌ¹ÉÕ¸¡ì4(€€€€€Á½Í¥Ñ¥½¹%°µ¥¹Ğ°•á¥ÑAÉ¥”°•á¥ÑQÌ°4(€€€€€µ…áAÉ¥”°µ…áAÉ¥•QÌ°µ…áAÕµÁAĞ°4(€€€€€µ¥¹AÉ¥”°µ¥¹AÉ¥•QÌ°µ…áÕµÁAĞ°4(€€€€€Í…µÁ±•½Õ¹Ğ°Í¹…ÁÍ¡½ÑÌ°™¥¹…±¥é•‘Ğ°4(€€€ô¤ì4(€ô4(4(€µ…É­M•±±A•¹‘¥¹œ¡Á½Í¥Ñ¥½¹%°Í¥¹…ÑÕÉ”°•á¥ÑI•…Í½¸¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹µ…É­M•±±A•¹‘¥¹œ¹ÉÕ¸¡Í¥¹…ÑÕÉ”ñğ¹Õ±°°•á¥ÑI•…Í½¸ñğ¹Õ±°°…Ñ”¹¹½Ü ¤°Á½Í¥Ñ¥½¹%¤ì4(€ô4(4(€µ…É­M•±±…¥±•‘A•¹‘¥¹I•ÑÉä¡Á½Í¥Ñ¥½¹%°¹•áÑI•ÑÉåĞ°•ÉÉ½É5Íœ°•á¥ÑI•…Í½¸¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹µ…É­M•±±…¥±•‘A•¹‘¥¹I•ÑÉä¹ÉÕ¸ 4(€€€€€¹•áÑI•ÑÉåĞ°4(€€€€€•ÉÉ½É5Íœñğ¹Õ±°°4(€€€€€•á¥ÑI•…Í½¸ñğ¹Õ±°°4(€€€€€…Ñ”¹¹½Ü ¤°4(€€€€€Á½Í¥Ñ¥½¹%°4(€€€€¤ì4(€ô4(4(€µ…É­MÑÕ¬¡Á½Í¥Ñ¥½¹%°É•…Í½¸¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹µ…É­MÑÕ¬¹ÉÕ¸¡É•…Í½¸ñğ¹Õ±°°…Ñ”¹¹½Ü ¤°Á½Í¥Ñ¥½¹%¤ì4(€ô4(4(€É•½É‘M•±±ÑÑ•µÁĞ¡Á½Í¥Ñ¥½¹%°•ÉÉ½É5Íœ¤ì4(€€€Ñ¡¥Ì¹ÍÑµÑÌ¹É•½É‘M•±±ÑÑ•µÁĞ¹ÉÕ¸¡•ÉÉ½É5Íœñğ¹Õ±°°…Ñ”¹¹½Ü ¤°Á½Í¥Ñ¥½¹%¤ì4(€ô4(4(€•Ñ=Á•¹A½Í¥Ñ¥½¹Ì ¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹•Ñ=Á•¹A½Í¥Ñ¥½¹Ì¹…±° ¤ì4(€ô4(4(€•ÑÕ•A•¹‘¥¹I•ÑÉ¥•Ì¡¹½Ü¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹•ÑÕ•A•¹‘¥¹I•ÑÉ¥•Ì¹…±°¡¹½Ü¤ì4(€ô4(4(€€¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(€€¼¼I•Á½ÉÑ¥¹œ€¼‘…Í¡‰½…ÉÅÕ•É¥•Ì4(€€¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(4(€•ÑM¥¹…±Í%¹I…¹”¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹Í¥¹…±Í%¹I…¹”¹…±°¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€ô4(4(€•ÑQÉ…‘•Í%¹I…¹”¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹ÑÉ…‘•Í%¹I…¹”¹…±°¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€ô4(4(€•ÑMİ…ÁÙ•¹ÑÍ%¹I…¹”¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹Íİ…ÁÙ•¹ÑÍ%¹I…¹”¹…±°¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€ô4(4(€•ÑA½Í¥Ñ¥½¹Í%¹I…¹”¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹Á½Í¥Ñ¥½¹Í%¹I…¹”¹…±°¡ÍÑ…ÉÑ5Ì°•¹‘5Ì¤ì4(€ô4(4(€•ÑI••¹ÑM¥¹…±Ì¡±¥µ¥Ğ€ô€ÄÀÀ¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹É••¹ÑM¥¹…±Ì¹…±°¡±¥µ¥Ğ¤ì4(€ô4(4(€•ÑI••¹ÑQÉ…‘•Ì¡±¥µ¥Ğ€ô€ÄÀÀ¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹É••¹ÑQÉ…‘•Ì¹…±°¡±¥µ¥Ğ¤ì4(€ô4(4(€•ÑI••¹ÑA½Í¥Ñ¥½¹Ì¡±¥µ¥Ğ€ô€ÄÀÀ¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹É••¹ÑA½Í¥Ñ¥½¹Ì¹…±°¡±¥µ¥Ğ¤ì4(€ô4(4(€•ÑMÑÕ­A½Í¥Ñ¥½¹Ì ¤ì4(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑµÑÌ¹ÍÑÕ­A½Í¥Ñ¥½¹Ì¹…±° ¤ì4(€ô4(4(€€¼¼€ôôôôôôôôôôôôÁÉ¥•}Í…µÁ±•Ì€ôôôôôôôôôôôô4(4(€€¼¨¨4(€€€¨M…Ù”„Í¥¹±”ÁÉ¥”Í…µÁ±”€¡…±±•™É½´M¥¹…±¹¥¹”¹}Í…µÁ±•1½¹AÉ¥”¤4(€€€¨¼4(€Í…Ù•AÉ¥•M…µÁ±”¡µ¥¹Ğ°ÑÌ°ÁÉ¥”¤ì4(€€€ÑÉäì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹¥¹Í•ÉÑAÉ¥•M…µÁ±”¹ÉÕ¸¡ìµ¥¹Ğ°ÑÌ°ÁÉ¥”ô¤ì4(€€€ô…Ñ €¡|¤ì€¼¨‰•ÍĞ•™™½ÉĞ€¨¼ô4(€ô4(4(€€¼¨¨4(€€€¨1½…ÁÉ¥”Í…µÁ±•Ì™É½´Ñ¡”±…ÍĞ8µ¥±±¥Í•½¹‘Ì¸4(€€€¨I•ÑÕÉ¹Ì5…Àñµ¥¹Ğ°míÑÌ°ÁÉ¥•ô°€¸¸¹tø4(€€€¨¼4(€±½…‘I••¹ÑAÉ¥•M…µÁ±•Ì¡Í¥¹•5Ì¤ì4(€€€½¹ÍĞÉ½İÌ€ôÑ¡¥Ì¹ÍÑµÑÌ¹±½…‘I••¹ÑAÉ¥•M…µÁ±•Ì¹…±°¡Í¥¹•5Ì¤ì4(€€€½¹ÍĞµ…À€ô¹•Ü5…À ¤ì4(€€€™½È€¡½¹ÍĞÉ½Ü½˜É½İÌ¤ì4(€€€€€±•Ğ…ÉÈ€ôµ…À¹•Ğ¡É½Ü¹µ¥¹Ğ¤ì4(€€€€€¥˜€ ……ÉÈ¤ì4(€€€€€€€…ÉÈ€ômtì4(€€€€€€€µ…À¹Í•Ğ¡É½Ü¹µ¥¹Ğ°…ÉÈ¤ì4(€€€€€ô4(€€€€€…ÉÈ¹ÁÕÍ ¡ìÑÌèÉ½Ü¹ÑÌ°ÁÉ¥”èÉ½Ü¹ÁÉ¥”ô¤ì4(€€€ô4(€€€É•ÑÕÉ¸µ…Àì4(€ô4(4(€€¼¨¨4(€€€¨ØÌ¸ÄÜ¸ĞÄè½Õ¹ĞÁ½Í¥Ñ¥½¹Ì½Á•¹•™½È„µ¥¹ĞÍ¥¹”„Ñ¥µ•ÍÑ…µÀ4(€€€¨¼4(€½Õ¹ÑI••¹Ñ	ÕåÍ	å5¥¹Ğ¡µ¥¹Ğ°Í¥¹•5Ì¤ì(€€€ÑÉäì4(€€€€€½¹ÍĞÉ½Ü€ôÑ¡¥Ì¹‘ˆ¹ÁÉ•Á…É” 4(€€€€€€€€M1P½Õ¹Ğ ¨¤…Ì¹ĞI=4Á½Í¥Ñ¥½¹Ì]!Iµ¥¹Ğ€ô€ü9½Á•¹•‘}…Ğ€ø€üœ4(€€€€€€¤¹•Ğ¡µ¥¹Ğ°Í¥¹•5Ì¤ì4(€€€€€É•ÑÕÉ¸É½Ü€üÉ½Ü¹¹Ğ€è€Àì4(€€€ô…Ñ €¡|¤ìÉ•ÑÕÉ¸€´Äìô(€ô((€¡…ÍMÕ•ÍÍ™Õ±	Õå½É5¥¹Ğ¡µ¥¹Ğ¤ì(€€€½¹ÍĞÉ½Ü€ôÑ¡¥Ì¹‘ˆ¹ÁÉ•Á…É” (€€€€€€‰M1P€ÄL™½Õ¹I=4ÑÉ…‘•Ì€ˆ€¬(€€€€€€€€‰]!Iµ¥¹Ğ€ô€ü9Í¥‘”€ô€	Udœ9ÍÕ•ÍÌ€ô€Ä9‘Éå}ÉÕ¸€ô€À1%5%P€Äˆ°(€€€€¤¹•Ğ¡µ¥¹Ğ¤ì(€€€É•ÑÕÉ¸€„…É½Üì(€ô((€€¼¨¨(€€€¨•±•Ñ”ÁÉ¥”Í…µÁ±•Ì½±‘•ÈÑ¡…¸ÕÑ½™™5Ì(€€€¨¼4(€±•…¹=±‘AÉ¥•M…µÁ±•Ì¡ÕÑ½™™5Ì¤ì4(€€€ÑÉäì4(€€€€€Ñ¡¥Ì¹ÍÑµÑÌ¹±•…¹=±‘AÉ¥•M…µÁ±•Ì¹ÉÕ¸¡ÕÑ½™™5Ì¤ì4(€€€ô…Ñ €¡|¤ì€¼¨‰•ÍĞ•™™½ÉĞ€¨¼ô4(€ô4)ô4(4)µ½‘Õ±”¹•áÁ½ÉÑÌ€ôQÉ…‘•1½•Èì4)µ½‘Õ±”¹•áÁ½ÉÑÌ¹MQIQe}1	}EU1%Qe}YIM%=8€ôMQIQe}1	}EU1%Qe}YIM%=8ì4(
+      CREATE INDEX IF NOT EXISTS idx_token_events_ts ON token_events(ts);
+      CREATE INDEX IF NOT EXISTS idx_token_events_type_ts ON token_events(event_type, ts);
+      CREATE INDEX IF NOT EXISTS idx_token_events_mint_ts ON token_events(mint, ts);
+
+      CREATE TABLE IF NOT EXISTS bot_latency_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts INTEGER NOT NULL,
+        mint TEXT,
+        symbol TEXT,
+        signature TEXT,
+        phase TEXT,
+        latency_detect_ms INTEGER,
+        latency_decision_ms INTEGER,
+        latency_send_ms INTEGER,
+        latency_confirm_ms INTEGER,
+        details_json TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_bot_latency_events_ts ON bot_latency_events(ts);
+      CREATE INDEX IF NOT EXISTS idx_bot_latency_events_mint_ts ON bot_latency_events(mint, ts);
+    `);
+
+    this._ensureColumns('token_snapshots', this._snapshotFeatureColumns());
+    this._ensureColumns('token_candles', [
+      ['timeframe', 'TEXT'],
+      ['bucket_ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['open', 'REAL'],
+      ['high', 'REAL'],
+      ['low', 'REAL'],
+      ['close', 'REAL'],
+      ['volume_sol', 'REAL'],
+      ['buy_volume_sol', 'REAL'],
+      ['sell_volume_sol', 'REAL'],
+      ['buy_count', 'INTEGER'],
+      ['sell_count', 'INTEGER'],
+      ['tx_count', 'INTEGER'],
+      ['unique_buy_wallets', 'INTEGER'],
+      ['unique_sell_wallets', 'INTEGER'],
+      ['fdv', 'REAL'],
+      ['liquidity', 'REAL'],
+      ['data_quality_version', 'INTEGER'],
+      ['filtered_event_count', 'INTEGER'],
+      ['filtered_volume_sol', 'REAL'],
+      ['feature_quality_status', 'TEXT'],
+      ['updated_at', 'INTEGER'],
+    ]);
+    this._ensureColumns('token_events', [
+      ['ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['event_type', 'TEXT'],
+      ['event_key', 'TEXT'],
+      ['price', 'REAL'],
+      ['fdv', 'REAL'],
+      ['liquidity', 'REAL'],
+      ['age_ms', 'INTEGER'],
+      ['value', 'REAL'],
+      ['details_json', 'TEXT'],
+      ['created_at', 'INTEGER'],
+    ]);
+    this._ensureColumns('bot_latency_events', [
+      ['ts', 'INTEGER'],
+      ['mint', 'TEXT'],
+      ['symbol', 'TEXT'],
+      ['signature', 'TEXT'],
+      ['phase', 'TEXT'],
+      ['latency_detect_ms', 'INTEGER'],
+      ['latency_decision_ms', 'INTEGER'],
+      ['latency_send_ms', 'INTEGER'],
+      ['latency_confirm_ms', 'INTEGER'],
+      ['details_json', 'TEXT'],
+    ]);
+  }
+
+  _prepareStatements() {
+    this.stmts = {
+      // ============ signals ============
+      insertSignal: this.db.prepare(`
+        INSERT INTO signals
+          (ts, mint, symbol, kind, sell_sol, price_impact_pct, seller, seller_tx, notes, accepted, reject_reason)
+        VALUES (@ts, @mint, @symbol, @kind, @sellSol, @priceImpactPct, @seller, @sellerTx, @notes, @accepted, @rejectReason)
+      `),
+
+      recentAcceptedSellerTxs: this.db.prepare(`
+        SELECT seller_tx, ts FROM signals
+        WHERE accepted = 1 AND seller_tx IS NOT NULL AND seller_tx != ''
+          AND ts >= ?
+        ORDER BY ts DESC
+        LIMIT 5000
+      `),
+
+      signalsInRange: this.db.prepare(`
+        SELECT * FROM signals WHERE ts >= ? AND ts < ? ORDER BY ts ASC
+      `),
+
+      recentSignals: this.db.prepare(`
+        SELECT * FROM signals ORDER BY ts DESC LIMIT ?
+      `),
+
+      // ============ trades ============
+      insertTrade: this.db.prepare(`
+        INSERT INTO trades
+          (position_id, ts, mint, symbol, side, sol_amount, token_amount, price, signature,
+           success, dry_run, reason, latency_ms, error, configured_slippage_pct,
+           effective_slippage_pct, signal_price, expected_price, max_price, max_quote_sol,
+           cache_age_before_ms, cache_age_at_build_ms, state_source, buy_mode,
+           min_base_amount_out_raw, virtual_quote_reserves_raw)
+        VALUES (@positionId, @ts, @mint, @symbol, @side, @solAmount, @tokenAmount, @price, @signature,
+                @success, @dryRun, @reason, @latencyMs, @error, @configuredSlippagePct,
+                @effectiveSlippagePct, @signalPrice, @expectedPrice, @maxPrice, @maxQuoteSol,
+                @cacheAgeBeforeMs, @cacheAgeAtBuildMs, @stateSource, @buyMode,
+                @minBaseAmountOutRaw, @virtualQuoteReservesRaw)
+      `),
+
+      tradesInRange: this.db.prepare(`
+        SELECT * FROM trades WHERE ts >= ? AND ts < ? ORDER BY ts ASC
+      `),
+
+      recentTrades: this.db.prepare(`
+        SELECT * FROM trades ORDER BY ts DESC LIMIT ?
+      `),
+      markBuyChainFailed: this.db.prepare(`
+        UPDATE trades
+        SET success = 0,
+            error = @error,
+            chain_error_class = @chainErrorClass,
+            chain_instruction_index = @chainInstructionIndex,
+            chain_program_id = @chainProgramId,
+            chain_failed_program_id = @chainFailedProgramId,
+            chain_compute_units = @chainComputeUnits,
+            chain_logs_json = @chainLogsJson
+        WHERE signature = @signature AND side = 'BUY'
+      `),
+
+      // ============ swap_events ============
+      insertSwapEvent: this.db.prepare(`
+        INSERT OR IGNORE INTO swap_events
+          (ts, mint, symbol, signer, side, sol_volume, price, price_before, price_change_pct,
+           slot, signature, pool_address, pool_quote_after, source, price_reliable,
+           price_sanitized, raw_price, raw_price_before, sanitizer_reason, feature_eligible,
+           data_quality_version)
+        VALUES
+          (@ts, @mint, @symbol, @signer, @side, @solVolume, @price, @priceBefore, @priceChangePct,
+           @slot, @signature, @poolAddress, @poolQuoteAfter, @source, @priceReliable,
+            @priceSanitized, @rawPrice, @rawPriceBefore, @sanitizerReason, @featureEligible,
+            @dataQualityVersion)
+      `),
+
+      swapEventsInRange: this.db.prepare(`
+        SELECT * FROM swap_events WHERE ts >= ? AND ts < ? ORDER BY mint, ts ASC
+      `),
+
+      // ============ positions ============
+      openPosition: this.db.prepare(`
+        INSERT INTO positions
+          (position_id, mint, symbol, opened_at, entry_sol, entry_price, token_amount,
+           dry_run, buy_signature, buy_fee_lamports, buy_slot, dump_slot,
+           entry_fdv, entry_pool_sol, entry_liquidity,
+           sell_count_10s, total_sell_sol_10s,
+           mint_age_at_buy_sec, rsi_pre_dump, rsi_1s_pre_dump, rsi_30s_pre_dump,
+           is_ema_strategy, is_addon, status)
+        VALUES (@positionId, @mint, @symbol, @openedAt, @entrySol, @entryPrice, @tokenAmount,
+                @dryRun, @buySignature, @buyFeeLamports, @buySlot, @dumpSlot,
+                @entryFdv, @entryPoolSol, @entryLiquidity,
+                @sellCount10s, @totalSellSol10s,
+                @mintAgeAtBuySec, @rsiPreDump, @rsi1sPreDump, @rsi30sPreDump,
+                @isEmaStrategy, @isAddOn, 'open')
+        ON CONFLICT(position_id) DO UPDATE SET
+          opened_at = excluded.opened_at,
+          entry_sol = excluded.entry_sol,
+          entry_price = excluded.entry_price,
+          token_amount = excluded.token_amount,
+          buy_signature = excluded.buy_signature,
+          buy_fee_lamports = excluded.buy_fee_lamports,
+          buy_slot = excluded.buy_slot,
+          dump_slot = excluded.dump_slot,
+          entry_fdv = excluded.entry_fdv,
+          entry_pool_sol = excluded.entry_pool_sol,
+          entry_liquidity = excluded.entry_liquidity,
+          sell_count_10s = excluded.sell_count_10s,
+          total_sell_sol_10s = excluded.total_sell_sol_10s,
+          mint_age_at_buy_sec = excluded.mint_age_at_buy_sec,
+          rsi_pre_dump = excluded.rsi_pre_dump,
+          rsi_1s_pre_dump = excluded.rsi_1s_pre_dump,
+          rsi_30s_pre_dump = excluded.rsi_30s_pre_dump,
+          is_ema_strategy = excluded.is_ema_strategy,
+          is_addon = excluded.is_addon,
+          status = 'open'
+      `),
+
+      updateEntry: this.db.prepare(`
+        UPDATE positions SET
+          entry_sol = @entrySol,
+          entry_price = @entryPrice,
+          token_amount = @tokenAmount,
+          buy_fee_lamports = @buyFeeLamports
+        WHERE position_id = @positionId
+      `),
+
+      closePosition: this.db.prepare(`
+        UPDATE positions SET
+          closed_at = @closedAt,
+          exit_price = @exitPrice,
+          exit_sol = @exitSol,
+          pnl_sol = @pnlSol,
+          pnl_pct = @pnlPct,
+          exit_reason = @exitReason,
+          sell_signature = @sellSignature,
+          peak_pnl_pct = @peakPnlPct,
+          peak_price = @peakPrice,
+          peak_ts = @peakTs,
+          time_to_peak_ms = @timeToPeakMs,
+          price_tick_count = @priceTickCount,
+          status = 'closed'
+        WHERE position_id = @positionId
+      `),
+
+      updatePeak: this.db.prepare(`
+        UPDATE positions SET
+          peak_price = @peakPrice,
+          peak_ts = @peakTs,
+          peak_pnl_pct = @peakPnlPct
+        WHERE position_id = @positionId
+      `),
+
+      markSellPending: this.db.prepare(`
+        UPDATE positions SET
+          status = 'sell_confirming',
+          pending_sell_signature = ?,
+          exit_intent = ?,
+          last_retry_at = ?
+        WHERE position_id = ?
+      `),
+
+      markSellFailedPendingRetry: this.db.prepare(`
+        UPDATE positions SET
+          status = 'sell_pending',
+          next_retry_at = ?,
+          last_error = ?,
+          exit_intent = ?,
+          last_retry_at = ?
+        WHERE position_id = ?
+      `),
+
+      markStuck: this.db.prepare(`
+        UPDATE positions SET
+          status = 'stuck',
+          stuck_reason = ?,
+          last_retry_at = ?
+        WHERE position_id = ?
+      `),
+
+      recordSellAttempt: this.db.prepare(`
+        UPDATE positions SET
+          sell_attempts = COALESCE(sell_attempts, 0) + 1,
+          last_error = ?,
+          last_retry_at = ?
+        WHERE position_id = ?
+      `),
+
+      // PositionManager.restoreFromDb expects open + sell_pending + sell_confirming + stuck
+      getOpenPositions: this.db.prepare(`
+        SELECT * FROM positions
+        WHERE status IN ('open', 'sell_pending', 'sell_confirming', 'stuck')
+        ORDER BY opened_at ASC
+      `),
+
+      getDuePendingRetries: this.db.prepare(`
+        SELECT * FROM positions
+        WHERE status IN ('sell_pending', 'sell_confirming')
+          AND (next_retry_at IS NULL OR next_retry_at <= ?)
+      `),
+
+      positionsInRange: this.db.prepare(`
+        SELECT * FROM positions
+        WHERE closed_at IS NOT NULL AND closed_at >= ? AND closed_at < ?
+        ORDER BY opened_at ASC
+      `),
+
+      recentPositions: this.db.prepare(`
+        SELECT *, pre_vol_5m_pct as pre_vol_5m FROM positions ORDER BY opened_at DESC LIMIT ?
+      `),
+
+      // ============ price_samples ============
+      insertPriceSample: this.db.prepare(`
+        INSERT INTO price_samples (mint, ts, price) VALUES (@mint, @ts, @price)
+      `),
+
+      loadRecentPriceSamples: this.db.prepare(`
+        SELECT mint, ts, price FROM price_samples
+        WHERE ts >= ?
+        ORDER BY mint, ts ASC
+      `),
+
+      cleanOldPriceSamples: this.db.prepare(`
+        DELETE FROM price_samples WHERE ts < ?
+      `),
+
+      stuckPositions: this.db.prepare(`
+        SELECT * FROM positions WHERE status = 'stuck' ORDER BY opened_at DESC
+      `),
+    };
+
+    this._prepareStrategyLabStatements();
+  }
+
+  _snapshotColumnNames() {
+    return this._snapshotFeatureColumns().map(([name]) => name);
+  }
+
+  _prepareStrategyLabStatements() {
+    const snapshotColumns = this._snapshotColumnNames();
+    const snapshotInsertColumns = snapshotColumns.join(', ');
+    const snapshotInsertParams = snapshotColumns.map((name) => `@${name}`).join(', ');
+    const snapshotUpdateColumns = snapshotColumns
+      .filter((name) => name !== 'mint' && name !== 'bucket_ts')
+      .filter((name) => !name.startsWith('future_') && !name.startsWith('label_'))
+      .map((name) => `${name} = excluded.${name}`)
+      .join(',\n          ');
+
+    this.stmts.upsertTokenSnapshot = this.db.prepare(`
+      INSERT INTO token_snapshots (${snapshotInsertColumns})
+      VALUES (${snapshotInsertParams})
+      ON CONFLICT(mint, bucket_ts) DO UPDATE SET
+          ${snapshotUpdateColumns}
+    `);
+
+    this.stmts.upsertTokenCandle = this.db.prepare(`
+      INSERT INTO token_candles
+        (timeframe, bucket_ts, mint, symbol, open, high, low, close,
+         volume_sol, buy_volume_sol, sell_volume_sol, buy_count, sell_count, tx_count,
+         unique_buy_wallets, unique_sell_wallets, fdv, liquidity, data_quality_version,
+         filtered_event_count, filtered_volume_sol, feature_quality_status, updated_at)
+      VALUES
+        (@timeframe, @bucket_ts, @mint, @symbol, @open, @high, @low, @close,
+         @volume_sol, @buy_volume_sol, @sell_volume_sol, @buy_count, @sell_count, @tx_count,
+          @unique_buy_wallets, @unique_sell_wallets, @fdv, @liquidity, @data_quality_version,
+          @filtered_event_count, @filtered_volume_sol, @feature_quality_status, @updated_at)
+      ON CONFLICT(timeframe, mint, bucket_ts) DO UPDATE SET
+        symbol = excluded.symbol,
+        open = excluded.open,
+        high = excluded.high,
+        low = excluded.low,
+        close = excluded.close,
+        volume_sol = excluded.volume_sol,
+        buy_volume_sol = excluded.buy_volume_sol,
+        sell_volume_sol = excluded.sell_volume_sol,
+        buy_count = excluded.buy_count,
+        sell_count = excluded.sell_count,
+        tx_count = excluded.tx_count,
+        unique_buy_wallets = excluded.unique_buy_wallets,
+        unique_sell_wallets = excluded.unique_sell_wallets,
+        fdv = excluded.fdv,
+        liquidity = excluded.liquidity,
+        data_quality_version = excluded.data_quality_version,
+        filtered_event_count = excluded.filtered_event_count,
+        filtered_volume_sol = excluded.filtered_volume_sol,
+        feature_quality_status = excluded.feature_quality_status,
+        updated_at = excluded.updated_at
+    `);
+
+    this.stmts.insertTokenEvent = this.db.prepare(`
+      INSERT OR IGNORE INTO token_events
+        (ts, mint, symbol, event_type, event_key, price, fdv, liquidity, age_ms, value, details_json, created_at)
+      VALUES
+        (@ts, @mint, @symbol, @event_type, @event_key, @price, @fdv, @liquidity, @age_ms, @value, @details_json, @created_at)
+    `);
+
+    this.stmts.insertBotLatencyEvent = this.db.prepare(`
+      INSERT INTO bot_latency_events
+        (ts, mint, symbol, signature, phase,
+         latency_detect_ms, latency_decision_ms, latency_send_ms, latency_confirm_ms, details_json)
+      VALUES
+        (@ts, @mint, @symbol, @signature, @phase,
+         @latency_detect_ms, @latency_decision_ms, @latency_send_ms, @latency_confirm_ms, @details_json)
+    `);
+
+    this.stmts.pendingSnapshotLabels = this.db.prepare(`
+      SELECT id, mint, ts, price
+      FROM token_snapshots
+      WHERE price > 0
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND trusted_price_ts IS NOT NULL
+        AND COALESCE(feature_quality_status, '') IN ('trusted', 'mixed_filtered', 'quiet')
+        AND ts <= @mature_before
+        AND label_updated_at IS NULL
+      ORDER BY ts ASC
+      LIMIT @limit
+    `);
+
+    this.stmts.futurePricesForLabel = this.db.prepare(`
+      SELECT ts, price
+      FROM swap_events
+      WHERE mint = @mint
+        AND ts > @from_ts
+        AND ts <= @until_ts
+        AND price > 0
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND COALESCE(feature_eligible, 0) = 1
+        AND COALESCE(price_reliable, 0) = 1
+        ORDER BY ts ASC, id ASC
+    `);
+
+    this.stmts.snapshotLabelBacklog = this.db.prepare(`
+      SELECT COUNT(*) AS count, MIN(ts) AS oldest_ts, MAX(ts) AS newest_ts
+      FROM token_snapshots
+      WHERE price > 0
+        AND COALESCE(data_quality_version, 1) >= @min_quality_version
+        AND trusted_price_ts IS NOT NULL
+        AND COALESCE(feature_quality_status, '') IN ('trusted', 'mixed_filtered', 'quiet')
+        AND ts <= @mature_before
+        AND label_updated_at IS NULL
+    `);
+
+    this.stmts.updateSnapshotLabels = this.db.prepare(`
+      UPDATE token_snapshots SET
+        future_max_30s_pct = @future_max_30s_pct,
+        future_close_30s_pct = @future_close_30s_pct,
+        future_drawdown_30s_pct = @future_drawdown_30s_pct,
+        label_sample_count_30s = @label_sample_count_30s,
+        future_max_60s_pct = @future_max_60s_pct,
+        future_close_60s_pct = @future_close_60s_pct,
+        future_drawdown_60s_pct = @future_drawdown_60s_pct,
+        label_sample_count_60s = @label_sample_count_60s,
+        future_max_180s_pct = @future_max_180s_pct,
+        future_close_180s_pct = @future_close_180s_pct,
+        future_drawdown_180s_pct = @future_drawdown_180s_pct,
+        label_sample_count_180s = @label_sample_count_180s,
+        label_status = @label_status,
+        label_quality_version = @label_quality_version,
+        label_updated_at = @label_updated_at
+      WHERE id = @id
+    `);
+  }
+
+  // ============================================================
+  // Signal API
+  // ============================================================
+
+  logSignal({ ts, mint, symbol, kind, sellSol, priceImpactPct, seller, sellerTx,
+             notes, accepted, rejectReason }) {
+    this.stmts.insertSignal.run({
+      ts: ts || Date.now(),
+      mint: mint || null,
+      symbol: symbol || null,
+      kind: kind || null,
+      sellSol: sellSol ?? null,
+      priceImpactPct: priceImpactPct ?? null,
+      seller: seller || null,
+      sellerTx: sellerTx || null,
+      notes: notes || null,
+      accepted: accepted ? 1 : 0,
+      rejectReason: rejectReason || null,
+    });
+  }
+
+  /** SignalEngine._restoreSellerTxsFromDb expects rows with seller_tx/ts. */
+  getRecentAcceptedSellerTxs(dedupMs) {
+    const cutoff = Date.now() - dedupMs;
+    return this.stmts.recentAcceptedSellerTxs.all(cutoff);
+  }
+
+  // ============================================================
+  // Trade API
+  // ============================================================
+
+  logTrade({ positionId, ts, mint, symbol, side, solAmount, tokenAmount, price, signature,
+             success, dryRun, reason, latencyMs, error, configuredSlippagePct,
+             effectiveSlippagePct, signalPrice, expectedPrice, maxPrice, maxQuoteSol,
+             cacheAgeBeforeMs, cacheAgeAtBuildMs, stateSource, buyMode,
+             minBaseAmountOutRaw, virtualQuoteReservesRaw }) {
+    this.stmts.insertTrade.run({
+      positionId: positionId || null,
+      ts: ts || Date.now(),
+      mint: mint || null,
+      symbol: symbol || null,
+      side: side || null,
+      solAmount: solAmount ?? null,
+      tokenAmount: tokenAmount ?? null,
+      price: price ?? null,
+      signature: signature || null,
+      success: success ? 1 : 0,
+      dryRun: dryRun ? 1 : 0,
+      reason: reason || null,
+      latencyMs: latencyMs ?? null,
+      error: error || null,
+      configuredSlippagePct: configuredSlippagePct ?? null,
+      effectiveSlippagePct: effectiveSlippagePct ?? null,
+      signalPrice: signalPrice ?? null,
+      expectedPrice: expectedPrice ?? null,
+      maxPrice: maxPrice ?? null,
+      maxQuoteSol: maxQuoteSol ?? null,
+      cacheAgeBeforeMs: cacheAgeBeforeMs ?? null,
+      cacheAgeAtBuildMs: cacheAgeAtBuildMs ?? null,
+      stateSource: stateSource || null,
+      buyMode: buyMode || null,
+      minBaseAmountOutRaw: minBaseAmountOutRaw || null,
+      virtualQuoteReservesRaw: virtualQuoteReservesRaw || null,
+    });
+  }
+
+  markBuyChainFailed(signature, diagnostics = {}) {
+    if (!signature) return 0;
+    const result = this.stmts.markBuyChainFailed.run({
+      signature,
+      error: diagnostics.error || 'BUY_CHAIN_FAILED',
+      chainErrorClass: diagnostics.errorClass || 'OTHER_CHAIN_FAILURE',
+      chainInstructionIndex: diagnostics.instructionIndex ?? null,
+      chainProgramId: diagnostics.instructionProgramId || null,
+      chainFailedProgramId: diagnostics.failedProgramId || null,
+      chainComputeUnits: diagnostics.computeUnitsConsumed ?? null,
+      chainLogsJson: diagnostics.logTail
+        ? JSON.stringify(diagnostics.logTail)
+        : null,
+    });
+    return result.changes;
+  }
+
+  logSwapEvent(swap) {
+    if (!swap || !swap.mint) return;
+    const side = String(swap.side || '').toUpperCase();
+    if (side !== 'BUY' && side !== 'SELL') return;
+
+    const num = (value) => {
+      if (value == null || value === '') return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    try {
+      this.stmts.insertSwapEvent.run({
+        ts: num(swap.ts) || Date.now(),
+        mint: swap.mint,
+        symbol: swap.symbol || null,
+        signer: swap.signer || null,
+        side,
+        solVolume: num(swap.solVolume),
+        price: num(swap.price),
+        priceBefore: num(swap.priceBefore),
+        priceChangePct: num(swap.priceChangePct),
+        slot: num(swap.slot),
+        signature: swap.signature || null,
+        poolAddress: swap.poolAddress || null,
+        poolQuoteAfter: num(swap.poolQuoteAfter),
+        source: swap.source || null,
+        priceReliable: swap.priceReliable ? 1 : 0,
+        priceSanitized: swap.priceSanitized ? 1 : 0,
+        rawPrice: num(swap.rawPrice),
+        rawPriceBefore: num(swap.rawPriceBefore),
+        sanitizerReason: swap.sanitizerReason || null,
+        featureEligible: swap.featureEligible === true ? 1 : 0,
+        dataQualityVersion: num(swap.dataQualityVersion) || 1,
+      });
+    } catch (_) { /* best effort; strategy must never block on analytics writes */ }
+  }
+
+  // ============================================================
+  // Strategy Lab API
+  // ============================================================
+
+  _cleanDbValue(value) {
+    if (typeof value === 'number' && !Number.isFinite(value)) return null;
+    return value ?? null;
+  }
+
+  saveTokenSnapshot(snapshot) {
+    if (!snapshot || !snapshot.mint) return;
+    const row = {};
+    for (const name of this._snapshotColumnNames()) {
+      row[name] = this._cleanDbValue(snapshot[name]);
+    }
+    row.ts = row.ts || Date.now();
+    row.bucket_ts = row.bucket_ts || row.ts;
+    try {
+      this.stmts.upsertTokenSnapshot.run(row);
+    } catch (_) { /* analytics only */ }
+  }
+
+  saveTokenCandle(candle) {
+    if (!candle || !candle.mint || !candle.timeframe || !candle.bucket_ts) return;
+    const row = {
+      timeframe: candle.timeframe,
+      bucket_ts: candle.bucket_ts,
+      mint: candle.mint,
+      symbol: candle.symbol || null,
+      open: this._cleanDbValue(candle.open),
+      high: this._cleanDbValue(candle.high),
+      low: this._cleanDbValue(candle.low),
+      close: this._cleanDbValue(candle.close),
+      volume_sol: this._cleanDbValue(candle.volume_sol),
+      buy_volume_sol: this._cleanDbValue(candle.buy_volume_sol),
+      sell_volume_sol: this._cleanDbValue(candle.sell_volume_sol),
+      buy_count: this._cleanDbValue(candle.buy_count),
+      sell_count: this._cleanDbValue(candle.sell_count),
+      tx_count: this._cleanDbValue(candle.tx_count),
+      unique_buy_wallets: this._cleanDbValue(candle.unique_buy_wallets),
+      unique_sell_wallets: this._cleanDbValue(candle.unique_sell_wallets),
+      fdv: this._cleanDbValue(candle.fdv),
+      liquidity: this._cleanDbValue(candle.liquidity),
+      data_quality_version: this._cleanDbValue(candle.data_quality_version),
+      filtered_event_count: this._cleanDbValue(candle.filtered_event_count),
+      filtered_volume_sol: this._cleanDbValue(candle.filtered_volume_sol),
+      feature_quality_status: candle.feature_quality_status || null,
+      updated_at: candle.updated_at || Date.now(),
+    };
+    try {
+      this.stmts.upsertTokenCandle.run(row);
+    } catch (_) { /* analytics only */ }
+  }
+
+  logTokenEvent(event) {
+    if (!event || !event.mint || !event.eventType) return;
+    const details = event.detailsJson != null
+      ? event.detailsJson
+      : (event.details == null ? null : JSON.stringify(event.details));
+    try {
+      this.stmts.insertTokenEvent.run({
+        ts: event.ts || Date.now(),
+        mint: event.mint,
+        symbol: event.symbol || null,
+        event_type: event.eventType,
+        event_key: event.eventKey || 'first',
+        price: this._cleanDbValue(event.price),
+        fdv: this._cleanDbValue(event.fdv),
+        liquidity: this._cleanDbValue(event.liquidity),
+        age_ms: this._cleanDbValue(event.ageMs),
+        value: this._cleanDbValue(event.value),
+        details_json: details,
+        created_at: Date.now(),
+      });
+    } catch (_) { /* analytics only */ }
+  }
+
+  logBotLatencyEvent(event) {
+    if (!event) return;
+    const details = event.detailsJson != null
+      ? event.detailsJson
+      : (event.details == null ? null : JSON.stringify(event.details));
+    try {
+      this.stmts.insertBotLatencyEvent.run({
+        ts: event.ts || Date.now(),
+        mint: event.mint || null,
+        symbol: event.symbol || null,
+        signature: event.signature || null,
+        phase: event.phase || null,
+        latency_detect_ms: this._cleanDbValue(event.latencyDetectMs),
+        latency_decision_ms: this._cleanDbValue(event.latencyDecisionMs),
+        latency_send_ms: this._cleanDbValue(event.latencySendMs),
+        latency_confirm_ms: this._cleanDbValue(event.latencyConfirmMs),
+        details_json: details,
+      });
+    } catch (_) { /* analytics only */ }
+  }
+
+  getSnapshotLabelBacklog({ now = Date.now(), minQualityVersion = STRATEGY_LAB_QUALITY_VERSION } = {}) {
+    const maxHorizonMs = Math.max(...this._strategyLabHorizons()) * 1000;
+    const row = this.stmts.snapshotLabelBacklog.get({
+      min_quality_version: minQualityVersion,
+      mature_before: now - maxHorizonMs,
+    });
+    const oldestTs = Number(row?.oldest_ts) || null;
+    return {
+      count: Number(row?.count) || 0,
+      oldestTs,
+      newestTs: Number(row?.newest_ts) || null,
+      oldestAgeMs: oldestTs ? Math.max(0, now - maxHorizonMs - oldestTs) : 0,
+      minQualityVersion,
+    };
+  }
+
+  backfillSnapshotLabels({
+    now = Date.now(),
+    batchSize = 1000,
+    minQualityVersion = STRATEGY_LAB_QUALITY_VERSION,
+  } = {}) {
+    const horizons = this._strategyLabHorizons();
+    const maxHorizonMs = Math.max(...horizons) * 1000;
+    try {
+      const pending = this.stmts.pendingSnapshotLabels.all({
+        min_quality_version: minQualityVersion,
+        mature_before: now - maxHorizonMs,
+        limit: Math.max(1, Math.floor(batchSize)),
+      });
+      if (pending.length === 0) return 0;
+
+      const byMint = new Map();
+      for (const snap of pending) {
+        if (!byMint.has(snap.mint)) byMint.set(snap.mint, []);
+        byMint.get(snap.mint).push(snap);
+      }
+
+      const updates = [];
+      for (const [mint, snapshots] of byMint) {
+        snapshots.sort((left, right) => left.ts - right.ts);
+        const prices = this.stmts.futurePricesForLabel.all({
+          mint,
+          from_ts: snapshots[0].ts,
+          until_ts: snapshots[snapshots.length - 1].ts + maxHorizonMs,
+          min_quality_version: minQualityVersion,
+        }).map((row) => ({ ts: Number(row.ts), price: Number(row.price) }));
+
+        for (const snap of snapshots) {
+          const basePrice = Number(snap.price);
+          if (!Number.isFinite(basePrice) || basePrice <= 0) continue;
+          const start = upperBoundByTs(prices, snap.ts);
+          const params = {
+            id: snap.id,
+            label_updated_at: now,
+            label_status: 'complete',
+            label_quality_version: minQualityVersion,
+          };
+
+          for (const horizon of horizons) {
+            const until = snap.ts + horizon * 1000;
+            const end = upperBoundByTs(prices, until);
+            let maxPrice = basePrice;
+            let minPrice = basePrice;
+            let closePrice = basePrice;
+            let sampleCount = 0;
+            for (let index = start; index < end; index++) {
+              const price = prices[index].price;
+              if (!Number.isFinite(price) || price <= 0) continue;
+              maxPrice = Math.max(maxPrice, price);
+              minPrice = Math.min(minPrice, price);
+              closePrice = price;
+              sampleCount++;
+            }
+            params[`future_max_${horizon}s_pct`] = ((maxPrice - basePrice) / basePrice) * 100;
+            params[`future_close_${horizon}s_pct`] = ((closePrice - basePrice) / basePrice) * 100;
+            params[`future_drawdown_${horizon}s_pct`] = ((minPrice - basePrice) / basePrice) * 100;
+            params[`label_sample_count_${horizon}s`] = sampleCount;
+          }
+          updates.push(params);
+        }
+      }
+
+      const applyUpdates = () => {
+        for (const params of updates) this.stmts.updateSnapshotLabels.run(params);
+      };
+      if (typeof this.db.transaction === 'function') this.db.transaction(applyUpdates)();
+      else applyUpdates();
+      return updates.length;
+    } catch (error) {
+      throw new Error(`Strategy Lab label backfill failed: ${error.message}`);
+    }
+  }
+
+  // ============================================================
+  // Position lifecycle API
+  // ============================================================
+
+  openPosition({ positionId, mint, symbol, openedAt, entrySol, entryPrice, tokenAmount,
+                 dryRun, buySignature, buyFeeLamports, buySlot, dumpSlot,
+                 entryFdv, entryPoolSol, entryLiquidity,
+                 sellCount10s, totalSellSol10s,
+                 mintAgeAtBuySec, rsiPreDump, rsi1sPreDump, rsi30sPreDump,
+                 isEmaStrategy = 0, isAddOn = 0 }) {
+    this.stmts.openPosition.run({
+      positionId,
+      mint,
+      symbol: symbol || null,
+      openedAt: openedAt || Date.now(),
+      entrySol: entrySol ?? null,
+      entryPrice: entryPrice ?? null,
+      tokenAmount: tokenAmount ?? null,
+      dryRun: dryRun ? 1 : 0,
+      buySignature: buySignature || null,
+      buyFeeLamports: buyFeeLamports || 0,
+      buySlot: buySlot || 0,
+      dumpSlot: dumpSlot || 0,
+      entryFdv: entryFdv ?? null,
+      entryPoolSol: entryPoolSol ?? null,
+      entryLiquidity: entryLiquidity ?? null,
+      sellCount10s: sellCount10s ?? null,        // v3.17.36: è¿ç¯æ‹”å›æµ‹
+      totalSellSol10s: totalSellSol10s ?? null,  // v3.17.36: è¿ç¯æ‹”å›æµ‹
+      mintAgeAtBuySec: mintAgeAtBuySec ?? null,  // v3.17.39: é¦–ä¿¡å·åˆ°ä¹°å…¥çš„ç§’æ•°
+      rsiPreDump: rsiPreDump ?? null,              // v3.17.38: ç ¸å•å‰ RSI5s
+      rsi1sPreDump: rsi1sPreDump ?? null,          // v3.17.38: ç ¸å•å‰ RSI1s
+      rsi30sPreDump: rsi30sPreDump ?? null,        // v3.17.42: ç ¸å•å‰ RSI30s
+      isEmaStrategy: isEmaStrategy ?? 0,            // EMAç­–ç•¥æ ‡è®°
+      isAddOn: isAddOn ?? 0,                       // åŠ ä»“æ ‡è®°
+    });
+  }
+
+  updatePositionEntry(positionId, { entrySol, entryPrice, tokenAmount, buyFeeLamports, buySlot, dumpSlot }) {
+    // v3.17.20-fix: æ”¯æŒ buySlot/dumpSlot æ›´æ–°
+    const hasSlotUpdate = buySlot != null || dumpSlot != null;
+    if (hasSlotUpdate) {
+      this.db.prepare(`
+        UPDATE positions SET
+          entry_sol = @entrySol,
+          entry_price = @entryPrice,
+          token_amount = @tokenAmount,
+          buy_fee_lamports = @buyFeeLamports,
+          buy_slot = COALESCE(@buySlot, buy_slot),
+          dump_slot = COALESCE(@dumpSlot, dump_slot)
+        WHERE position_id = @positionId
+      `).run({
+        positionId,
+        entrySol: entrySol ?? null,
+        entryPrice: entryPrice ?? null,
+        tokenAmount: tokenAmount ?? null,
+        buyFeeLamports: buyFeeLamports ?? 0,
+        buySlot: buySlot ?? null,
+        dumpSlot: dumpSlot ?? null,
+      });
+    } else {
+      this.stmts.updateEntry.run({
+        positionId,
+        entrySol: entrySol ?? null,
+        entryPrice: entryPrice ?? null,
+        tokenAmount: tokenAmount ?? null,
+        buyFeeLamports: buyFeeLamports ?? 0,
+      });
+    }
+  }
+
+  closePosition(positionId, { closedAt, exitPrice, exitSol, pnlSol, pnlPct, exitReason, sellSignature, peakPnlPct, peakPrice, peakTs, timeToPeakMs, priceTickCount }) {
+    this.stmts.closePosition.run({
+      positionId,
+      closedAt: closedAt || Date.now(),
+      exitPrice: exitPrice ?? null,
+      exitSol: exitSol ?? null,
+      pnlSol: pnlSol ?? null,
+      pnlPct: pnlPct ?? null,
+      exitReason: exitReason || null,
+      sellSignature: sellSignature || null,
+      peakPnlPct: peakPnlPct ?? null,
+      peakPrice: peakPrice ?? null,
+      peakTs: peakTs ?? null,
+      timeToPeakMs: timeToPeakMs ?? null,
+      priceTickCount: priceTickCount ?? 0,
+    });
+  }
+
+  // v3.17.31: å¹³ä»“åä»·æ ¼è¿½è¸ªå†™å…¥
+  recordPostExitStats({ positionId, mint, exitPrice, exitTs, maxPrice, maxPriceTs,
+    maxPumpPct, minPrice, minPriceTs, maxDumpPct, sampleCount,
+    snapshots, finalizedAt }) {
+    if (!this.stmts.recordPostExitStats) {
+      this.stmts.recordPostExitStats = this.db.prepare(`
+        INSERT OR REPLACE INTO post_exit_stats (
+          position_id, mint, exit_price, exit_ts,
+          max_price, max_price_ts, max_pump_pct,
+          min_price, min_price_ts, max_dump_pct,
+          sample_count, snapshots, finalized_at
+        ) VALUES (
+          @positionId, @mint, @exitPrice, @exitTs,
+          @maxPrice, @maxPriceTs, @maxPumpPct,
+          @minPrice, @minPriceTs, @maxDumpPct,
+          @sampleCount, @snapshots, @finalizedAt
+        )
+      `);
+    }
+    this.stmts.recordPostExitStats.run({
+      positionId, mint, exitPrice, exitTs,
+      maxPrice, maxPriceTs, maxPumpPct,
+      minPrice, minPriceTs, maxDumpPct,
+      sampleCount, snapshots, finalizedAt,
+    });
+  }
+
+  markSellPending(positionId, signature, exitReason) {
+    this.stmts.markSellPending.run(signature || null, exitReason || null, Date.now(), positionId);
+  }
+
+  markSellFailedPendingRetry(positionId, nextRetryAt, errorMsg, exitReason) {
+    this.stmts.markSellFailedPendingRetry.run(
+      nextRetryAt,
+      errorMsg || null,
+      exitReason || null,
+      Date.now(),
+      positionId,
+    );
+  }
+
+  markStuck(positionId, reason) {
+    this.stmts.markStuck.run(reason || null, Date.now(), positionId);
+  }
+
+  recordSellAttempt(positionId, errorMsg) {
+    this.stmts.recordSellAttempt.run(errorMsg || null, Date.now(), positionId);
+  }
+
+  getOpenPositions() {
+    return this.stmts.getOpenPositions.all();
+  }
+
+  getDuePendingRetries(now) {
+    return this.stmts.getDuePendingRetries.all(now);
+  }
+
+  // ============================================================
+  // Reporting / dashboard queries
+  // ============================================================
+
+  getSignalsInRange(startMs, endMs) {
+    return this.stmts.signalsInRange.all(startMs, endMs);
+  }
+
+  getTradesInRange(startMs, endMs) {
+    return this.stmts.tradesInRange.all(startMs, endMs);
+  }
+
+  getSwapEventsInRange(startMs, endMs) {
+    return this.stmts.swapEventsInRange.all(startMs, endMs);
+  }
+
+  getPositionsInRange(startMs, endMs) {
+    return this.stmts.positionsInRange.all(startMs, endMs);
+  }
+
+  getRecentSignals(limit = 100) {
+    return this.stmts.recentSignals.all(limit);
+  }
+
+  getRecentTrades(limit = 100) {
+    return this.stmts.recentTrades.all(limit);
+  }
+
+  getRecentPositions(limit = 100) {
+    return this.stmts.recentPositions.all(limit);
+  }
+
+  getStuckPositions() {
+    return this.stmts.stuckPositions.all();
+  }
+
+  // ============ price_samples ============
+
+  /**
+   * Save a single price sample (called from SignalEngine._sampleLongPrice)
+   */
+  savePriceSample(mint, ts, price) {
+    try {
+      this.stmts.insertPriceSample.run({ mint, ts, price });
+    } catch (_) { /* best effort */ }
+  }
+
+  /**
+   * Load price samples from the last N milliseconds.
+   * Returns Map<mint, [{ts, price}, ...]>
+   */
+  loadRecentPriceSamples(sinceMs) {
+    const rows = this.stmts.loadRecentPriceSamples.all(sinceMs);
+    const map = new Map();
+    for (const row of rows) {
+      let arr = map.get(row.mint);
+      if (!arr) {
+        arr = [];
+        map.set(row.mint, arr);
+      }
+      arr.push({ ts: row.ts, price: row.price });
+    }
+    return map;
+  }
+
+  /**
+   * v3.17.41: Count positions opened for a mint since a timestamp
+   */
+  countRecentBuysByMint(mint, sinceMs) {
+    try {
+      const row = this.db.prepare(
+        'SELECT count(*) as cnt FROM positions WHERE mint = ? AND opened_at > ?'
+      ).get(mint, sinceMs);
+      return row ? row.cnt : 0;
+    } catch (_) { return -1; }
+  }
+
+  hasSuccessfulBuyForMint(mint) {
+    const row = this.db.prepare(
+      "SELECT 1 AS found FROM trades " +
+        "WHERE mint = ? AND side = 'BUY' AND success = 1 AND dry_run = 0 LIMIT 1",
+    ).get(mint);
+    return !!row;
+  }
+
+  /**
+   * Delete price samples older than cutoffMs
+   */
+  cleanOldPriceSamples(cutoffMs) {
+    try {
+      this.stmts.cleanOldPriceSamples.run(cutoffMs);
+    } catch (_) { /* best effort */ }
+  }
+}
+
+module.exports = TradeLogger;
+module.exports.STRATEGY_LAB_QUALITY_VERSION = STRATEGY_LAB_QUALITY_VERSION;

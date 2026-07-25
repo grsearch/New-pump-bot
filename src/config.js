@@ -232,6 +232,360 @@ const config = {
   // ============ Activity-flow entry ============
   activityFlow: {
     // Strategy V8: buy a confirmed rebound after a trusted one-second dump.
-    Û]{¶‰ËkºwµçY1=]}5%9}QIM|ØÁLñğ€œÈĞœ°€ÄÀ¤°4(€€€µ¥¹Y½±Õµ”ØÁÍM½°èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}Y=1U5|ØÁM}M=0ñğ€œÄÈœ¤°4(€€€µ¥¹U¹¥ÅÕ•QÉ…‘•ÉÌØÁÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}U9%EU}QIIM|ØÁLñğ€œÄÀœ°€ÄÀ¤°4(€€€µ¥¹QÉ…‘•ÌÌÁÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}QIM|ÌÁLñğ€œÄÈœ°€ÄÀ¤°4(€€€µ¥¹Y½±Õµ”ÌÁÍM½°èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}Y=1U5|ÌÁM}M=0ñğ€œØœ¤°4(€€€µ¥¹I…Ñ¥¼ÌÁÌèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}	Ue}M11}IQ%=|ÌÁLñğ€œÄ¸ÀÔœ¤°4(€€€µ¥¹QÉ…‘•ÌÄÕÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}QIM|ÄÕLñğ€œàœ°€ÄÀ¤°4(€€€µ¥¹Y½±Õµ”ÄÕÍM½°èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}Y=1U5|ÄÕM}M=0ñğ€œĞœ¤°4(€€€µ¥¹I…Ñ¥¼ÄÕÌèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}	Ue}M11}IQ%=|ÄÕLñğ€œÄ¸ĞÔœ¤°4(€€€µ¥¹%µ‰…±…¹”ÄÕÌèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}%5	19|ÄÕLñğ€œÀ¸ÈÀœ¤°4(€€€µ¥¹U¹¥ÅÕ•	Õå•ÉÌÄÕÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}U9%EU}	UeIM|ÄÕLñğ€œÌœ°€ÄÀ¤°4(€€€µ¥¹AÉ¥•¡…¹”ÄÕÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}AI%}!9|ÄÕM}APñğ€œ´Ìœ¤°4(€€€µ¥¹AÉ¥•¡…¹”ÌÁÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}AI%}!9|ÌÁM}APñğ€œ´ÈÀœ¤°4(€€€µ¥¹AÉ¥•¡…¹”ØÁÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}AI%}!9|ØÁM}APñğ€œ´ÌÀœ¤°4(€€€µ¥¹QÉ…‘•ÌÕÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}QIM|ÕLñğ€œÔœ°€ÄÀ¤°4(€€€µ¥¹Y½±Õµ”ÕÍM½°èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}Y=1U5|ÕM}M=0ñğ€œÈ¸Ôœ¤°4(€€€µ¥¹I…Ñ¥¼ÕÌèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}	Ue}M11}IQ%=|ÕLñğ€œÄ¸ĞÀœ¤°4(€€€µ¥¹%µ‰…±…¹”ÕÌèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}%5	19|ÕLñğ€œÀ¸ÈÔœ¤°4(€€€µ¥¹U¹¥ÅÕ•	Õå•ÉÌÕÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}U9%EU}	UeIM|ÕLñğ€œÈœ°€ÄÀ¤°4(€€€µ¥¹AÉ¥•¡…¹”ÕÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5%9}AI%}!9|ÕM}APñğ€œÀ¸Èœ¤°4(€€€µ…áAÉ¥•¡…¹”ÕÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5a}AI%}!9|ÕM}APñğ€œÔœ¤°4(€€€µ…áAÉ¥•¡…¹”ÌÁÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5a}AI%}!9|ÌÁM}APñğ€œÄÀœ¤°4(€€€µ…áAÉ¥•¡…¹”ØÁÍAĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5a}AI%}!9|ØÁM}APñğ€œÄÀœ¤°4(€€€½½±‘½İ¹5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}==1=]9}5Lñğ€œÀœ°€ÄÀ¤°4(€€€µ…áM¥¹…±•5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5a}M%91}}5LñğÁÉ½•ÍÌ¹•¹Ø¹5a}AUM!}1}5Lñğ€œÔÀÀÀœ°€ÄÀ¤°4(€€€µ…áÙ•¹ÑÍA•É5¥¹ĞèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}5a}Y9QM}AI}5%9Pñğ€œØÀÀœ°€ÄÀ¤°4(€€€‘•‰Õœè€¡ÁÉ½•ÍÌ¹•¹Ø¹Q%Y%Qe}1=]}	U€üü€™…±Í”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôôAÉ¥”…¹½µ…±ä™¥±Ñ•È€ôôôôôôôôôôôô4(€ÁÉ¥•¥±Ñ•Èèì4(€€€€¼¼ƒ–6TÑ¥¬ƒ’îßš‚ó–>c–2[¢Ú¢şµ…á)ÕµÁI…Ñ¥¼ƒ¢’âë–>¿ZD4(€€€€¼¼€Ä¸Ôƒ¢†£’è€¬ÔÀ”ƒš"X€´ÌÌ—¾ò Ä¼Ä¸×¾ò'’î—’â+–Æ{’ê;–ò–âà4(€€€µ…á)ÕµÁI…Ñ¥¼èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AI%}5a})U5A}IQ%<ñğ€œÄ¸Ôœ¤°4(€€€€¼¼ƒ–>¿ZGš‚ßšr³–ş¦†ï–r£–’k–ÂGš¾¯K–¢ş{î·–ë:Ã–æÛšZç–BG’â¢Óš&7š:—–>\4(€€€½¹™¥Éµ]¥¹‘½İ5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AI%}=9%I5}]%9=]}5Lñğ€œÌÀÀÀœ°€ÄÀ¤°4(€€€½¹™¥Éµ5¥¹M…µÁ±•ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AI%}=9%I5}5%9}M5A1Lñğ€œÈœ°€ÄÀ¤°4(€€€Íİ…ÁM…¹¥Ñ¥é•Èèì4(€€€€€•¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}9	1€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€€€Í½±AÉ¥•UÍèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M=1}AI%}UMñğ€œÜÈœ¤°4(€€€€€µ…á)ÕµÁI…Ñ¥¼èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}5a})U5A}IQ%<ñğ€œÈœ¤°4(€€€€€µ…É­•Ñ5…áI…Ñ¥¼èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}5I-Q}5a}IQ%<ñğ€œÔœ¤°4(€€€€€µ…É­•Ñ5…á•5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}5I-Q}5a}}5Lñğ€œÌÀÀÀÀÀœ°€ÄÀ¤°4(€€€€€½¹™¥Éµ]¥¹‘½İ5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}=9%I5}]%9=]}5Lñğ€œÔÀÀÀœ°€ÄÀ¤°4(€€€€€½¹™¥Éµ5¥¹M…µÁ±•ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}=9%I5}5%9}M5A1Lñğ€œÌœ°€ÄÀ¤°4(€€€€€½¹™¥Éµ5¥¹%¹‘•Á•¹‘•¹ÑM½ÕÉ•ÌèÁ…ÉÍ•%¹Ğ 4(€€€€€€€ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}=9%I5}5%9}%9A99Q}M=UILñğ€œÈœ°4(€€€€€€€€ÄÀ°4(€€€€€€¤°4(€€€€€½¹™¥Éµ5¥¹MÁ…¹5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}=9%I5}5%9}MA9}5Lñğ€œÄÀÀœ°€ÄÀ¤°4(€€€€€½¹™¥Éµ±ÕÍÑ•ÉI…Ñ¥¼èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}=9%I5}1UMQI}IQ%<ñğ€œÄ¸ÈÔœ¤°4(€€€€€µ¥¹A½½±EÕ½Ñ•M½°èÁ…ÉÍ•±½…Ğ 4(€€€€€€€ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}5%9}A==1}EU=Q}M=0ñğÁÉ½•ÍÌ¹•¹Ø¹5%9}A==1}EU=Q}M=0ñğ€œÌÀœ°4(€€€€€€¤°4(€€€€€‘•‰Õœè€¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}M9%Q%iI}	U€üü€™…±Í”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€ô°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôô!•±¥ÕÌ€ôôôôôôôôôôôô4(€€¼¼ØÌ¸ÄÜèƒšR¿š2–’hÉ•¥½¸1…Í•ÉMÑÉ•…´€¬ƒ–’hÉ•¥½¸M•¹‘•È4(€€¼¼€€€´±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ÑÌèƒšVÃî¾ò3–’hÉ•¥½¸IAƒ¢º‹¦b¾ò3šr–ş¯jÉ•¥½¸ƒ–F÷’â·–6Ï¢›–>G¾ò!Í¥¹…ÑÕÉ”ƒ–:ï¦7¾ò$4(€€¼¼€€€´Í•¹‘•É¹‘Á½¥¹ÑÌè€€€€€ƒšVÃî¾ò3–’hÉ•¥½¸M•¹‘•Èƒ–æÛ–>Gš>C’ê“¾ò1AÉ½µ¥Í”¹É…”ƒ–>[šr–ş¯¢şS–nx4(€€¼¼€€€´ƒ–BG–B;–ó–ºç¾òkšr«¦4}9A=%9QLƒš^Û–n{¦–"Ãš^Ÿj–6T•¹‘Á½¥¹Ğƒ–¶_šºÔ4(€¡•±¥ÕÌèì4(€€€…Á¥-•äèÁÉ½•ÍÌ¹•¹Ø¹!1%UM}A%}-d°4(€€€ÉÁUÉ°èÁÉ½•ÍÌ¹•¹Ø¹!1%UM}IA}UI0°4(€€€ÍÑ…­•‘IÁUÉ°èÁÉ½•ÍÌ¹•¹Ø¹!1%UM}MQ-}IA}UI0°4(4(€€€€¼¼€´´´´1…Í•ÉMÑÉ•…·¾ò#–’hÉ•¥½¸ƒ¢º‹¦b¾ò$´´´´4(€€€€¼¼ƒ’òc–#¢¾ì!1%UM}1MIMQI5}9A=%9QO¾ò#¦_–>ß–"¦jS–’k’â«¾ò$4(€€€€¼¼™…±±‰…¬ƒ–"Ãš^Ÿj!1%UM}1MIMQI5}9A=%9S¾ò#–6T•¹‘Á½¥¹Ó¾ò$4(€€€±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ĞèÁÉ½•ÍÌ¹•¹Ø¹!1%UM}1MIMQI5}9A=%9P°4(€€€±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ÑÌè€  ¤€ôøì4(€€€€€½¹ÍĞµÕ±Ñ¤€ô€¡ÁÉ½•ÍÌ¹•¹Ø¹!1%UM}1MIMQI5}9A=%9QLñğ€œœ¤¹ÑÉ¥´ ¤ì4(€€€€€¥˜€¡µÕ±Ñ¤¤ì4(€€€€€€€É•ÑÕÉ¸µÕ±Ñ¤¹ÍÁ±¥Ğ œ°œ¤¹µ…À ¡Ì¤€ôøÌ¹ÑÉ¥´ ¤¤¹™¥±Ñ•È¡	½½±•…¸¤ì4(€€€€€ô4(€€€€€½¹ÍĞÍ¥¹±”€ô€¡ÁÉ½•ÍÌ¹•¹Ø¹!1%UM}1MIMQI5}9A=%9Pñğ€œœ¤¹ÑÉ¥´ ¤ì4(€€€€€É•ÑÕÉ¸Í¥¹±”€ümÍ¥¹±•t€èmtì4(€€€ô¤ ¤°4(€€€±…Í•ÉÍÑÉ•…µQ½­•¸èÁÉ½•ÍÌ¹•¹Ø¹!1%UM}1MIMQI5}Q=-8°4(4(€€€€¼¼€´´´´M•¹‘•Ë¾ò#–’hÉ•¥½¸ƒš>C’ê“¾ò$´´´´4(€€€€¼¼ƒ’òc–#¢¾ì!1%UM}M9I}9A=%9QO¾ò#¦_–>ß–"¦jS–’k’â«¾ò$4(€€€€¼¼™…±±‰…¬ƒ–"Ãš^Ÿj!1%UM}M9I}9A=%9P4(€€€Í•¹‘•É¹‘Á½¥¹ĞèÁÉ½•ÍÌ¹•¹Ø¹!1%UM}M9I}9A=%9Pñğ¹Õ±°°4(€€€Í•¹‘•É¹‘Á½¥¹ÑÌè€  ¤€ôøì4(€€€€€½¹ÍĞµÕ±Ñ¤€ô€¡ÁÉ½•ÍÌ¹•¹Ø¹!1%UM}M9I}9A=%9QLñğ€œœ¤¹ÑÉ¥´ ¤ì4(€€€€€¥˜€¡µÕ±Ñ¤¤ì4(€€€€€€€É•ÑÕÉ¸µÕ±Ñ¤¹ÍÁ±¥Ğ œ°œ¤¹µ…À ¡Ì¤€ôøÌ¹ÑÉ¥´ ¤¤¹™¥±Ñ•È¡	½½±•…¸¤ì4(€€€€€ô4(€€€€€½¹ÍĞÍ¥¹±”€ô€¡ÁÉ½•ÍÌ¹•¹Ø¹!1%UM}M9I}9A=%9Pñğ€œœ¤¹ÑÉ¥´ ¤ì4(€€€€€É•ÑÕÉ¸Í¥¹±”€ümÍ¥¹±•t€èmtì4(€€€ô¤ ¤°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôô±±•¹!…É¬€ôôôôôôôôôôôô4(€€¼¼±±•¹!…É¬ƒš>C’úo’â“¦†çš‚ã–ş¢÷–*o¾òh4(€€¼¼€€€Ä¤e•±±½İÍÑ½¹”IAƒšVÃš6»šÖƒŠPƒ¢Ş|!•±¥ÕÌ1…Í•ÉMÑÉ•…´ƒ–B3–6?¢º»¾ò3’ös’âë¦Šw–’XÉ•¥½¸ƒ¦f7’ö;–Âû–îÛ¢ş|4(€€¼¼€€€È¤M±¥ÁÍÑÉ•…´ƒ’ê“šbO’â·îœƒŠP±•…‘•ÈµÁÉ½á¥µ¥Ñäƒ¢Ş¿RÇ¾ò3¢«–*£¦'šr–ş¬Í•¹‘•Èƒš>C’êÑà4(€…±±•¹¡…É¬èì4(€€€€¼¼€´´´´IAƒšVÃš6»šÖ€´´´´4(€€€€¼¼±±•¹!…É¬IAƒ®¿
-ç¾ò!%@ƒf÷–B7–6W–"Û¾ò3š^ƒ¦r Ñ½­•»¾ò$4(€€€€¼¼ƒ¦_–>ß–"¦jS–’k’â«®¿
-ç¾ò3š‚ó–ò?–B01…Í•ÉMÑÉ•…´4(€€€€¼¼ƒ’ë’ú,èÉÁŒ¹…±±•¹¡…É¬¹½´èÄÀÀÀÀ4(€€€ÉÁ¹‘Á½¥¹ÑÌè€  ¤€ôøì4(€€€€€½¹ÍĞÉ…Ü€ô€¡ÁÉ½•ÍÌ¹•¹Ø¹119!I-}IA}9A=%9QLñğ€œœ¤¹ÑÉ¥´ ¤ì4(€€€€€¥˜€ …É…Ü¤É•ÑÕÉ¸mtì4(€€€€€É•ÑÕÉ¸É…Ü¹ÍÁ±¥Ğ œ°œ¤¹µ…À ¡Ì¤€ôøÌ¹ÑÉ¥´ ¤¤¹™¥±Ñ•È¡	½½±•…¸¤ì4(€€€ô¤ ¤°4(€€€€¼¼±±•¹!…É¬IAƒjàµÑ½­•»¾ò#–ššzs¦r¢šj¢¾w¾ò3n»–&7–ºcšZç¢¾Óšb¼%@ƒf÷–B7–6W’â7¦r¢š¾ò$4(€€€ÉÁQ½­•¸èÁÉ½•ÍÌ¹•¹Ø¹119!I-}IA}Q=-8ñğ€œœ°4(4(€€€€¼¼€´´´´M±¥ÁÍÑÉ•…´ƒ’ê“šbO’â·îœ€´´´´4(€€€€¼¼A$­•ä€¡Í­}±¥Ù•|¨§¾ò3’î8±±•¹!…É¬½¹Í½±”ƒ¢:ß–>X4(€€€Í±¥ÁÍÑÉ•…µÁ¥-•äèÁÉ½•ÍÌ¹•¹Ø¹119!I-}M1%AMQI5}A%}-dñğ€œœ°4(€€€€¼¼ƒ¦š[¦$É•¥½¸èÕÌµ•…ÍĞ°•Ôµ•¹ÑÉ…°°…Àµ¹½ÉÑ¡•…ÍĞƒ¶$4(€€€Í±¥ÁÍÑÉ•…µI•¥½¸èÁÉ½•ÍÌ¹•¹Ø¹119!I-}M1%AMQI5}I%=8ñğ€œœ°4(€€€€¼¼ƒšb¿–B›–B¿R M±¥ÁÍÑÉ•…´ƒ’ös’âè	Udƒš>C’ê“¦k¦L4(€€€€¼¼ÑÉÕ”ƒš^Ø	Udƒ’òk¢ÖÀM±¥ÁÍÑÉ•…´€¡±•…‘•ÈµÁÉ½á¥µ¥ÑäÉ½ÕÑ¥¹œ§¾ò3–’Ç¢Ò—–4™…±±‰…¬!•±¥ÕÌM•¹‘•È4(€€€Í±¥ÁÍÑÉ•…µ¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹119!I-}M1%AMQI5}9	1€üü€™…±Í”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€€¼¼M±¥ÁÍÑÉ•…´ƒ’òc–#êœ™•”ƒ¦–ê˜èM1=\°MP°U1QI}MP4(€€€Í±¥ÁÍÑÉ•…µ••MÁ••èÁÉ½•ÍÌ¹•¹Ø¹119!I-}M1%AMQI5}}MAñğ€U1QI}MPœ°4(€€€€¼¼M±¥ÁÍÑÉ•…´ƒšr–’œÑ¥À€¡M=0§¾ò0Àƒ¢†£’ë’â7¦f@4(€€€Í±¥ÁÍÑÉ•…µ5…áQ¥ÁM½°èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹119!I-}M1%AMQI5}5a}Q%A}M=0ñğ€œÀœ¤°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôô	¥É‘•å”€ôôôôôôôôôôôô4(€‰¥É‘•å”èì4(€€€…Á¥-•äèÁÉ½•ÍÌ¹•¹Ø¹	%Ie}A%}-d°4(€€€‰…Í•UÉ°è€¡ÑÑÁÌè¼½ÁÕ‰±¥Œµ…Á¤¹‰¥É‘•å”¹Í¼œ°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôô]…±±•Ğ€ôôôôôôôôôôôô4(€İ…±±•Ğèì4(€€€ÁÉ¥Ù…Ñ•-•å	ÌÔàèÁÉ½•ÍÌ¹•¹Ø¹]11Q}AI%YQ}-e}	LÔà°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôôAÉ½É…µÌ€ôôôôôôôôôôôô4(€ÁÉ½É…µÌèì4(€€€ÁÕµÀè€œÙáÉÉ•Ñ¡HÕ­é½¸á9İÔÜá¡IÙ™-Õ‰(ÄÑ4ÕÕ	İÙ@œ°4(€€€ÁÕµÁ5¥É…Ñ¥½¹]…±±•Ğè€œÌå…éUe]AèÍY!-˜ÍY¡Uİ‰ÁUI‘!Iá©]Y½İ˜Õ©U)©œœ°4(€€€ÁÕµÁµ´è€Á55	…äÙ½• å™)-	I!@ÕÑ‰ÑÍ]ÁµMİ5¸ÔÉ5™aœ°4(€€€ÁÕµÁµµXÈè€”ÙQEÅ•!åÀá-•ÑÍ8Ù)Í©!,İUQi¬İ¹…Í©©¹ÈİaáaÀåÄœ°4(€€€Ñ½­•¹AÉ½É…´è€Q½­•¹­•E™•iå¥9İ)‰9‰-Aa]Õ	Ù˜åMÌØÈÍYDÕœ°4(€€€…ÍÍ½¥…Ñ•‘Q½­•¹AÉ½É…´è€Q½­•¹AÙ‰‘YáÈÅˆÉ¡Ùi‰Í¥Å\Õá] ÈÕ•™Q9Í1)á­¹0œ°4(€€€ÍåÍÑ•µAÉ½É…´è€œÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄœ°4(€€€İÍ½°è€M¼ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÈœ°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôôM•ÉÙ•È€ôôôôôôôôôôôô4(€Í•ÉÙ•Èèì4(€€€Á½ÉĞèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M!	=I}A=IPñğ€œÌÀÀÄœ°€ÄÀ¤°4(€€€‰¥¹‘!½ÍĞèÁÉ½•ÍÌ¹•¹Ø¹	%9}!=MPñğ€œÀ¸À¸À¸Àœ°4(€€€İ•‰¡½½­M•É•ĞèÁÉ½•ÍÌ¹•¹Ø¹]	!==-}MIPñğ¹Õ±°°4(€€€‘…Í¡‰½…É‘Q½­•¸èÁÉ½•ÍÌ¹•¹Ø¹M!	=I}Q=-8ñğ¹Õ±°°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôôMÑ½É…”€ôôôôôôôôôôôô4(€ÍÑ½É…”èì4(€€€‘‰A…Ñ è€œ¸½‘…Ñ„½Í¹¥Á•È¹‘ˆœ°4(€€€É•Á½ÉÑÍ¥Èè€œ¸½É•Á½ÉÑÌœ°4(€€€±½Í¥Èè€œ¸½±½Ìœ°4(€ô°4(4(€…ÁÑÕÉ”èì4(€€€Íİ…ÁÙ•¹ÑÍ¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹M]A}Y9Q}1=}9	1€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€ÍÑÉ…Ñ•å1…‰¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}9	1€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€ÍÑÉ…Ñ•å1…‰M¹…ÁÍ¡½Ñ%¹Ñ•ÉÙ…±5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}M9AM!=Q}%9QIY1}5Lñğ€œÄÀÀÀœ°€ÄÀ¤°4(€€€ÍÑÉ…Ñ•å1…‰I•Ñ•¹Ñ¥½¹5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}IQ9Q%=9}5Lñğ€œÌÀÀÀÀÀœ°€ÄÀ¤°4(€€€ÍÑÉ…Ñ•å1…‰1…‰•±¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1	1}9	1€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€ÍÑÉ…Ñ•å1…‰1…‰•±%¹Ñ•ÉÙ…±5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1	1}%9QIY1}5Lñğ€œÄÀÀÀÀœ°€ÄÀ¤°4(€€€ÍÑÉ…Ñ•å1…‰1…‰•±	…Ñ¡M¥é”èÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1	1}	Q!}M%iñğ€œÄÀÀÀœ°€ÄÀ¤°4(€€€ÍÑÉ…Ñ•å1…‰1…‰•±5…á	…Ñ¡•ÍA•ÉQ¥¬èÁ…ÉÍ•%¹Ğ 4(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1	1}5a}	Q!M}AI}Q%,ñğ€œĞœ°4(€€€€€€ÄÀ°4(€€€€¤°4(€€€ÍÑÉ…Ñ•å1…‰1…‰•±]…É¹•5ÌèÁ…ÉÍ•%¹Ğ 4(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1	1}]I9}}5Lñğ€œÌÀÀÀÀÀœ°4(€€€€€€ÄÀ°4(€€€€¤°4(€€€ÍÑÉ…Ñ•å1…‰M¹…ÁÍ¡½Ñ±±Ñ¥Ù”è€¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}M9AM!=Q}11}Q%Y€üü€™…±Í”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€ÍÑÉ…Ñ•å1…‰	Õå	ÕÉÍÑQ¡É•Í¡½±èÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}	Ue}	UIMQ}Q!IM!=1ñğ€œÄÀœ°€ÄÀ¤°4(€€€ÍÑÉ…Ñ•å1…‰QÁÍ½Õ‰±•5¥¸èÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}QAM}=U	1}5%8ñğ€œÔœ¤°4(€€€ÍÑÉ…Ñ•å1…‰1Á¡…¹•AĞèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}1A}!9}APñğ€œÄÀœ¤°4(€€€ÍÑÉ…Ñ•å1…‰‘Ù	…¹‘ÍUÍèÁÉ½•ÍÌ¹•¹Ø¹MQIQe}1	}Y}	9M}UMñğ€œÔÀÀÀÀ°ÄÀÀÀÀÀ°ÈÔÀÀÀÀ°ÔÀÀÀÀÀ°ÄÀÀÀÀÀÀœ°4(€ô°4(4(€€¼¼A…ÍÍ¥¹œÑ¡¥Ì…Ñ”½¹±ä…‘‘Ì„µ¥¹ĞÑ¼µ½¹¥Ñ½É¥¹œì¥Ğ‘½•Ì¹½Ğ‰ÕäÑ¡”Ñ½­•¸¸4(€ÁÕµÁ¥Í½Ù•Éäèì4(€€€•¹…‰±•è€¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}9	1€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(€€€İÍUÉ°èÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}]M}UI0ñğ¹Õ±°°4(€€€Á½±±%¹Ñ•ÉÙ…±5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}A=11}%9QIY1}5Lñğ€œÔÀÀÀœ°€ÄÀ¤°4(€€€Á½±±1¥µ¥ĞèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}A=11}1%5%Pñğ€œÄÀÀœ°€ÄÀ¤°4(€€€ÍÑ…ÉÑÕÁ1½½­‰…­M•ŒèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}MQIQUA}1==-	-}Mñğ€œÄÈÀœ°€ÄÀ¤°4(€€€µ…É­•Ñ%¹¥Ñ¥…±•±…å5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}5I-Q}%9%Q%1}1e}5Lñğ€œÈÀÀÀœ°€ÄÀ¤°4(€€€µ…É­•ÑI•ÑÉ¥•ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}5I-Q}IQI%Lñğ€œàœ°€ÄÀ¤°4(€€€µ…É­•ÑI•ÑÉå5ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}5I-Q}IQIe}5Lñğ€œÌÀÀÀœ°€ÄÀ¤°4(€€€µ…á½¹ÕÉÉ•¹Ñ¡•­ÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹AU5A}%M=YIe}5a}=9UII9Q}!-Lñğ€œÌœ°€ÄÀ¤°4(€€€µ¥¹‘ÙUÍèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹5%9}Y}UMñğ€œÄÔÀÀÀœ¤°4(€€€µ…á‘ÙUÍèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹5a}Y}UMñğ€œÄÀÀÀÀÀÀœ¤°4(€€€µ¥¹1¥ÅÕ¥‘¥ÑåUÍèÁ…ÉÍ•±½…Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹5%9}1%EU%%Qe}UMñğ€œÌÀÀÀœ¤°4(€ô°4(4(€€¼¼€ôôôôôôôôôôôôAÉ¥½É¥Ñä™••Ì€ôôôôôôôôôôôô4(€€¼¼	Udƒ–J0M10ƒ–"–ò¦7ö»¾òh4(€€¼¼€€€´	Udƒšb¿š*ˆÍ±½Ğƒj¾ò#‚ãnc–B;š&šr$Í¹¥Á•Èƒ–B3š*‹¾ò'¾ò3¦r¢š¦®`™•”4(€€¼¼€€€´M10ƒšb¿–æÏ’îOj¾ò#šfh€Ä´Ìƒ’â¨Í±½Ğƒ¢B÷¦NûšÊ‡–Ş»–"¯¾ò'¾ò3’ö8™•”ƒ–6Ï–>¼4(€€¼¼ƒ–º{š"c®{’ê'¢šVÃš6¸¡		eQI=10Í±½Ğ¤è4(€€¼¼€€ƒš:K–B4Ä€äÍ­áe-”èÁÉ¥½É¥Ñä™•”€À¸ÀÌÜM=0±T€ÄÄÅ,ƒŠHƒ:ñ0½T€ÌÌÑ44(€€¼¼€€ƒš:K–B4È€Í™i™ÑèÙ´èÁÉ¥½É¥Ñä™•”€À¸ÀÄÈM=0±T€ÄÄÁ,ƒŠHƒ:ñ0½T€ÄÄÍ44(€€¼¼€€ƒš"G’î°ØÌ¸ÄÜ¸Üè™•”€À¸ÀÄ±T€ÄØÍ,ƒŠHƒ:ñ0½T€ØÅ4£š:K–B4Ğ¤4(€€¼¼€€ƒš‚ã–şé1•…‘•Èƒš:K–ê?r,ÁÉ¥½É¥Ñä™•”€¼T³’â7r,)¥Ñ¼Ñ¥À4(€ÁÉ¥½É¥Ñå•”èì4(€€€€¼¼ƒ¦vgšš¢‡–ò?¾ò!‘å¹…µ¥Œõ™…±Í”ƒš^Û’öÿR£¾ò$4(€€€€¼¼ØÌ¸ÄÜ¸ÈÀèƒR£š"ß¢ÂšVĞ	Ud½M10™•”ƒ¢2–nĞ€¡	Ud€À¸ÀÀÄ´À¸ÀÀä°M10€À¸ÀÀÀÄ´À¸ÀÀÀÌ¤4(€€€‰Õå5…á1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹	Ue}5a}AI%=I%Qe}}15A=IQLñğ€œÔÀÀÀÀÀœ°€ÄÀ¤°€€¼¼€À¸ÀÀÀÔM=04(€€€Í•±±5…á1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M11}5a}AI%=I%Qe}}15A=IQLñğ€œÌÀÀÀÀÀœ°€ÄÀ¤°€€¼¼€À¸ÀÀÀÌM=04(4(€€€€¼¼ƒ–*£šš¢‡–ò?¾òkR !•±¥ÕÌ•ÑAÉ¥½É¥Ñå••ÍÑ¥µ…Ñ”ƒš~”µ•µÁ½½°ƒ–º{š^Ûš.—–‚Ô4(€€€€¼¼ƒ‚ãnc’ê/’îÛ’â·šVÓöD™•”ƒ¦g–6¾ò3–*£š¢ÂšVÓ¢÷¢Ş’â+®{’ê'¢¢*––<4(€€€‘å¹…µ¥Œè€¡ÁÉ½•ÍÌ¹•¹Ø¹AI%=I%Qe}}e95%€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4(4(€€€€¼¼ƒ–*£šš¢‡–ò?–>šVÀ4(€€€€¼¼	UdƒR ¡¥ € ÜÕÑ ¤ƒš"XÙ•Éå!¥ € äÕÑ §¾ò1M10ƒR µ•‘¥Õ´€ ÔÁÑ ¤4(€€€‰Õå1•Ù•°èÁÉ½•ÍÌ¹•¹Ø¹	Ue}AI%=I%Qe}1Y0ñğ€Ù•Éå!¥ œ°€€¼¼ƒš*‹–—R£šr¦®cêŸ–"¬4(€€€Í•±±1•Ù•°èÁÉ½•ÍÌ¹•¹Ø¹M11}AI%=I%Qe}1Y0ñğ€µ•‘¥Õ´œ°€€¼¼ƒ–6[–ëR£’â·¶$4(4(€€€€¼¼ƒ–*£šš¢‡–ò?’â/¦f@4(€€€€¼¼ØÌ¸ÄÜ¸ÈÀèƒR£š"ß–:/’ö;š"Cšr³¢ºûö¸ƒŠPƒšÎ£š<	Udƒ:ñ0½Tƒ’òk’î8€ÈØİ4ƒ¦f7–"À€ÌÙ4€¡T€ÈÔÁ,°™•”€À¸ÀÀäƒ’â+¦f@¤4(€€€€¼¼€€ƒ–ššzs–ë:À	Ue}!%9}%1ƒ–Š{–’h³–#š*(	Ue}@ƒ¢Â–"À€À¸ÀÈM=0ƒr/šb¿–B›š‹–’44(€€€‰Õå5¥¹1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹	Ue}5%9}AI%=I%Qe}}15A=IQLñğ€œÔÀÀÀÀÀœ°€ÄÀ¤°€€¼¼€À¸ÀÀÀÔM=04(€€€Í•±±5¥¹1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M11}5%9}AI%=I%Qe}}15A=IQLñğ€œÄÀÀÀÀÀœ°€ÄÀ¤°€€¼¼€À¸ÀÀÀÄM=04(4(€€€€¼¼ƒ–*£šš~—¢¾‹j’â+¦f@€£–6Ï’öüµ•µÁ½½°ƒšzš.—–‚×’æ’â7¢Ú¢ş¤4(€€€€¼¼ØÌ¸ÄÜ¸ÈÀèƒR£š"ß¢ÂšVĞ³šş¢şo–:/š"Cšr°4(€€€‰Õå…Á1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹	Ue}A}AI%=I%Qe}}15A=IQLñğ€œÔÀÀÀÀÀœ°€ÄÀ¤°€€€¼¼€À¸ÀÀÀÔM=04(€€€Í•±±…Á1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹M11}A}AI%=I%Qe}}15A=IQLñğ€œÌÀÀÀÀÀœ°€ÄÀ¤°€€¼¼€À¸ÀÀÀÌM=04(€ô°4(4(€€¼¼ƒš^Ÿ–¶_šº×’şwVg¾ò3–BG–B;–ó–ºç¾ò#’îR£’ê8™…±±‰…¯¾ò$4(€µ…áAÉ¥½É¥Ñå••1…µÁ½ÉÑÌèÁ…ÉÍ•%¹Ğ¡ÁÉ½•ÍÌ¹•¹Ø¹5a}AI%=I%Qe}}15A=IQLñğ€œÔÀÀÀÀÀœ°€ÄÀ¤°€¼¼€À¸ÀÀÀÔM=04(4(€€¼¼ƒ–B¿–*£š^Ûšb¿–B›¢«–*£–Âw¢¾W¢†—–òë–’ÇjÁ½½°ƒ’ş‡š¿¾ò!A½½±¥¹‘•Ë¾ò$4(€…ÕÑ½¥±±A½½±Í=¹MÑ…ÉĞè€¡ÁÉ½•ÍÌ¹•¹Ø¹UQ=}%11}A==1M}=9}MQIP€üü€ÑÉÕ”œ¤¹Ñ½1½İ•É…Í” ¤€ôôô€ÑÉÕ”œ°4)ôì4(4)™Õ¹Ñ¥½¸Ù…±¥‘…Ñ•½¹™¥œ ¤ì4(€½¹ÍĞ•ÉÉ½ÉÌ€ômtì4(€¥˜€ …½¹™¥œ¹¡•±¥ÕÌ¹…Á¥-•ä¤•ÉÉ½ÉÌ¹ÁÕÍ  !1%UM}A%}-dµ¥ÍÍ¥¹œœ¤ì4(€¥˜€ …½¹™¥œ¹¡•±¥ÕÌ¹ÉÁUÉ°¤•ÉÉ½ÉÌ¹ÁÕÍ  !1%UM}IA}UI0µ¥ÍÍ¥¹œœ¤ì4(€€¼¼ØÌ¸ÄÜè±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ÑÌƒšVÃî¦v{¦ë¾ò#š^œ}9A=%9Pƒ’æ’òk¢Š¯šRÛ¢şošVÃî¾ò$4(€¥˜€ …½¹™¥œ¹¡•±¥ÕÌ¹±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ÑÌñğ½¹™¥œ¹¡•±¥ÕÌ¹±…Í•ÉÍÑÉ•…µ¹‘Á½¥¹ÑÌ¹±•¹Ñ €ôôô€À¤ì4(€€€•ÉÉ½ÉÌ¹ÁÕÍ  !1%UM}1MIMQI5}9A=%9P€¡½È!1%UM}1MIMQI5}9A=%9QL¤µ¥ÍÍ¥¹œœ¤ì4(€ô4(€¥˜€ …½¹™¥œ¹¡•±¥ÕÌ¹±…Í•ÉÍÑÉ•…µQ½­•¸¤•ÉÉ½ÉÌ¹ÁÕÍ  !1%UM}1MIMQI5}Q=-8µ¥ÍÍ¥¹œœ¤ì4(€¥˜€ …½¹™¥œ¹‰¥É‘•å”¹…Á¥-•ä¤•ÉÉ½ÉÌ¹ÁÕÍ  	%Ie}A%}-dµ¥ÍÍ¥¹œœ¤ì4(€¥˜€ …½¹™¥œ¹Ie}IU8€˜˜€…½¹™¥œ¹İ…±±•Ğ¹ÁÉ¥Ù…Ñ•-•å	ÌÔà¤ì4(€€€•ÉÉ½ÉÌ¹ÁÕÍ  ]11Q}AI%YQ}-e}	LÔàÉ•ÅÕ¥É•™½È1%Yµ½‘”œ¤ì4(€ô4(€É•ÑÕÉ¸•ÉÉ½ÉÌì4)ô4(4)µ½‘Õ±”¹•áÁ½ÉÑÌ€ôì½¹™¥œ°Ù…±¥‘…Ñ•½¹™¥œôì4(
+    // V8 is the live strategy, not a shadow feed. FORCE_DISABLED remains the emergency kill switch.
+    enabled: !activityFlowForceDisabled,
+    replaceDumpSignal: !activityFlowForceDisabled,
+    entryMode: 'ONE_SECOND_REBOUND_V8',
+    reboundWindowMs: 1_000,
+    reboundMinDropPct: 20,
+    reboundMaxDropPct: 65,
+    reboundMinRecoveryPct: 2,
+    reboundMaxRecoveryPct: 10,
+    reboundConfirmMinGapMs: 1_000,
+    reboundConfirmMaxGapMs: 3_000,
+    reboundMinUniqueBuyers1s: 2,
+    reboundCooldownMs: 60_000,
+    age3EntryTargetMs: parseInt(process.env.AGE3_ENTRY_TARGET_MS || '180000', 10),
+    age3EntryToleranceMs: parseInt(process.env.AGE3_ENTRY_TOLERANCE_MS || '15000', 10),
+    age3MinFdvUsd: parseFloat(process.env.AGE3_ENTRY_MIN_FDV_USD || '40000'),
+    age3MinUniqueBuyers1m: parseInt(
+      process.env.AGE3_ENTRY_MIN_UNIQUE_BUYERS_1M || '17',
+      10,
+    ),
+    age3TokenSupply: parseFloat(process.env.PUMP_TOKEN_SUPPLY || '1000000000'),
+    minVolume1mUsd: parseFloat(process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_USD || '3000'),
+    minVolume1mSol: parseFloat(
+      process.env.ACTIVITY_FLOW_1M_MIN_VOLUME_SOL || String(activityFlow1mMinVolumeSolDefault),
+    ),
+    minRatio1m: parseFloat(process.env.ACTIVITY_FLOW_1M_MIN_BUY_SELL_RATIO || '1.35'),
+    minTrades1m: parseInt(process.env.ACTIVITY_FLOW_1M_MIN_TRADES || '25', 10),
+    armWindowMs: parseInt(process.env.ACTIVITY_FLOW_ARM_WINDOW_MS || '30000', 10),
+    armCancelMinVolume1mSol: parseFloat(
+      process.env.ACTIVITY_FLOW_ARM_CANCEL_MIN_VOLUME_1M_SOL || String(2000 / Math.max(solPriceUsdForConfig, 0.001)),
+    ),
+    armMinUniqueTraders1m: parseInt(process.env.ACTIVITY_FLOW_ARM_MIN_UNIQUE_TRADERS_1M || '8', 10),
+    armMaxLargestBuyShare1m: parseFloat(
+      process.env.ACTIVITY_FLOW_ARM_MAX_LARGEST_BUY_SHARE_1M || '0.25',
+    ),
+    armCancelMaxLargestBuyShare1m: parseFloat(
+      process.env.ACTIVITY_FLOW_ARM_CANCEL_MAX_LARGEST_BUY_SHARE_1M || '0.40',
+    ),
+    armMinVolatility1mPct: parseFloat(process.env.ACTIVITY_FLOW_ARM_MIN_VOLATILITY_1M_PCT || '1.1'),
+    triggerMinVolume5sSol: parseFloat(process.env.ACTIVITY_FLOW_TRIGGER_MIN_VOLUME_5S_SOL || '2'),
+    triggerMinTrades5s: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_MIN_TRADES_5S || '4', 10),
+    triggerMinUniqueBuyers5s: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_MIN_UNIQUE_BUYERS_5S || '2', 10),
+    triggerMinTxAcceleration5s: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_MIN_TX_ACCEL_5S || '2', 10),
+    triggerMinRange5sPct: parseFloat(process.env.ACTIVITY_FLOW_TRIGGER_MIN_RANGE_5S_PCT || '1'),
+    triggerMinPriceChange10sPct: parseFloat(process.env.ACTIVITY_FLOW_TRIGGER_MIN_PRICE_CHANGE_10S_PCT || '0'),
+    triggerMaxPriceChange10sPct: parseFloat(process.env.ACTIVITY_FLOW_TRIGGER_MAX_PRICE_CHANGE_10S_PCT || '6'),
+    triggerConfirmMinGapMs: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_CONFIRM_MIN_GAP_MS || '1000', 10),
+    triggerConfirmMaxGapMs: parseInt(process.env.ACTIVITY_FLOW_TRIGGER_CONFIRM_MAX_GAP_MS || '3000', 10),
+    // Clamp legacy production values (80) to the current strategy floor.
+    breadthMinUniqueBuyers1m: Math.max(
+      100,
+      parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_1M || '100', 10),
+    ),
+    breadthMinNewBuyers1m: parseInt(process.env.BREADTH_BURST_MIN_NEW_BUYERS_1M || '30', 10),
+    breadthMinBuyCount1m: parseInt(process.env.BREADTH_BURST_MIN_BUY_COUNT_1M || '100', 10),
+    breadthMaxLargestBuyShare1m: parseFloat(
+      process.env.BREADTH_BURST_MAX_LARGEST_BUY_SHARE_1M || '0.10',
+    ),
+    breadthMinUniqueBuyers5s: parseInt(process.env.BREADTH_BURST_MIN_UNIQUE_BUYERS_5S || '10', 10),
+    breadthMaxAvgBuyPerWallet5sSol: parseFloat(
+      process.env.BREADTH_BURST_MAX_AVG_BUY_PER_WALLET_5S_SOL || '0.4',
+    ),
+    breadthPreviousRatioMax5s: parseFloat(process.env.BREADTH_BURST_PREVIOUS_RATIO_MAX_5S || '0.8'),
+    breadthCurrentRatioMin5s: parseFloat(process.env.BREADTH_BURST_CURRENT_RATIO_MIN_5S || '0.8'),
+    breadthCurrentRatioMax5s: parseFloat(process.env.BREADTH_BURST_CURRENT_RATIO_MAX_5S || '1.0'),
+    breadthMinAccelerationFactor5s: parseFloat(
+      process.env.BREADTH_BURST_MIN_ACCELERATION_FACTOR_5S || '1.5',
+    ),
+    breadthMinPriceChange10sPct: parseFloat(process.env.BREADTH_BURST_MIN_PRICE_CHANGE_10S_PCT || '-5'),
+    breadthMaxPriceChange10sPct: parseFloat(process.env.BREADTH_BURST_MAX_PRICE_CHANGE_10S_PCT || '5'),
+    breadthMaxPriceChange60sPct: parseFloat(process.env.BREADTH_BURST_MAX_PRICE_CHANGE_60S_PCT || '20'),
+    breadthMinConfirmations: parseInt(process.env.BREADTH_BURST_MIN_CONFIRMATIONS || '3', 10),
+    breadthCooldownMs: parseInt(process.env.BREADTH_BURST_COOLDOWN_MS || '60000', 10),
+    breadthWarmupMs: parseInt(process.env.BREADTH_BURST_WARMUP_MS || '60000', 10),
+    rsi1mEnabled: false,
+    rsi1mPeriod: parseInt(process.env.ACTIVITY_FLOW_RSI_1M_PERIOD || '7', 10),
+    rsi1mMax: parseFloat(process.env.ACTIVITY_FLOW_RSI_1M_MAX || '50'),
+    rsi1mMinBars: parseInt(process.env.ACTIVITY_FLOW_RSI_1M_MIN_BARS || '8', 10),
+    rsi1mWarmupMaxMinutes: parseInt(process.env.ACTIVITY_FLOW_RSI_1M_WARMUP_MAX_MINUTES || '120', 10),
+    rsiPriceScaleResetRatio: parseFloat(process.env.RSI_PRICE_SCALE_RESET_RATIO || '100'),
+    confirmMinBuyTrades5s: parseInt(process.env.ACTIVITY_FLOW_CONFIRM_MIN_BUY_TRADES_5S || '4', 10),
+    confirmMinUniqueBuyers5s: parseInt(process.env.ACTIVITY_FLOW_CONFIRM_MIN_UNIQUE_BUYERS_5S || '3', 10),
+    confirmMinRatio5s: parseFloat(process.env.ACTIVITY_FLOW_CONFIRM_MIN_BUY_SELL_RATIO_5S || '1.10'),
+    confirmMaxBuyerShare5s: parseFloat(process.env.ACTIVITY_FLOW_CONFIRM_MAX_BUYER_SHARE_5S || '0.50'),
+    confirmMaxPriceRise5sPct: parseFloat(process.env.ACTIVITY_FLOW_CONFIRM_MAX_PRICE_RISE_5S_PCT || '6'),
+    confirmMaxSingleBuyImpactPct: parseFloat(
+      process.env.ACTIVITY_FLOW_CONFIRM_MAX_SINGLE_BUY_IMPACT_PCT || '4',
+    ),
+    window5Ms: parseInt(process.env.ACTIVITY_FLOW_WINDOW_5S_MS || '5000', 10),
+    window10Ms: parseInt(process.env.ACTIVITY_FLOW_WINDOW_10S_MS || '10000', 10),
+    window15Ms: parseInt(process.env.ACTIVITY_FLOW_WINDOW_15S_MS || '15000', 10),
+    window30Ms: parseInt(process.env.ACTIVITY_FLOW_WINDOW_30S_MS || '30000', 10),
+    window60Ms: parseInt(process.env.ACTIVITY_FLOW_WINDOW_60S_MS || '60000', 10),
+    minTrades60s: parseInt(process.env.ACTIVITY_FLOW_MIN_TRADES_60S || '24', 10),
+    minVolume60sSol: parseFloat(process.env.ACTIVITY_FLOW_MIN_VOLUME_60S_SOL || '12'),
+    minUniqueTraders60s: parseInt(process.env.ACTIVITY_FLOW_MIN_UNIQUE_TRADERS_60S || '10', 10),
+    minTrades30s: parseInt(process.env.ACTIVITY_FLOW_MIN_TRADES_30S || '12', 10),
+    minVolume30sSol: parseFloat(process.env.ACTIVITY_FLOW_MIN_VOLUME_30S_SOL || '6'),
+    minRatio30s: parseFloat(process.env.ACTIVITY_FLOW_MIN_BUY_SELL_RATIO_30S || '1.05'),
+    minTrades15s: parseInt(process.env.ACTIVITY_FLOW_MIN_TRADES_15S || '8', 10),
+    minVolume15sSol: parseFloat(process.env.ACTIVITY_FLOW_MIN_VOLUME_15S_SOL || '4'),
+    minRatio15s: parseFloat(process.env.ACTIVITY_FLOW_MIN_BUY_SELL_RATIO_15S || '1.45'),
+    minImbalance15s: parseFloat(process.env.ACTIVITY_FLOW_MIN_IMBALANCE_15S || '0.20'),
+    minUniqueBuyers15s: parseInt(process.env.ACTIVITY_FLOW_MIN_UNIQUE_BUYERS_15S || '3', 10),
+    minPriceChange15sPct: parseFloat(process.env.ACTIVITY_FLOW_MIN_PRICE_CHANGE_15S_PCT || '-3'),
+    minPriceChange30sPct: parseFloat(process.env.ACTIVITY_FLOW_MIN_PRICE_CHANGE_30S_PCT || '-20'),
+    minPriceChange60sPct: parseFloat(process.env.ACTIVITY_FLOW_MIN_PRICE_CHANGE_60S_PCT || '-30'),
+    minTrades5s: parseInt(process.env.ACTIVITY_FLOW_MIN_TRADES_5S || '5', 10),
+    minVolume5sSol: parseFloat(process.env.ACTIVITY_FLOW_MIN_VOLUME_5S_SOL || '2.5'),
+    minRatio5s: parseFloat(process.env.ACTIVITY_FLOW_MIN_BUY_SELL_RATIO_5S || '1.40'),
+    minImbalance5s: parseFloat(process.env.ACTIVITY_FLOW_MIN_IMBALANCE_5S || '0.25'),
+    minUniqueBuyers5s: parseInt(process.env.ACTIVITY_FLOW_MIN_UNIQUE_BUYERS_5S || '2', 10),
+    minPriceChange5sPct: parseFloat(process.env.ACTIVITY_FLOW_MIN_PRICE_CHANGE_5S_PCT || '0.2'),
+    maxPriceChange5sPct: parseFloat(process.env.ACTIVITY_FLOW_MAX_PRICE_CHANGE_5S_PCT || '5'),
+    maxPriceChange30sPct: parseFloat(process.env.ACTIVITY_FLOW_MAX_PRICE_CHANGE_30S_PCT || '10'),
+    maxPriceChange60sPct: parseFloat(process.env.ACTIVITY_FLOW_MAX_PRICE_CHANGE_60S_PCT || '10'),
+    cooldownMs: parseInt(process.env.ACTIVITY_FLOW_COOLDOWN_MS || '0', 10),
+    maxSignalAgeMs: parseInt(process.env.ACTIVITY_FLOW_MAX_SIGNAL_AGE_MS || process.env.MAX_PUSH_LAG_MS || '5000', 10),
+    maxEventsPerMint: parseInt(process.env.ACTIVITY_FLOW_MAX_EVENTS_PER_MINT || '600', 10),
+    debug: (process.env.ACTIVITY_FLOW_DEBUG ?? 'false').toLowerCase() === 'true',
+  },
+
+  // ============ Price anomaly filter ============
+  priceFilter: {
+    // å• tick ä»·æ ¼å˜åŒ–è¶…è¿‡ maxJumpRatio è§†ä¸ºå¯ç–‘
+    // 1.5 è¡¨ç¤º +50% æˆ– -33%ï¼ˆ1/1.5ï¼‰ä»¥ä¸Šå±äºå¼‚å¸¸
+    maxJumpRatio: parseFloat(process.env.PRICE_MAX_JUMP_RATIO || '1.5'),
+    // å¯ç–‘æ ·æœ¬å¿…é¡»åœ¨å¤šå°‘æ¯«ç§’å†…è¿ç»­å‡ºç°å¹¶æ–¹å‘ä¸€è‡´æ‰æ¥å—
+    confirmWindowMs: parseInt(process.env.PRICE_CONFIRM_WINDOW_MS || '3000', 10),
+    confirmMinSamples: parseInt(process.env.PRICE_CONFIRM_MIN_SAMPLES || '2', 10),
+    swapSanitizer: {
+      enabled: (process.env.SWAP_SANITIZER_ENABLED ?? 'true').toLowerCase() === 'true',
+      solPriceUsd: parseFloat(process.env.SOL_PRICE_USD || '72'),
+      maxJumpRatio: parseFloat(process.env.SWAP_SANITIZER_MAX_JUMP_RATIO || '2'),
+      marketMaxRatio: parseFloat(process.env.SWAP_SANITIZER_MARKET_MAX_RATIO || '5'),
+      marketMaxAgeMs: parseInt(process.env.SWAP_SANITIZER_MARKET_MAX_AGE_MS || '300000', 10),
+      confirmWindowMs: parseInt(process.env.SWAP_SANITIZER_CONFIRM_WINDOW_MS || '5000', 10),
+      confirmMinSamples: parseInt(process.env.SWAP_SANITIZER_CONFIRM_MIN_SAMPLES || '3', 10),
+      confirmMinIndependentSources: parseInt(
+        process.env.SWAP_SANITIZER_CONFIRM_MIN_INDEPENDENT_SOURCES || '2',
+        10,
+      ),
+      confirmMinSpanMs: parseInt(process.env.SWAP_SANITIZER_CONFIRM_MIN_SPAN_MS || '100', 10),
+      confirmClusterRatio: parseFloat(process.env.SWAP_SANITIZER_CONFIRM_CLUSTER_RATIO || '1.25'),
+      minPoolQuoteSol: parseFloat(
+        process.env.SWAP_SANITIZER_MIN_POOL_QUOTE_SOL || process.env.MIN_POOL_QUOTE_SOL || '30',
+      ),
+      debug: (process.env.SWAP_SANITIZER_DEBUG ?? 'false').toLowerCase() === 'true',
+    },
+  },
+
+  // ============ Helius ============
+  // v3.17: æ”¯æŒå¤š region LaserStream + å¤š region Sender
+  //   - laserstreamEndpoints: æ•°ç»„ï¼Œå¤š region gRPC è®¢é˜…ï¼Œæœ€å¿«çš„ region å‘½ä¸­å³è§¦å‘ï¼ˆsignature å»é‡ï¼‰
+  //   - senderEndpoints:      æ•°ç»„ï¼Œå¤š region Sender å¹¶å‘æäº¤ï¼ŒPromise.race å–æœ€å¿«è¿”å›
+  //   - å‘åå…¼å®¹ï¼šæœªé… _ENDPOINTS æ—¶å›é€€åˆ°æ—§çš„å• endpoint å­—æ®µ
+  helius: {
+    apiKey: process.env.HELIUS_API_KEY,
+    rpcUrl: process.env.HELIUS_RPC_URL,
+    stakedRpcUrl: process.env.HELIUS_STAKED_RPC_URL,
+
+    // ---- LaserStreamï¼ˆå¤š region è®¢é˜…ï¼‰----
+    // ä¼˜å…ˆè¯» HELIUS_LASERSTREAM_ENDPOINTSï¼ˆé€—å·åˆ†éš”å¤šä¸ªï¼‰
+    // fallback åˆ°æ—§çš„ HELIUS_LASERSTREAM_ENDPOINTï¼ˆå• endpointï¼‰
+    laserstreamEndpoint: process.env.HELIUS_LASERSTREAM_ENDPOINT,
+    laserstreamEndpoints: (() => {
+      const multi = (process.env.HELIUS_LASERSTREAM_ENDPOINTS || '').trim();
+      if (multi) {
+        return multi.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      const single = (process.env.HELIUS_LASERSTREAM_ENDPOINT || '').trim();
+      return single ? [single] : [];
+    })(),
+    laserstreamToken: process.env.HELIUS_LASERSTREAM_TOKEN,
+
+    // ---- Senderï¼ˆå¤š region æäº¤ï¼‰----
+    // ä¼˜å…ˆè¯» HELIUS_SENDER_ENDPOINTSï¼ˆé€—å·åˆ†éš”å¤šä¸ªï¼‰
+    // fallback åˆ°æ—§çš„ HELIUS_SENDER_ENDPOINT
+    senderEndpoint: process.env.HELIUS_SENDER_ENDPOINT || null,
+    senderEndpoints: (() => {
+      const multi = (process.env.HELIUS_SENDER_ENDPOINTS || '').trim();
+      if (multi) {
+        return multi.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      const single = (process.env.HELIUS_SENDER_ENDPOINT || '').trim();
+      return single ? [single] : [];
+    })(),
+  },
+
+  // ============ AllenHark ============
+  // AllenHark æä¾›ä¸¤é¡¹æ ¸å¿ƒèƒ½åŠ›ï¼š
+  //   1) Yellowstone gRPC æ•°æ®æµ â€” è·Ÿ Helius LaserStream åŒåè®®ï¼Œä½œä¸ºé¢å¤– region é™ä½å°¾å»¶è¿Ÿ
+  //   2) Slipstream äº¤æ˜“ä¸­ç»§ â€” leader-proximity è·¯ç”±ï¼Œè‡ªåŠ¨é€‰æœ€å¿« sender æäº¤ tx
+  allenhark: {
+    // ---- gRPC æ•°æ®æµ ----
+    // AllenHark gRPC ç«¯ç‚¹ï¼ˆIP ç™½åå•åˆ¶ï¼Œæ— éœ€ tokenï¼‰
+    // é€—å·åˆ†éš”å¤šä¸ªç«¯ç‚¹ï¼Œæ ¼å¼åŒ LaserStream
+    // ç¤ºä¾‹: grpc.allenhark.com:10000
+    grpcEndpoints: (() => {
+      const raw = (process.env.ALLENHARK_GRPC_ENDPOINTS || '').trim();
+      if (!raw) return [];
+      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    })(),
+    // AllenHark gRPC çš„ x-tokenï¼ˆå¦‚æœéœ€è¦çš„è¯ï¼Œç›®å‰å®˜æ–¹è¯´æ˜¯ IP ç™½åå•ä¸éœ€è¦ï¼‰
+    grpcToken: process.env.ALLENHARK_GRPC_TOKEN || '',
+
+    // ---- Slipstream äº¤æ˜“ä¸­ç»§ ----
+    // API key (sk_live_*)ï¼Œä» AllenHark Console è·å–
+    slipstreamApiKey: process.env.ALLENHARK_SLIPSTREAM_API_KEY || '',
+    // é¦–é€‰ region: us-east, eu-central, ap-northeast ç­‰
+    slipstreamRegion: process.env.ALLENHARK_SLIPSTREAM_REGION || '',
+    // æ˜¯å¦å¯ç”¨ Slipstream ä½œä¸º BUY æäº¤é€šé“
+    // true æ—¶ BUY ä¼šèµ° Slipstream (leader-proximity routing)ï¼Œå¤±è´¥å† fallback Helius Sender
+    slipstreamEnabled: (process.env.ALLENHARK_SLIPSTREAM_ENABLED ?? 'false').toLowerCase() === 'true',
+    // Slipstream ä¼˜å…ˆçº§ fee é€Ÿåº¦: SLOW, FAST, ULTRA_FAST
+    slipstreamFeeSpeed: process.env.ALLENHARK_SLIPSTREAM_FEE_SPEED || 'ULTRA_FAST',
+    // Slipstream æœ€å¤§ tip (SOL)ï¼Œ0 è¡¨ç¤ºä¸é™
+    slipstreamMaxTipSol: parseFloat(process.env.ALLENHARK_SLIPSTREAM_MAX_TIP_SOL || '0'),
+  },
+
+  // ============ Birdeye ============
+  birdeye: {
+    apiKey: process.env.BIRDEYE_API_KEY,
+    baseUrl: 'https://public-api.birdeye.so',
+  },
+
+  // ============ Wallet ============
+  wallet: {
+    privateKeyBs58: process.env.WALLET_PRIVATE_KEY_BS58,
+  },
+
+  // ============ Programs ============
+  programs: {
+    pump: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+    pumpMigrationWallet: '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg',
+    pumpAmm: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',
+    pumpAmmV2: 'Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1',
+    tokenProgram: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    associatedTokenProgram: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+    systemProgram: '11111111111111111111111111111111',
+    wsol: 'So11111111111111111111111111111111111111112',
+  },
+
+  // ============ Server ============
+  server: {
+    port: parseInt(process.env.DASHBOARD_PORT || '3001', 10),
+    bindHost: process.env.BIND_HOST || '0.0.0.0',
+    webhookSecret: process.env.WEBHOOK_SECRET || null,
+    dashboardToken: process.env.DASHBOARD_TOKEN || null,
+  },
+
+  // ============ Storage ============
+  storage: {
+    dbPath: './data/sniper.db',
+    reportsDir: './reports',
+    logsDir: './logs',
+  },
+
+  capture: {
+    swapEventsEnabled: (process.env.SWAP_EVENT_LOG_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabEnabled: (process.env.STRATEGY_LAB_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabSnapshotIntervalMs: parseInt(process.env.STRATEGY_LAB_SNAPSHOT_INTERVAL_MS || '1000', 10),
+    strategyLabRetentionMs: parseInt(process.env.STRATEGY_LAB_RETENTION_MS || '300000', 10),
+    strategyLabLabelEnabled: (process.env.STRATEGY_LAB_LABEL_ENABLED ?? 'true').toLowerCase() === 'true',
+    strategyLabLabelIntervalMs: parseInt(process.env.STRATEGY_LAB_LABEL_INTERVAL_MS || '10000', 10),
+    strategyLabLabelBatchSize: parseInt(process.env.STRATEGY_LAB_LABEL_BATCH_SIZE || '1000', 10),
+    strategyLabLabelMaxBatchesPerTick: parseInt(
+      process.env.STRATEGY_LAB_LABEL_MAX_BATCHES_PER_TICK || '4',
+      10,
+    ),
+    strategyLabLabelWarnAgeMs: parseInt(
+      process.env.STRATEGY_LAB_LABEL_WARN_AGE_MS || '300000',
+      10,
+    ),
+    strategyLabSnapshotAllActive: (process.env.STRATEGY_LAB_SNAPSHOT_ALL_ACTIVE ?? 'false').toLowerCase() === 'true',
+    strategyLabBuyBurstThreshold: parseInt(process.env.STRATEGY_LAB_BUY_BURST_THRESHOLD || '10', 10),
+    strategyLabTpsDoubleMin: parseFloat(process.env.STRATEGY_LAB_TPS_DOUBLE_MIN || '5'),
+    strategyLabLpChangePct: parseFloat(process.env.STRATEGY_LAB_LP_CHANGE_PCT || '10'),
+    strategyLabFdvBandsUsd: process.env.STRATEGY_LAB_FDV_BANDS_USD || '50000,100000,250000,500000,1000000',
+  },
+
+  // Passing this gate only adds a mint to monitoring; it does not buy the token.
+  pumpDiscovery: {
+    enabled: (process.env.PUMP_DISCOVERY_ENABLED ?? 'true').toLowerCase() === 'true',
+    wsUrl: process.env.PUMP_DISCOVERY_WS_URL || null,
+    pollIntervalMs: parseInt(process.env.PUMP_DISCOVERY_POLL_INTERVAL_MS || '5000', 10),
+    pollLimit: parseInt(process.env.PUMP_DISCOVERY_POLL_LIMIT || '100', 10),
+    startupLookbackSec: parseInt(process.env.PUMP_DISCOVERY_STARTUP_LOOKBACK_SEC || '120', 10),
+    marketInitialDelayMs: parseInt(process.env.PUMP_DISCOVERY_MARKET_INITIAL_DELAY_MS || '2000', 10),
+    marketRetries: parseInt(process.env.PUMP_DISCOVERY_MARKET_RETRIES || '8', 10),
+    marketRetryMs: parseInt(process.env.PUMP_DISCOVERY_MARKET_RETRY_MS || '3000', 10),
+    maxConcurrentChecks: parseInt(process.env.PUMP_DISCOVERY_MAX_CONCURRENT_CHECKS || '3', 10),
+    minFdvUsd: parseFloat(process.env.MIN_FDV_USD || '15000'),
+    maxFdvUsd: parseFloat(process.env.MAX_FDV_USD || '1000000'),
+    minLiquidityUsd: parseFloat(process.env.MIN_LIQUIDITY_USD || '3000'),
+  },
+
+  // ============ Priority fees ============
+  // BUY å’Œ SELL åˆ†å¼€é…ç½®ï¼š
+  //   - BUY æ˜¯æŠ¢ slot çš„ï¼ˆç ¸ç›˜åæ‰€æœ‰ sniper åŒæŠ¢ï¼‰ï¼Œéœ€è¦é«˜ fee
+  //   - SELL æ˜¯å¹³ä»“çš„ï¼ˆæ™š 1-3 ä¸ª slot è½é“¾æ²¡å·®åˆ«ï¼‰ï¼Œä½ fee å³å¯
+  // å®æˆ˜ç«äº‰è€…æ•°æ®(BABYTROLL slot):
+  //   æ’å1 93kgxYKe: priority fee 0.037 SOL,CU 111K â†’ Î¼L/CU 334M
+  //   æ’å2 3fZftz6m: priority fee 0.012 SOL,CU 110K â†’ Î¼L/CU 113M
+  //   æˆ‘ä»¬ v3.17.7: fee 0.01,CU 163K â†’ Î¼L/CU 61M(æ’å4)
+  //   æ ¸å¿ƒ:Leader æ’åºçœ‹ priority fee / CU,ä¸çœ‹ Jito tip
+  priorityFee: {
+    // é™æ€æ¨¡å¼ï¼ˆdynamic=false æ—¶ä½¿ç”¨ï¼‰
+    // v3.17.20: ç”¨æˆ·è°ƒæ•´ BUY/SELL fee èŒƒå›´ (BUY 0.001-0.009, SELL 0.0001-0.0003)
+    buyMaxLamports: parseInt(process.env.BUY_MAX_PRIORITY_FEE_LAMPORTS || '500000', 10),  // 0.0005 SOL
+    sellMaxLamports: parseInt(process.env.SELL_MAX_PRIORITY_FEE_LAMPORTS || '300000', 10),  // 0.0003 SOL
+
+    // åŠ¨æ€æ¨¡å¼ï¼šç”¨ Helius getPriorityFeeEstimate æŸ¥ mempool å®æ—¶æ‹¥å µ
+    // ç ¸ç›˜äº‹ä»¶ä¸­æ•´ç½‘ fee é£™å‡ï¼ŒåŠ¨æ€è°ƒæ•´èƒ½è·Ÿä¸Šç«äº‰è€…èŠ‚å¥
+    dynamic: (process.env.PRIORITY_FEE_DYNAMIC ?? 'true').toLowerCase() === 'true',
+
+    // åŠ¨æ€æ¨¡å¼å‚æ•°
+    // BUY ç”¨ high (75th) æˆ– veryHigh (95th)ï¼ŒSELL ç”¨ medium (50th)
+    buyLevel: process.env.BUY_PRIORITY_LEVEL || 'veryHigh',  // æŠ¢å…¥ç”¨æœ€é«˜çº§åˆ«
+    sellLevel: process.env.SELL_PRIORITY_LEVEL || 'medium',  // å–å‡ºç”¨ä¸­ç­‰
+
+    // åŠ¨æ€æ¨¡å¼ä¸‹é™
+    // v3.17.20: ç”¨æˆ·å‹ä½æˆæœ¬è®¾ç½® â€” æ³¨æ„ BUY Î¼L/CU ä¼šä» 267M é™åˆ° 36M (CU 250K, fee 0.009 ä¸Šé™)
+    //   å¦‚æœå‡ºç° BUY_CHAIN_FAILED å¢å¤š,å…ˆæŠŠ BUY_CAP è°ƒåˆ° 0.02 SOL çœ‹æ˜¯å¦æ¢å¤
+    buyMinLamports: parseInt(process.env.BUY_MIN_PRIORITY_FEE_LAMPORTS || '500000', 10),  // 0.0005 SOL
+    sellMinLamports: parseInt(process.env.SELL_MIN_PRIORITY_FEE_LAMPORTS || '100000', 10),  // 0.0001 SOL
+
+    // åŠ¨æ€æŸ¥è¯¢çš„ä¸Šé™ (å³ä½¿ mempool ææ‹¥å µä¹Ÿä¸è¶…è¿‡)
+    // v3.17.20: ç”¨æˆ·è°ƒæ•´,æ¿€è¿›å‹æˆæœ¬
+    buyCapLamports: parseInt(process.env.BUY_CAP_PRIORITY_FEE_LAMPORTS || '500000', 10),   // 0.0005 SOL
+    sellCapLamports: parseInt(process.env.SELL_CAP_PRIORITY_FEE_LAMPORTS || '300000', 10),  // 0.0003 SOL
+  },
+
+  // æ—§å­—æ®µä¿ç•™ï¼Œå‘åå…¼å®¹ï¼ˆä»…ç”¨äº fallbackï¼‰
+  maxPriorityFeeLamports: parseInt(process.env.MAX_PRIORITY_FEE_LAMPORTS || '500000', 10), // 0.0005 SOL
+
+  // å¯åŠ¨æ—¶æ˜¯å¦è‡ªåŠ¨å°è¯•è¡¥å……ç¼ºå¤±çš„ pool ä¿¡æ¯ï¼ˆPoolFinderï¼‰
+  autoFillPoolsOnStart: (process.env.AUTO_FILL_POOLS_ON_START ?? 'true').toLowerCase() === 'true',
+};
+
+function validateConfig() {
+  const errors = [];
+  if (!config.helius.apiKey) errors.push('HELIUS_API_KEY missing');
+  if (!config.helius.rpcUrl) errors.push('HELIUS_RPC_URL missing');
+  // v3.17: laserstreamEndpoints æ•°ç»„éç©ºï¼ˆæ—§ _ENDPOINT ä¹Ÿä¼šè¢«æ”¶è¿›æ•°ç»„ï¼‰
+  if (!config.helius.laserstreamEndpoints || config.helius.laserstreamEndpoints.length === 0) {
+    errors.push('HELIUS_LASERSTREAM_ENDPOINT (or HELIUS_LASERSTREAM_ENDPOINTS) missing');
+  }
+  if (!config.helius.laserstreamToken) errors.push('HELIUS_LASERSTREAM_TOKEN missing');
+  if (!config.birdeye.apiKey) errors.push('BIRDEYE_API_KEY missing');
+  if (!config.DRY_RUN && !config.wallet.privateKeyBs58) {
+    errors.push('WALLET_PRIVATE_KEY_BS58 required for LIVE mode');
+  }
+  return errors;
+}
+
+module.exports = { config, validateConfig };

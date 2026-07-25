@@ -204,6 +204,15 @@ async function run() {
     1,
     'a previous completed trade must not permanently blacklist V8 rebound entries',
   );
+  await engine.handleDumpSignal({
+    ...passingSignals[0],
+    signature: 'duplicate-inflight-signal',
+  });
+  assert.strictEqual(
+    acceptedSignals.length,
+    1,
+    'a duplicate V8 signal must not emit a second BUY while the first BUY is in flight',
+  );
   engine.markBuyDone(passingMint);
   historicalBuyExists = false;
   engine._exitCooldowns.set(passingMint, Date.now() + 60_000);

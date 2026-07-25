@@ -206,6 +206,15 @@ class TokenRegistry {
     for (const row of rows) this.cache.set(row.mint, row);
   }
 
+  _refreshCachedRow(mint, row) {
+    if (row && Number(row.is_active) === 1) {
+      this.cache.set(mint, row);
+    } else {
+      this.cache.delete(mint);
+    }
+    return row || null;
+  }
+
   /** Static validator used by server.js endpoints */
   static validateMint(mint) {
     if (typeof mint !== 'string' || mint.length < 32 || mint.length > 44) {
@@ -298,7 +307,7 @@ class TokenRegistry {
 
     this.stmts.insert.run(row);
     const fresh = this.stmts.get.get(mint);
-    if (fresh) this.cache.set(mint, fresh);
+    this._refreshCachedRow(mint, fresh);
     return fresh;
   }
 
@@ -352,7 +361,7 @@ class TokenRegistry {
     });
 
     const fresh = this.stmts.get.get(mint);
-    if (fresh?.is_active) this.cache.set(mint, fresh);
+    this._refreshCachedRow(mint, fresh);
     return fresh || null;
   }
 
@@ -386,7 +395,7 @@ class TokenRegistry {
       mint,
     );
     const fresh = this.stmts.get.get(mint);
-    if (fresh) this.cache.set(mint, fresh);
+    this._refreshCachedRow(mint, fresh);
   }
 
   recordMigration(mint, info = {}) {
@@ -399,7 +408,7 @@ class TokenRegistry {
       mint,
     );
     const fresh = this.stmts.get.get(mint);
-    if (fresh?.is_active) this.cache.set(mint, fresh);
+    this._refreshCachedRow(mint, fresh);
     return fresh || null;
   }
 
@@ -412,16 +421,24 @@ class TokenRegistry {
   }
 
   getToken(mint) {
-    return this.cache.get(mint) || this.stmts.get.get(mint) || null;
+    const cached = this.cache.get(mint);
+    if (cached && Number(cached.is_active) === 1) return cached;
+    if (cached) this.cache.delete(mint);
+
+    const row = this.stmts.get.get(mint) || null;
+    if (row && Number(row.is_active) === 1) this.cache.set(mint, row);
+    return row;
   }
 
   isActive(mint) {
     const row = this.cache.get(mint);
-    return !!(row && row.is_active);
+    if (row && Number(row.is_active) === 1) return true;
+    if (row) this.cache.delete(mint);
+    return false;
   }
 
   listActive() {
-    return Array.from(this.cache.values());
+    return Array.from(this.cache.values()).filter((row) => Number(row.is_active) === 1);
   }
 
   listAll() {
@@ -438,19 +455,14 @@ class TokenRegistry {
     const info = this.stmts.removeStaleByAge.run(Date.now(), cutoff);
     const removed = info.changes;
     if (removed > 0) {
-      // 清除缓存中对应的条目
-      for (const [mint, token] of this.cache) {
-        if (token.migration_time && token.migration_time < cutoff) {
-          this.cache.delete(mint);
-        }
-      }
+      this._reloadCache();
       console.log(`[TokenRegistry] 🕐 Removed ${removed} tokens migrated more than ${Math.round(maxAgeMs / 3600000)}h ago`);
     }
     return removed;
   }
 
   getActiveMintSet() {
-    return new Set(this.cache.keys());
+    return new Set(this.listActive().map((row) => row.mint));
   }
 }
 

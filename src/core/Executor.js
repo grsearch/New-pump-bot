@@ -49,6 +49,7 @@ const {
   replaceBuyWithExactQuoteIn,
   resolveFreshPoolState,
 } = require('./BuyExecutionGuard');
+const { classifyChainFailure, parseInstructionError } = require('./ChainFailureDiagnostics');
 
 // AllenHark Slipstream SDK (lazy load)
 let SlipstreamClient = null;
@@ -731,10 +732,16 @@ class Executor {
         const status = value?.[0];
         if (status) {
           if (status.err) {
+            const diagnostics = await this.fetchTxFailureDiagnostics(
+              signature,
+              status.err,
+              status.slot,
+            );
             return {
               confirmed: false,
               error: typeof status.err === 'string' ? status.err : JSON.stringify(status.err),
               slot: status.slot,
+              ...diagnostics,
             };
           }
           // confirmationStatus: 'processed' | 'confirmed' | 'finalized'
@@ -751,6 +758,65 @@ class Executor {
       await new Promise((r) => setTimeout(r, pollIntervalMs));
     }
     return { confirmed: false, error: 'not_landed' };
+  }
+
+  async fetchTxFailureDiagnostics(signature, statusError = null, slot = null) {
+    const fallback = classifyChainFailure({
+      error: statusError,
+      computeUnitLimit: this.computeUnitLimit,
+    });
+
+    let tx = null;
+    for (let attempt = 0; attempt < 3 && !tx; attempt += 1) {
+      try {
+        tx = await this.rpc.getTransaction(signature, {
+          commitment: 'confirmed',
+          maxSupportedTransactionVersion: 0,
+        });
+      } catch (_) {
+        // A failed status can become visible before the full transaction.
+      }
+      if (!tx && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+    if (!tx?.meta) return fallback;
+
+    const error = tx.meta.err || statusError;
+    const logs = Array.isArray(tx.meta.logMessages) ? tx.meta.logMessages : [];
+    const parsed = parseInstructionError(error);
+    const message = tx.transaction?.message;
+    const staticKeys = message?.staticAccountKeys || message?.accountKeys || [];
+    const loaded = tx.meta.loadedAddresses || {};
+    const allKeys = [
+      ...staticKeys,
+      ...(loaded.writable || []),
+      ...(loaded.readonly || []),
+    ];
+    const instructions = message?.compiledInstructions || message?.instructions || [];
+    const failedInstruction = parsed.instructionIndex == null
+      ? null
+      : instructions[parsed.instructionIndex];
+    const programKey = failedInstruction?.programId ||
+      allKeys[failedInstruction?.programIdIndex];
+    const instructionProgramId = programKey?.toBase58?.() ||
+      programKey?.toString?.() ||
+      (typeof programKey === 'string' ? programKey : null);
+    const computeUnitsConsumed = tx.meta.computeUnitsConsumed ?? null;
+    const classified = classifyChainFailure({
+      error,
+      logs,
+      computeUnitsConsumed,
+      computeUnitLimit: this.computeUnitLimit,
+    });
+
+    return {
+      ...classified,
+      instructionProgramId,
+      computeUnitsConsumed,
+      logTail: logs.slice(-24),
+      slot: tx.slot ?? slot,
+    };
   }
 
   /**

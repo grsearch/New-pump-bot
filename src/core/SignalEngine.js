@@ -181,6 +181,10 @@ class SignalEngine extends EventEmitter {
     const _signalReceivedAt = Date.now();
     const { mint, symbol, sellSol, priceImpactPct, seller, signature, ts, slot } = signal;
 
+    if (signal._reboundEntry) {
+      return this._handleReboundEntrySignal(signal, _signalReceivedAt);
+    }
+
     if (signal._age3Entry) {
       return this._handleAge3EntrySignal(signal, _signalReceivedAt);
     }
@@ -766,6 +770,113 @@ class SignalEngine extends EventEmitter {
   //   出场：EMA9下穿EMA20清仓 / 20%止盈 / 10%激活3%回撤移动止盈
   //   加仓：首仓价跌>=15% 允许加仓1次，独立止盈
   //   无止损、无其他过滤
+  _handleReboundEntrySignal(signal, signalReceivedAt) {
+    const {
+      mint,
+      symbol,
+      signature,
+      ts,
+      slot,
+    } = signal;
+    if (!mint) return;
+
+    if (signature && this.ourSignatures.has(signature)) {
+      monitor.inc('SignalEngine.rejectedSelfTrigger', 1, 'SignalEngine');
+      this._logReject(signal, 'self-triggered');
+      return;
+    }
+
+    const maxPushLagMs = config.strategy.maxPushLagMs || 0;
+    const pushLagMs = ts ? Date.now() - ts : 0;
+    if (maxPushLagMs > 0 && pushLagMs > maxPushLagMs) {
+      monitor.inc('SignalEngine.rejectedPushLag', 1, 'SignalEngine');
+      this._logReject(signal, `rebound signal stale: ${pushLagMs}ms>${maxPushLagMs}ms`);
+      return;
+    }
+
+    const rebound = signal._flow?.entryRebound;
+    if (!rebound) {
+      this._logReject(signal, 'rebound metrics missing');
+      return;
+    }
+
+    const openCount = this.positionManager.openPositionCount();
+    const inflightCount = this.inflightBuys.size;
+    if (openCount + inflightCount >= config.strategy.maxConcurrentPositions) {
+      monitor.inc('SignalEngine.rejectedMaxConcurrent', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `max concurrent (${openCount} open + ${inflightCount} inflight / ` +
+          `${config.strategy.maxConcurrentPositions})`,
+      );
+      return;
+    }
+
+    const protectionRemainingMs = this._getMintProtectionRemainingMs(mint);
+    if (protectionRemainingMs > 0) {
+      monitor.inc('SignalEngine.rejectedRebuyCooldown', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `MINT_PROTECTION_COOLDOWN: ${Math.round(protectionRemainingMs / 1000)}s remaining`,
+      );
+      return;
+    }
+    if (this.inflightBuys.has(mint)) {
+      monitor.inc('SignalEngine.rejectedInflightBuy', 1, 'SignalEngine');
+      this._logReject(signal, 'buy in-flight');
+      return;
+    }
+    if (this.positionManager.hasOpenPosition(mint)) {
+      monitor.inc('SignalEngine.rejectedSameMintOpen', 1, 'SignalEngine');
+      this._logReject(signal, 'same mint already has open position');
+      return;
+    }
+
+    const reason =
+      `one_second_rebound_v8: drop=${rebound.dropDepthPct.toFixed(2)}% ` +
+      `recovery=${rebound.recoveryPct.toFixed(2)}% ` +
+      `buyers1=${rebound.uniqueBuyers1s} confirm=${rebound.confirmGapMs}ms`;
+
+    monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');
+    this.inflightBuys.add(mint);
+    this.lastTriggerTs.set(mint, Date.now());
+    this.emit('buyOrder', {
+      ...signal,
+      reason,
+      sizeSol: config.strategy.positionSizeSol,
+      _signalReceivedAt: signalReceivedAt,
+    });
+
+    console.log(
+      `[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}`,
+    );
+    setImmediate(() => {
+      try {
+        this.tradeLogger.logSignal({
+          ts,
+          mint,
+          symbol,
+          kind: 'BUY_SIGNAL',
+          sellSol: signal.sellSol || 0,
+          priceImpactPct: signal.priceImpactPct || 0,
+          seller: null,
+          sellerTx: signature,
+          notes: reason,
+          accepted: true,
+        });
+      } catch (err) {
+        monitor.recordError('SignalEngine', err, {
+          phase: 'rebound_log_signal',
+          mint,
+        });
+      }
+    });
+
+    const inSignalEngineMs = Date.now() - signalReceivedAt;
+    monitor.set('SignalEngine.lastInEngineMs', inSignalEngineMs, 'SignalEngine');
+    monitor.set('SignalEngine.lastReboundSlot', slot || 0, 'SignalEngine');
+  }
+
   _handleAge3EntrySignal(signal, signalReceivedAt) {
     const {
       mint,

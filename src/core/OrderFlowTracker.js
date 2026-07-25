@@ -60,8 +60,8 @@ class OrderFlowTracker extends EventEmitter {
       boolEnv('ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL', boolEnv('ORDER_FLOW_REPLACE_DUMP_SIGNAL', true));
 
     const requestedEntryMode = String(
-      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'AGE3_BREADTH_V7') ||
-        'AGE3_BREADTH_V7',
+      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'ONE_SECOND_REBOUND_V8') ||
+        'ONE_SECOND_REBOUND_V8',
     ).toUpperCase();
     // Existing production .env files still name V5. Remap them so deployment cannot silently keep old entry rules.
     this.entryMode = requestedEntryMode === 'ACTIVITY_BURST_V5' ? 'BREADTH_BURST_V6' : requestedEntryMode;
@@ -129,6 +129,42 @@ class OrderFlowTracker extends EventEmitter {
       opts.triggerConfirmMaxGapMs ??
       flowConfig.triggerConfirmMaxGapMs ??
       numEnv('ACTIVITY_FLOW_TRIGGER_CONFIRM_MAX_GAP_MS', 3_000);
+    this.reboundWindowMs =
+      opts.reboundWindowMs ??
+      flowConfig.reboundWindowMs ??
+      numEnv('REBOUND_WINDOW_MS', 1_000);
+    this.reboundMinDropPct =
+      opts.reboundMinDropPct ??
+      flowConfig.reboundMinDropPct ??
+      numEnv('REBOUND_MIN_DROP_PCT', 20);
+    this.reboundMaxDropPct =
+      opts.reboundMaxDropPct ??
+      flowConfig.reboundMaxDropPct ??
+      numEnv('REBOUND_MAX_DROP_PCT', 65);
+    this.reboundMinRecoveryPct =
+      opts.reboundMinRecoveryPct ??
+      flowConfig.reboundMinRecoveryPct ??
+      numEnv('REBOUND_MIN_RECOVERY_PCT', 2);
+    this.reboundMaxRecoveryPct =
+      opts.reboundMaxRecoveryPct ??
+      flowConfig.reboundMaxRecoveryPct ??
+      numEnv('REBOUND_MAX_RECOVERY_PCT', 10);
+    this.reboundConfirmMinGapMs =
+      opts.reboundConfirmMinGapMs ??
+      flowConfig.reboundConfirmMinGapMs ??
+      numEnv('REBOUND_CONFIRM_MIN_GAP_MS', 1_000);
+    this.reboundConfirmMaxGapMs =
+      opts.reboundConfirmMaxGapMs ??
+      flowConfig.reboundConfirmMaxGapMs ??
+      numEnv('REBOUND_CONFIRM_MAX_GAP_MS', 3_000);
+    this.reboundMinUniqueBuyers1s =
+      opts.reboundMinUniqueBuyers1s ??
+      flowConfig.reboundMinUniqueBuyers1s ??
+      numEnv('REBOUND_MIN_UNIQUE_BUYERS_1S', 2);
+    this.reboundCooldownMs =
+      opts.reboundCooldownMs ??
+      flowConfig.reboundCooldownMs ??
+      numEnv('REBOUND_COOLDOWN_MS', 60_000);
     this.breadthMinUniqueBuyers1m =
       opts.breadthMinUniqueBuyers1m ??
       flowConfig.breadthMinUniqueBuyers1m ??
@@ -310,7 +346,14 @@ class OrderFlowTracker extends EventEmitter {
       opts.maxEventsPerMint ?? flowConfig.maxEventsPerMint ?? numEnv('ACTIVITY_FLOW_MAX_EVENTS_PER_MINT', 600);
     this.debug = opts.debug ?? flowConfig.debug ?? boolEnv('ACTIVITY_FLOW_DEBUG', false);
 
-    this.maxWindowMs = Math.max(90_000, this.window5Ms, this.window15Ms, this.window30Ms, this.window60Ms);
+    this.maxWindowMs = Math.max(
+      90_000,
+      this.reboundWindowMs,
+      this.window5Ms,
+      this.window15Ms,
+      this.window30Ms,
+      this.window60Ms,
+    );
     this.states = new Map();
     this.cooldowns = new Map();
     this._lastDebugLog = new Map();
@@ -373,6 +416,7 @@ class OrderFlowTracker extends EventEmitter {
       this.entryMode === 'ACTIVITY_BURST_V5' ||
       this.entryMode === 'BREADTH_BURST_V6' ||
       this.entryMode === 'AGE3_BREADTH_V7' ||
+      this.entryMode === 'ONE_SECOND_REBOUND_V8' ||
       ev.side === 'BUY'
     ) {
       this._trySignal(state, ev);
@@ -394,6 +438,8 @@ class OrderFlowTracker extends EventEmitter {
       windowReady: 0,
       fdvReady: 0,
       buyersReady: 0,
+      dropReady: 0,
+      recoveryReady: 0,
       armReady: 0,
       armed: 0,
       waiting: 0,
@@ -405,6 +451,7 @@ class OrderFlowTracker extends EventEmitter {
       const latest = state.events[state.events.length - 1];
       if (!latest) continue;
 
+      const s1 = this._stats(state, now, this.reboundWindowMs);
       const s5 = this._stats(state, now, this.window5Ms);
       const s10 = this._stats(state, now, this.window10Ms);
       const s60 = this._stats(state, now, this.window60Ms);
@@ -415,7 +462,46 @@ class OrderFlowTracker extends EventEmitter {
       let triggerReady;
       let trigger;
       let age3 = null;
-      if (this.entryMode === 'AGE3_BREADTH_V7') {
+      if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+        const arm = state.reboundArm;
+        const currentPrice = latest.price;
+        const observedDropPct = Math.max(
+          Math.max(0, -s1.priceChangePct),
+          Math.max(0, -latest.priceChangePct),
+        );
+        const dropDepthPct = arm?.deepestDropPct ?? observedDropPct;
+        const recoveryPct = arm?.lowPrice > 0
+          ? ((currentPrice - arm.lowPrice) / arm.lowPrice) * 100
+          : 0;
+        const confirmGapMs = arm ? now - arm.lowTs : null;
+        conditions = {
+          dropRange:
+            dropDepthPct >= this.reboundMinDropPct &&
+            dropDepthPct < this.reboundMaxDropPct,
+          confirmWindow:
+            arm != null &&
+            confirmGapMs >= this.reboundConfirmMinGapMs &&
+            confirmGapMs <= this.reboundConfirmMaxGapMs,
+          recovery:
+            recoveryPct >= this.reboundMinRecoveryPct &&
+            recoveryPct <= this.reboundMaxRecoveryPct,
+          buyers1s: s1.uniqueBuyers >= this.reboundMinUniqueBuyers1s,
+        };
+        armReady = arm != null || conditions.dropRange;
+        triggerReady =
+          arm != null &&
+          conditions.confirmWindow &&
+          conditions.recovery &&
+          conditions.buyers1s;
+        trigger = {
+          dropDepthPct: round(dropDepthPct, 3),
+          recoveryPct: round(recoveryPct, 3),
+          lowPrice: arm?.lowPrice ?? null,
+          currentPrice,
+          confirmGapMs,
+          uniqueBuyers1s: s1.uniqueBuyers,
+        };
+      } else if (this.entryMode === 'AGE3_BREADTH_V7') {
         age3 = this._age3Metrics(mint, latest.price, now, s60);
         conditions = {
           ageReady: age3.tokenAgeMs != null && age3.tokenAgeMs >= this.age3EntryTargetMs,
@@ -494,13 +580,24 @@ class OrderFlowTracker extends EventEmitter {
           txAcceleration5s: round(txAcceleration5s, 2),
         };
       }
-      const armed = state.armedAt != null && state.armedUntil != null && state.armedUntil >= now;
+      const reboundArmed =
+        this.entryMode === 'ONE_SECOND_REBOUND_V8' &&
+        state.reboundArm != null &&
+        state.reboundArm.expiresAt >= now;
+      const armed = reboundArmed ||
+        (state.armedAt != null && state.armedUntil != null && state.armedUntil >= now);
       const recentlySignaled = state.lastV5SignalTs != null && now - state.lastV5SignalTs <= this.window60Ms;
       const recentlyCancelled =
         state.lastArmCancelTs != null && now - state.lastArmCancelTs <= this.window15Ms;
 
       let stage = 'monitoring';
-      if (this.entryMode === 'AGE3_BREADTH_V7') {
+      if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+        if (recentlySignaled) stage = 'signaled';
+        else if (reboundArmed && triggerReady) stage = 'ready';
+        else if (reboundArmed && conditions.confirmWindow) stage = 'confirming';
+        else if (reboundArmed) stage = 'armed';
+        else if (recentlyCancelled) stage = 'cancelled';
+      } else if (this.entryMode === 'AGE3_BREADTH_V7') {
         if (state.age3Decision === 'signaled') stage = 'signaled';
         else if (state.age3EvaluatedAt != null) stage = 'cancelled';
         else if (conditions.ageWindow) stage = triggerReady ? 'ready' : 'waiting';
@@ -518,6 +615,9 @@ class OrderFlowTracker extends EventEmitter {
       if (conditions.ageWindow) summary.windowReady++;
       if (conditions.fdv) summary.fdvReady++;
       if (conditions.buyers1m) summary.buyersReady++;
+      if (conditions.buyers1s) summary.buyersReady++;
+      if (conditions.dropRange) summary.dropReady++;
+      if (conditions.recovery) summary.recoveryReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
       if (stage === 'waiting') summary.waiting++;
@@ -532,13 +632,16 @@ class OrderFlowTracker extends EventEmitter {
         stage,
         armReady,
         triggerReady,
-        armedAt: armed ? state.armedAt : null,
-        armedUntil: armed ? state.armedUntil : null,
+        armedAt: reboundArmed ? state.reboundArm.armedAt : (armed ? state.armedAt : null),
+        armedUntil: reboundArmed ? state.reboundArm.expiresAt : (armed ? state.armedUntil : null),
         confirmFirstTs: armed ? state.triggerConfirmFirstTs : null,
         lastSignalTs: state.lastV5SignalTs || null,
         cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
         waitReason: armed ? state.lastArmWaitReason : null,
-        decision: state.age3Decision,
+        decision:
+          this.entryMode === 'ONE_SECOND_REBOUND_V8'
+            ? state.reboundDecision
+            : state.age3Decision,
         tokenAgeMs: age3?.tokenAgeMs ?? null,
         fdvUsd: age3?.fdvUsd ?? null,
         conditions,
@@ -546,6 +649,7 @@ class OrderFlowTracker extends EventEmitter {
           ...this._compactStats(s60),
           volumeUsd: round(s60.volumeSol * this.solPriceUsd, 2),
         },
+        s1: this._compactStats(s1),
         s10: this._compactStats(s10),
         s5: this._compactStats(s5),
         trigger,
@@ -561,6 +665,11 @@ class OrderFlowTracker extends EventEmitter {
         const bDistance = Math.abs((b.tokenAgeMs ?? 0) - this.age3EntryTargetMs);
         return (aDistance - bDistance) ||
           ((b.s60.uniqueBuyers || 0) - (a.s60.uniqueBuyers || 0)) ||
+          (b.updatedAt - a.updatedAt);
+      }
+      if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+        return (Number(b.conditions.dropRange) - Number(a.conditions.dropRange)) ||
+          ((b.trigger.recoveryPct || 0) - (a.trigger.recoveryPct || 0)) ||
           (b.updatedAt - a.updatedAt);
       }
       return (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
@@ -587,6 +696,15 @@ class OrderFlowTracker extends EventEmitter {
         priceChange10sMaxPct: this.triggerMaxPriceChange10sPct,
         confirmMinGapMs: this.triggerConfirmMinGapMs,
         confirmMaxGapMs: this.triggerConfirmMaxGapMs,
+        reboundWindowMs: this.reboundWindowMs,
+        reboundMinDropPct: this.reboundMinDropPct,
+        reboundMaxDropPct: this.reboundMaxDropPct,
+        reboundMinRecoveryPct: this.reboundMinRecoveryPct,
+        reboundMaxRecoveryPct: this.reboundMaxRecoveryPct,
+        reboundConfirmMinGapMs: this.reboundConfirmMinGapMs,
+        reboundConfirmMaxGapMs: this.reboundConfirmMaxGapMs,
+        reboundMinUniqueBuyers1s: this.reboundMinUniqueBuyers1s,
+        reboundCooldownMs: this.reboundCooldownMs,
         buyers1m: this.breadthMinUniqueBuyers1m,
         age3TargetMs: this.age3EntryTargetMs,
         age3ToleranceMs: this.age3EntryToleranceMs,
@@ -636,6 +754,10 @@ class OrderFlowTracker extends EventEmitter {
         age3Decision: null,
         age3TokenAgeMs: null,
         age3FdvUsd: null,
+        reboundArm: null,
+        reboundDecision: null,
+        reboundLastDropPct: null,
+        reboundLastRecoveryPct: null,
         firstBuySeen: new Map(),
         lastWalletPruneTs: 0,
       };
@@ -811,6 +933,11 @@ class OrderFlowTracker extends EventEmitter {
     const cooldownUntil = this.cooldowns.get(ev.mint) || 0;
     if (cooldownUntil > wallNow) return;
 
+    if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+      this._tryOneSecondReboundV8(state, ev, wallNow);
+      return;
+    }
+
     if (this.entryMode === 'AGE3_BREADTH_V7') {
       this._tryAge3BreadthV7(state, ev);
       return;
@@ -857,6 +984,145 @@ class OrderFlowTracker extends EventEmitter {
       poolQuoteSol,
       entryPattern,
     });
+  }
+
+  _cancelReboundArm(state, ev, reason, wallNow, useCooldown = true) {
+    state.reboundDecision = reason;
+    state.lastArmCancelTs = ev.ts;
+    state.lastArmCancelReason = reason;
+    state.reboundArm = null;
+    if (useCooldown && this.reboundCooldownMs > 0) {
+      this.cooldowns.set(ev.mint, wallNow + this.reboundCooldownMs);
+    }
+    console.log(
+      `[ActivityFlow] REBOUND_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${reason}`,
+    );
+  }
+
+  _tryOneSecondReboundV8(state, ev, wallNow) {
+    const s1 = this._stats(state, ev.ts, this.reboundWindowMs);
+    const rollingDropPct = Math.max(0, -s1.priceChangePct);
+    const swapDropPct = Math.max(0, -ev.priceChangePct);
+    const observedDropPct = Math.max(rollingDropPct, swapDropPct);
+    let arm = state.reboundArm;
+
+    if (!arm) {
+      if (s1.sellCount === 0 || observedDropPct < this.reboundMinDropPct) return;
+      if (observedDropPct >= this.reboundMaxDropPct) {
+        this._cancelReboundArm(
+          state,
+          ev,
+          `drop ${observedDropPct.toFixed(2)}%>=${this.reboundMaxDropPct}% hard reject`,
+          wallNow,
+        );
+        return;
+      }
+
+      const rollingReference = s1.firstPrice > ev.price ? s1.firstPrice : null;
+      const swapReference = ev.priceBefore > ev.price ? ev.priceBefore : null;
+      const referencePrice = Math.max(
+        rollingReference || 0,
+        swapReference || 0,
+        ev.price / Math.max(1 - observedDropPct / 100, 0.0001),
+      );
+      arm = {
+        armedAt: ev.ts,
+        expiresAt: ev.ts + this.reboundConfirmMaxGapMs,
+        referencePrice,
+        lowPrice: ev.price,
+        lowTs: ev.ts,
+        deepestDropPct: observedDropPct,
+      };
+      state.reboundArm = arm;
+      state.reboundDecision = 'armed';
+      state.reboundLastDropPct = observedDropPct;
+      state.reboundLastRecoveryPct = 0;
+      console.log(
+        `[ActivityFlow] REBOUND_ARM ${state.symbol || ev.mint.slice(0, 6)} ` +
+        `drop=${observedDropPct.toFixed(2)}% low=${ev.price.toExponential(4)} ` +
+        `confirm=${this.reboundConfirmMinGapMs}-${this.reboundConfirmMaxGapMs}ms`,
+      );
+      return;
+    }
+
+    const liveDropPct = arm.referencePrice > 0
+      ? Math.max(0, ((arm.referencePrice - ev.price) / arm.referencePrice) * 100)
+      : observedDropPct;
+    if (ev.price < arm.lowPrice) {
+      arm.lowPrice = ev.price;
+      arm.lowTs = ev.ts;
+      arm.expiresAt = ev.ts + this.reboundConfirmMaxGapMs;
+      arm.deepestDropPct = Math.max(arm.deepestDropPct, liveDropPct);
+      state.reboundLastDropPct = arm.deepestDropPct;
+      state.reboundLastRecoveryPct = 0;
+      if (arm.deepestDropPct >= this.reboundMaxDropPct) {
+        this._cancelReboundArm(
+          state,
+          ev,
+          `continued drop ${arm.deepestDropPct.toFixed(2)}%>=${this.reboundMaxDropPct}% hard reject`,
+          wallNow,
+        );
+      }
+      return;
+    }
+
+    const confirmGapMs = ev.ts - arm.lowTs;
+    if (confirmGapMs > this.reboundConfirmMaxGapMs) {
+      this._cancelReboundArm(
+        state,
+        ev,
+        `confirmation timeout ${confirmGapMs}ms>${this.reboundConfirmMaxGapMs}ms`,
+        wallNow,
+      );
+      return;
+    }
+
+    const recoveryPct = arm.lowPrice > 0
+      ? ((ev.price - arm.lowPrice) / arm.lowPrice) * 100
+      : 0;
+    state.reboundLastRecoveryPct = recoveryPct;
+    if (recoveryPct > this.reboundMaxRecoveryPct) {
+      this._cancelReboundArm(
+        state,
+        ev,
+        `recovery ${recoveryPct.toFixed(2)}%>${this.reboundMaxRecoveryPct}% chase reject`,
+        wallNow,
+      );
+      return;
+    }
+    if (confirmGapMs < this.reboundConfirmMinGapMs) return;
+    if (recoveryPct < this.reboundMinRecoveryPct) return;
+    if (s1.uniqueBuyers < this.reboundMinUniqueBuyers1s) return;
+
+    const s5 = this._stats(state, ev.ts, this.window5Ms);
+    const s10 = this._stats(state, ev.ts, this.window10Ms);
+    const s15 = this._stats(state, ev.ts, this.window15Ms);
+    const s30 = this._stats(state, ev.ts, this.window30Ms);
+    const s60 = this._stats(state, ev.ts, this.window60Ms);
+    const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
+    state.reboundDecision = 'signaled';
+    state.lastV5SignalTs = ev.ts;
+    state.reboundArm = null;
+    this._emitBuySignal(state, ev, {
+      s1,
+      s5,
+      s10,
+      s15,
+      s30,
+      s60,
+      poolQuoteSol,
+      reboundPattern: {
+        armedAt: arm.armedAt,
+        lowTs: arm.lowTs,
+        confirmGapMs,
+        referencePrice: arm.referencePrice,
+        lowPrice: arm.lowPrice,
+        dropDepthPct: arm.deepestDropPct,
+        recoveryPct,
+        uniqueBuyers1s: s1.uniqueBuyers,
+      },
+    });
+    this.cooldowns.set(ev.mint, wallNow + this.reboundCooldownMs);
   }
 
   _tryAge3BreadthV7(state, ev) {
@@ -1224,6 +1490,7 @@ class OrderFlowTracker extends EventEmitter {
     state,
     ev,
     {
+      s1 = null,
       s5,
       s10,
       s15,
@@ -1234,9 +1501,11 @@ class OrderFlowTracker extends EventEmitter {
       v5Pattern = null,
       v6Pattern = null,
       age3Pattern = null,
+      reboundPattern = null,
     },
   ) {
     const flow = {
+      s1: s1 ? this._compactStats(s1) : null,
       s5: this._compactStats(s5),
       s10: this._compactStats(s10),
       s15: this._compactStats(s15),
@@ -1245,6 +1514,7 @@ class OrderFlowTracker extends EventEmitter {
       entry15s: entryPattern ? this._compactEntryPattern(entryPattern) : null,
       entryV5: v5Pattern ? this._compactV5Pattern(v5Pattern) : null,
       entryV6: v6Pattern ? this._compactV6Pattern(v6Pattern) : null,
+      entryRebound: reboundPattern ? this._compactReboundPattern(reboundPattern) : null,
       entryAge3: age3Pattern ? {
         migrationTs: age3Pattern.migrationTs,
         tokenAgeMs: round(age3Pattern.tokenAgeMs, 0),
@@ -1252,11 +1522,13 @@ class OrderFlowTracker extends EventEmitter {
         uniqueBuyers1m: age3Pattern.uniqueBuyers1m,
       } : null,
     };
-    const entryStats = this.entryMode === 'FLOW_ACCEL_15S' ||
+    const entryStats = flow.entryRebound ? s1 : (
+      this.entryMode === 'FLOW_ACCEL_15S' ||
       this.entryMode === 'VOLUME_RATIO_1M' ||
       this.entryMode === 'ACTIVITY_BURST_V5' ||
       this.entryMode === 'BREADTH_BURST_V6' ||
-      this.entryMode === 'AGE3_BREADTH_V7' ? s60 : s15;
+      this.entryMode === 'AGE3_BREADTH_V7' ? s60 : s15
+    );
 
     const signal = {
       mint: ev.mint,
@@ -1275,15 +1547,29 @@ class OrderFlowTracker extends EventEmitter {
       _aggregated: true,
       _activityFlow: true,
       _age3Entry: !!flow.entryAge3,
+      _reboundEntry: !!flow.entryRebound,
       _sellCount: entryStats.sellCount,
       _sellCount10s: entryStats.sellCount,
       _totalSellSol10s: round(entryStats.sellSol, 4),
       _sellers: [...new Set(entryStats.events.filter((x) => x.side === 'SELL').map((x) => x.signer).filter(Boolean))],
       _flow: flow,
-      _flowPattern: flow.entryAge3 || flow.entryV6 || flow.entryV5 || flow.entry15s,
+      _flowPattern:
+        flow.entryRebound ||
+        flow.entryAge3 ||
+        flow.entryV6 ||
+        flow.entryV5 ||
+        flow.entry15s,
     };
 
-    if (flow.entryAge3) {
+    if (flow.entryRebound) {
+      console.log(
+        `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
+        `drop=${flow.entryRebound.dropDepthPct.toFixed(2)}% ` +
+        `recovery=${flow.entryRebound.recoveryPct.toFixed(2)}% ` +
+        `buyers1=${flow.entryRebound.uniqueBuyers1s} ` +
+        `confirm=${flow.entryRebound.confirmGapMs}ms`,
+      );
+    } else if (flow.entryAge3) {
       console.log(
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
         `age=${(flow.entryAge3.tokenAgeMs / 1000).toFixed(1)}s ` +
@@ -1437,6 +1723,19 @@ class OrderFlowTracker extends EventEmitter {
       priceChangePct: round(stats.priceChangePct, 3),
       rangePct: round(stats.rangePct, 3),
       volatilityPct: round(stats.volatilityPct, 3),
+    };
+  }
+
+  _compactReboundPattern(pattern) {
+    return {
+      armedAt: pattern.armedAt,
+      lowTs: pattern.lowTs,
+      confirmGapMs: pattern.confirmGapMs,
+      referencePrice: pattern.referencePrice,
+      lowPrice: pattern.lowPrice,
+      dropDepthPct: round(pattern.dropDepthPct, 3),
+      recoveryPct: round(pattern.recoveryPct, 3),
+      uniqueBuyers1s: pattern.uniqueBuyers1s,
     };
   }
 

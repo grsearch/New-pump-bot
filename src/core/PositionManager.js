@@ -38,6 +38,15 @@ monitor.registerModule('PositionManager', { staleMs: 10_000, label: 'Position Ma
 
 const SELL_RETRY_DELAYS_MS = [500, 1500, 3000, 5000, 10_000, 20_000]; // 之后保持 30s
 
+const DEDICATED_EXIT_MODES = new Set([
+  'AGE3_TRAILING_V7',
+  'ONE_SECOND_REBOUND_V8',
+]);
+
+function usesDedicatedExitPolicy() {
+  return DEDICATED_EXIT_MODES.has(config.strategy.exitMode);
+}
+
 class PositionManager extends EventEmitter {
   constructor({ tradeLogger, executor, priceTracker, tokenRegistry, tickStream, postExitTracker }) {
     super();
@@ -733,6 +742,32 @@ class PositionManager extends EventEmitter {
     if (!result.confirmed) {
       monitor.inc('PositionManager.buyChainFail', 1, 'PositionManager');
       const errMsg = result.error || 'not_landed';
+      const errorClass = result.errorClass || 'OTHER_CHAIN_FAILURE';
+      monitor.inc(`PositionManager.buyChainFail_${errorClass}`, 1, 'PositionManager');
+      console.error(
+        `[PositionManager] BUY failure diagnostics: class=${errorClass} ` +
+          `ix=${result.instructionIndex ?? 'n/a'} ` +
+          `program=${result.instructionProgramId || result.failedProgramId || 'n/a'} ` +
+          `cu=${result.computeUnitsConsumed ?? 'n/a'}/${this.executor.computeUnitLimit || 'n/a'}`,
+      );
+      if (result.logTail?.length) {
+        console.error(
+          `[PositionManager] BUY failure logs ${signature.slice(0, 8)}..: ` +
+            JSON.stringify(result.logTail),
+        );
+      }
+      try {
+        this.tradeLogger.markBuyChainFailed(signature, {
+          ...result,
+          error: errMsg,
+        });
+      } catch (err) {
+        monitor.recordError('PositionManager', err, {
+          phase: 'mark_buy_chain_failed',
+          mint,
+          signature,
+        });
+      }
       console.error(
         `[PositionManager] ⚠️ BUY tx FAILED on chain: ${pos.symbol || mint.slice(0, 6)} ` +
           `sig=${signature.slice(0, 8)}.. error=${errMsg}`,
@@ -763,13 +798,30 @@ class PositionManager extends EventEmitter {
         symbol: pos.symbol,
         signature,
         error: errMsg,
+        errorClass,
+        instructionIndex: result.instructionIndex ?? null,
+        instructionProgramId: result.instructionProgramId || null,
+        failedProgramId: result.failedProgramId || null,
+        computeUnitsConsumed: result.computeUnitsConsumed ?? null,
+        logTail: result.logTail || null,
       });
       // v3.17.9: 清 watchdog
       if (pos._reconcileWatchdog) {
         clearTimeout(pos._reconcileWatchdog);
         pos._reconcileWatchdog = null;
       }
-      this.emit('buyChainFailed', { positionId, mint, symbol: pos.symbol, signature, error: errMsg });
+      this.emit('buyChainFailed', {
+        positionId,
+        mint,
+        symbol: pos.symbol,
+        signature,
+        error: errMsg,
+        errorClass,
+        instructionIndex: result.instructionIndex ?? null,
+        instructionProgramId: result.instructionProgramId || null,
+        failedProgramId: result.failedProgramId || null,
+        computeUnitsConsumed: result.computeUnitsConsumed ?? null,
+      });
 
       // v3.32: IncorrectProgramId → pool 已迁移到 Raydium，标记 pool dead 防止再次浪费费
       if (errMsg && (errMsg.includes('IncorrectProgramId') || errMsg.includes('IncorrectProgramId'))) {
@@ -1046,15 +1098,17 @@ class PositionManager extends EventEmitter {
           `[PositionManager] TIMEOUT ${pos.symbol || pos.mint.slice(0, 6)} ` +
           `peak=${peakPnlForTimeout.toFixed(1)}% timeout=${(timeoutMs/1000).toFixed(0)}s age=${(age/1000).toFixed(0)}s`,
         );
-        const timeoutMin = Math.round(timeoutMs / 60000);
-        this._exitForCondition(pos, lastPrice, `TIMEOUT_${timeoutMin}M`);
+        const timeoutReason = timeoutMs < 60_000
+          ? `TIMEOUT_${Math.round(timeoutMs / 1000)}S`
+          : `TIMEOUT_${Math.round(timeoutMs / 60_000)}M`;
+        this._exitForCondition(pos, lastPrice, timeoutReason);
         continue;
       }
 
       // v3.18: EARLY_LOW_PEAK_CUT — 死币早砍,连续时间覆盖
       // v3.32b: 可通过 EARLY_LOW_PEAK_CUT_ENABLED=0 禁用
       if (
-        config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+        !usesDedicatedExitPolicy() &&
         process.env.EARLY_LOW_PEAK_CUT_ENABLED === '1'
       ) {
       // 依据:6/2 LOW_PEAK_TIMEOUT 漏网 132 笔死币扛 18-20min 亏 -8~-11%
@@ -1765,7 +1819,7 @@ class PositionManager extends EventEmitter {
     // Buy price broke below pre-buy 5min range support + PnL < -10% + trailing not armed
     // v3.24: disabled via RANGE_STOP_ENABLED=0
     {
-      const rangeStopEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+      const rangeStopEnabled = !usesDedicatedExitPolicy() &&
         parseInt(process.env.RANGE_STOP_ENABLED || '0', 10);
       const rangeSupportPct = parseFloat(process.env.RANGE_STOP_SUPPORT_TOLERANCE_PCT || '3');
       const rangeStopPnlThreshold = parseFloat(process.env.RANGE_STOP_PNL_THRESHOLD_PCT || '-10');
@@ -1790,7 +1844,7 @@ class PositionManager extends EventEmitter {
     // Price breaks below 5-minute moving average + PnL < threshold + trailing not armed
     // Data: break+PnL<-8% saves avg 0.7% vs holding, 66% of broken-trend trades continue falling
     {
-      const trendStopEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+      const trendStopEnabled = !usesDedicatedExitPolicy() &&
         process.env.TREND_STOP_ENABLED === '1';
       const trendStopPnlThreshold = parseFloat(process.env.TREND_STOP_PNL_THRESHOLD_PCT || '-8');
       const trendStopMaWindow = parseInt(process.env.TREND_STOP_MA_WINDOW_SEC || '300') * 1000; // default 5min
@@ -1829,7 +1883,7 @@ class PositionManager extends EventEmitter {
     // 目的：捕获5-10%的"脉冲后回撤"行情，防止涨了不到10%就跌回来
     // 不在窗口内或涨幅超过10%的交给trailing stop处理
     {
-      const timedTpEnabled = config.strategy.exitMode !== 'AGE3_TRAILING_V7' &&
+      const timedTpEnabled = !usesDedicatedExitPolicy() &&
         process.env.TIMED_TP_ENABLED === '1';
       if (timedTpEnabled && !pos.trailingArmed) {
         // 阶梯阈值：越晚持仓时间，阈值越高（给拉盘更多空间触发trailing）
@@ -2121,7 +2175,7 @@ class PositionManager extends EventEmitter {
       let rebuyCooldownMs;
       if (isSmartStop) {
         rebuyCooldownMs = parseInt(process.env.SMART_STOP_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
-      } else if (isTimeout) {
+      } else if (isTimeout && config.strategy.exitMode !== 'ONE_SECOND_REBOUND_V8') {
         rebuyCooldownMs = parseInt(process.env.TIMEOUT_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
       } else {
         rebuyCooldownMs = config.strategy.rebuyCooldownMs;

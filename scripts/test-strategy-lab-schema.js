@@ -42,6 +42,7 @@ function run() {
     ts: 1_800_000_000_000,
     mint: 'TradeMint',
     side: 'BUY',
+    signature: 'BuyFailSig',
     success: false,
     error: 'ExceededSlippage',
     configuredSlippagePct: 50,
@@ -70,6 +71,25 @@ function run() {
   assert.strictEqual(tradeDiagnostic.buy_mode, 'buy_exact_quote_in');
   assert.strictEqual(tradeDiagnostic.min_base_amount_out_raw, '173914');
   assert.strictEqual(tradeDiagnostic.virtual_quote_reserves_raw, '5000000000');
+  assert.strictEqual(logger.markBuyChainFailed('BuyFailSig', {
+    error: '{"InstructionError":[6,{"Custom":1}]}',
+    errorClass: 'TOKEN_PROGRAM_INSUFFICIENT_FUNDS',
+    instructionIndex: 6,
+    instructionProgramId: 'PumpProgram',
+    failedProgramId: 'TokenProgram',
+    computeUnitsConsumed: 180000,
+    logTail: ['Program TokenProgram failed: custom program error: 0x1'],
+  }), 1);
+  const failedTrade = db.prepare("SELECT * FROM trades WHERE mint = 'TradeMint'").get();
+  assert.strictEqual(failedTrade.success, 0);
+  assert.strictEqual(failedTrade.chain_error_class, 'TOKEN_PROGRAM_INSUFFICIENT_FUNDS');
+  assert.strictEqual(failedTrade.chain_instruction_index, 6);
+  assert.strictEqual(failedTrade.chain_program_id, 'PumpProgram');
+  assert.strictEqual(failedTrade.chain_failed_program_id, 'TokenProgram');
+  assert.strictEqual(failedTrade.chain_compute_units, 180000);
+  assert.deepStrictEqual(JSON.parse(failedTrade.chain_logs_json), [
+    'Program TokenProgram failed: custom program error: 0x1',
+  ]);
   const snapshotColumns = db.pragma('table_info(token_snapshots)').map((row) => row.name);
   const swapColumns = new Set(db.pragma('table_info(swap_events)').map((row) => row.name));
   assert.strictEqual(snapshotColumns.length, logger._snapshotColumnNames().length + 1);

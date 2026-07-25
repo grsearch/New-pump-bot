@@ -66,10 +66,10 @@ function seedBuyers(subject, count, firstOffset = 125_000, price = PRICE_PASS) {
 }
 
 async function run() {
-  assert.strictEqual(config.activityFlow.entryMode, 'AGE3_BREADTH_V7');
-  assert.strictEqual(config.activityFlow.enabled, true, 'V7 must run live unless the emergency kill switch is set');
-  assert.strictEqual(config.activityFlow.replaceDumpSignal, true, 'V7 must suppress legacy dump entries');
-  assert.strictEqual(config.strategy.exitMode, 'AGE3_TRAILING_V7');
+  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.activityFlow.enabled, true, 'V8 must run live unless the emergency kill switch is set');
+  assert.strictEqual(config.activityFlow.replaceDumpSignal, true, 'V8 must suppress legacy dump entries');
+  assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
 
   const subject = tracker();
   const signals = [];
@@ -143,7 +143,7 @@ async function run() {
   assert.strictEqual(acceptedSignals.length, 1, 'a successful historical BUY must block the mint forever');
   engine.shutdown();
 
-  console.log('Strategy V7 AGE3 breadth tests: PASS');
+  console.log('Legacy Strategy V7 AGE3 compatibility tests: PASS');
   process.exit(0);
 }
 

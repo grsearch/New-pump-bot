@@ -16,8 +16,8 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
-// Production only trades the first ten minutes after confirmed migration.
-const maxMintAgeMinutes = 10;
+// Keep graduated tokens available for short-lived rebound opportunities.
+const maxMintAgeMinutes = 120;
 const maxMintAgeHours = maxMintAgeMinutes / 60;
 
 const config = {
@@ -26,7 +26,7 @@ const config = {
 
   // ============ Strategy ============
   strategy: {
-    exitMode: 'AGE3_TRAILING_V7',
+    exitMode: 'ONE_SECOND_REBOUND_V8',
     // 触发条件（DumpDetector）
     // v3.17.20 用户调参：MIN_SELL_SOL 6.0, MIN_PRICE_IMPACT_PCT 10.0
     minSellSol: parseFloat(process.env.MIN_SELL_SOL || '20'),
@@ -68,9 +68,9 @@ const config = {
     //   trailingDrawdownPct: armed 后，价格从 HWM 回撤此 % 立即 SELL
     //   trailingMinHwmAgeMs: HWM 必须稳定至少此毫秒数（防单 tick 污染）
     //   设 trailingActivatePct=0 或 trailingDrawdownPct=0 可禁用移动止盈
-    trailingActivatePct: 50,
-    trailingDrawdownPct: 10,
-    trailingMinHwmAgeMs: parseInt(process.env.TRAILING_MIN_HWM_AGE_MS || '2000', 10),
+    trailingActivatePct: 8,
+    trailingDrawdownPct: 3,
+    trailingMinHwmAgeMs: 500,
 
     // RSI 超买退出：使用当前未收盘的 1 分钟 RSI，便于在 swap 到达时立即响应。
     // 一旦同币任一仓位已经激活移动止盈，RSI 退出让位于移动止盈。
@@ -90,7 +90,7 @@ const config = {
     //     - 5 秒：覆盖砸盘后短暂剧烈波动（实测多数 < 3 秒就稳定）
     //     - 太短（< 3s）：保护不够，自买入虚高没消化完
     //     - 太长（> 10s）：错过早期快速反弹的入场窗口
-    stabilizationMs: parseInt(process.env.STABILIZATION_MS || '5000', 10),
+    stabilizationMs: 0,
 
     // v3.17.7: stabilization 期内 emergency_stop 的阈值
     //   stabilization 期内"相对 entryPrice 的 PnL"不可靠（自买入推高+回归造成假亏损）
@@ -103,7 +103,7 @@ const config = {
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: 0,
+    fixedStopLossPct: -25,
     emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
@@ -122,7 +122,7 @@ const config = {
     //   v3.17.20: 设 0 禁用 TIMEOUT 卖出，持仓靠 TP/Trailing/Emergency 退出
     //   v3.17.32: 恢复为 4h 强制退出(数据回测: 4h+ 只有 30% 胜率, 平均亏 -13%)
     // Activity strategies hard timeout: close every remaining position after 180 seconds.
-    maxHoldMs: 0,
+    maxHoldMs: 20_000,
 
     // Activity strategies exit quiet positions before the hard 180s timeout.
     noBounceExitEnabled: false,
@@ -176,7 +176,7 @@ const config = {
 
     // 风控（v3.17 默认 maxConcurrent 5）
     cooldownMsPerToken: parseInt(process.env.COOLDOWN_MS_PER_TOKEN || '0', 10),
-    rebuyCooldownMs: parseInt(process.env.REBUY_COOLDOWN_MS || '300000', 10),
+    rebuyCooldownMs: 60_000,
     maxConcurrentPositions: parseInt(process.env.MAX_CONCURRENT_POSITIONS || '10', 10),
 
     // v3.17.6: 同砸单去重时间窗（毫秒）
@@ -218,7 +218,7 @@ const config = {
     maxMintAgeHours,
     maxMintAgeMinutes,
     maxTokenAgeMs: maxMintAgeHours * 60 * 60 * 1000,
-    positionFdvExitUsd: 20000,
+    positionFdvExitUsd: 0,
     pumpTokenSupply: parseFloat(process.env.PUMP_TOKEN_SUPPLY || '1000000000'),
     solPriceUsd: solPriceUsdForConfig,
     // v3.17.20: FDV lower bound in USD; refreshed once per minute by TokenWatchdog.
@@ -231,11 +231,20 @@ const config = {
 
   // ============ Activity-flow entry ============
   activityFlow: {
-    // Strategy V7: make one decision at migration AGE 3m.
-    // V7 is the live strategy, not a shadow feed. FORCE_DISABLED remains the emergency kill switch.
+    // Strategy V8: buy a confirmed rebound after a trusted one-second dump.
+    // V8 is the live strategy, not a shadow feed. FORCE_DISABLED remains the emergency kill switch.
     enabled: !activityFlowForceDisabled,
     replaceDumpSignal: !activityFlowForceDisabled,
-    entryMode: 'AGE3_BREADTH_V7',
+    entryMode: 'ONE_SECOND_REBOUND_V8',
+    reboundWindowMs: 1_000,
+    reboundMinDropPct: 20,
+    reboundMaxDropPct: 65,
+    reboundMinRecoveryPct: 2,
+    reboundMaxRecoveryPct: 10,
+    reboundConfirmMinGapMs: 1_000,
+    reboundConfirmMaxGapMs: 3_000,
+    reboundMinUniqueBuyers1s: 2,
+    reboundCooldownMs: 60_000,
     age3EntryTargetMs: parseInt(process.env.AGE3_ENTRY_TARGET_MS || '180000', 10),
     age3EntryToleranceMs: parseInt(process.env.AGE3_ENTRY_TOLERANCE_MS || '15000', 10),
     age3MinFdvUsd: parseFloat(process.env.AGE3_ENTRY_MIN_FDV_USD || '40000'),

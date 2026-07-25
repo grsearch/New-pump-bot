@@ -52,13 +52,24 @@ async function main() {
   console.log(`Fixed TP: ${config.strategy.takeProfitPct > 0 ? `+${config.strategy.takeProfitPct}%` : 'disabled'}`);
   console.log(`Trailing: arm at +${config.strategy.trailingActivatePct}% / drawdown ${config.strategy.trailingDrawdownPct}%`);
   console.log('RSI exit: disabled');
-  console.log(
-    `Entry: ${config.activityFlow.entryMode} ` +
-      `(one-shot at AGE=${config.activityFlow.age3EntryTargetMs / 1000}s` +
-      `+${config.activityFlow.age3EntryToleranceMs / 1000}s tolerance, ` +
-      `FDV>=$${Math.round(config.activityFlow.age3MinFdvUsd)}, ` +
-      `buyers60>=${config.activityFlow.age3MinUniqueBuyers1m})`,
-  );
+  if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(drop=${config.activityFlow.reboundMinDropPct}%-<${config.activityFlow.reboundMaxDropPct}%/` +
+        `${config.activityFlow.reboundWindowMs}ms, ` +
+        `confirm=${config.activityFlow.reboundConfirmMinGapMs}-${config.activityFlow.reboundConfirmMaxGapMs}ms, ` +
+        `recovery=${config.activityFlow.reboundMinRecoveryPct}-${config.activityFlow.reboundMaxRecoveryPct}%, ` +
+        `buyers1>=${config.activityFlow.reboundMinUniqueBuyers1s})`,
+    );
+  } else {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(one-shot at AGE=${config.activityFlow.age3EntryTargetMs / 1000}s` +
+        `+${config.activityFlow.age3EntryToleranceMs / 1000}s tolerance, ` +
+        `FDV>=$${Math.round(config.activityFlow.age3MinFdvUsd)}, ` +
+        `buyers60>=${config.activityFlow.age3MinUniqueBuyers1m})`,
+    );
+  }
   console.log(config.strategy.flowReversalExitEnabled
     ? `Flow exit: ${config.strategy.flowReversalExitMode} ` +
       `(2 closed 15s net-flow values, + to -` +
@@ -73,7 +84,11 @@ async function main() {
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
   console.log(`Exit mode: ${config.strategy.exitMode}`);
-  console.log(`FDV exit: <$${Math.round(config.strategy.positionFdvExitUsd)} (sell then remove)`);
+  console.log(
+    `FDV exit: ${config.strategy.positionFdvExitUsd > 0
+      ? `<$${Math.round(config.strategy.positionFdvExitUsd)} (sell then remove)`
+      : 'disabled'}`,
+  );
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
@@ -232,14 +247,19 @@ async function main() {
       `jump<=${swapSanitizer.maxJumpRatio}x market<=${swapSanitizer.marketMaxRatio}x ` +
       `independentSources>=${swapSanitizer.confirmMinIndependentSources}`,
   );
-  console.log(
-    `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
-      `mode=${activityFlowTracker.entryMode} ` +
-      `age=${activityFlowTracker.age3EntryTargetMs / 1000}s` +
+  const activityFlowDescription = activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
+    ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
+      `${activityFlowTracker.reboundWindowMs}ms ` +
+      `recovery=${activityFlowTracker.reboundMinRecoveryPct}-${activityFlowTracker.reboundMaxRecoveryPct}% ` +
+      `confirm=${activityFlowTracker.reboundConfirmMinGapMs}-${activityFlowTracker.reboundConfirmMaxGapMs}ms ` +
+      `buyers1>=${activityFlowTracker.reboundMinUniqueBuyers1s}`
+    : `age=${activityFlowTracker.age3EntryTargetMs / 1000}s` +
       `+${activityFlowTracker.age3EntryToleranceMs / 1000}s ` +
       `fdv>=$${Math.round(activityFlowTracker.age3MinFdvUsd)} ` +
-      `buyers60>=${activityFlowTracker.age3MinUniqueBuyers1m} ` +
-      `entry=one-shot ` +
+      `buyers60>=${activityFlowTracker.age3MinUniqueBuyers1m}`;
+  console.log(
+    `[main] ActivityFlow ${activityFlowTracker.enabled ? 'enabled' : 'disabled'}: ` +
+      `mode=${activityFlowTracker.entryMode} ${activityFlowDescription} ` +
       `replaceDump=${activityFlowTracker.replaceDumpSignal}`,
   );
   console.log(

@@ -240,6 +240,12 @@ class TradeLogger {
       ['buy_mode', 'TEXT'],
       ['min_base_amount_out_raw', 'TEXT'],
       ['virtual_quote_reserves_raw', 'TEXT'],
+      ['chain_error_class', 'TEXT'],
+      ['chain_instruction_index', 'INTEGER'],
+      ['chain_program_id', 'TEXT'],
+      ['chain_failed_program_id', 'TEXT'],
+      ['chain_compute_units', 'INTEGER'],
+      ['chain_logs_json', 'TEXT'],
     ]);
     this._ensureColumns('swap_events', [
       ['source', 'TEXT'],
@@ -548,6 +554,18 @@ ${snapshotColumnsSql},
 
       recentTrades: this.db.prepare(`
         SELECT * FROM trades ORDER BY ts DESC LIMIT ?
+      `),
+      markBuyChainFailed: this.db.prepare(`
+        UPDATE trades
+        SET success = 0,
+            error = @error,
+            chain_error_class = @chainErrorClass,
+            chain_instruction_index = @chainInstructionIndex,
+            chain_program_id = @chainProgramId,
+            chain_failed_program_id = @chainFailedProgramId,
+            chain_compute_units = @chainComputeUnits,
+            chain_logs_json = @chainLogsJson
+        WHERE signature = @signature AND side = 'BUY'
       `),
 
       // ============ swap_events ============
@@ -915,6 +933,23 @@ ${snapshotColumnsSql},
       minBaseAmountOutRaw: minBaseAmountOutRaw || null,
       virtualQuoteReservesRaw: virtualQuoteReservesRaw || null,
     });
+  }
+
+  markBuyChainFailed(signature, diagnostics = {}) {
+    if (!signature) return 0;
+    const result = this.stmts.markBuyChainFailed.run({
+      signature,
+      error: diagnostics.error || 'BUY_CHAIN_FAILED',
+      chainErrorClass: diagnostics.errorClass || 'OTHER_CHAIN_FAILURE',
+      chainInstructionIndex: diagnostics.instructionIndex ?? null,
+      chainProgramId: diagnostics.instructionProgramId || null,
+      chainFailedProgramId: diagnostics.failedProgramId || null,
+      chainComputeUnits: diagnostics.computeUnitsConsumed ?? null,
+      chainLogsJson: diagnostics.logTail
+        ? JSON.stringify(diagnostics.logTail)
+        : null,
+    });
+    return result.changes;
   }
 
   logSwapEvent(swap) {

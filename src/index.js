@@ -1007,7 +1007,7 @@ async function main() {
   });
 
   // ============ 启动服务器 ============
-  server.start();
+  await server.start();
 
   // ============ 启动前补充 pool 信息（异步后台） ============
   if (config.autoFillPoolsOnStart) {
@@ -1045,7 +1045,6 @@ async function main() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   process.on('uncaughtException', (err) => {
-    if (err.code === 'EADDRINUSE') { console.warn('[main] port conflict, dashboard disabled - continuing'); return; }
     monitor.recordError('main', err, { phase: 'uncaughtException' });
     monitor.inc('main.uncaughtExceptions', 1, 'main');
     console.error('[main] uncaughtException:', err);

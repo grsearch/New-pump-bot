@@ -74,7 +74,9 @@ class Server {
         }
       },
     });
-    this.wss.on('error', (err) => { if (err.code === 'EADDRINUSE') { console.warn('[Server] WebSocket port conflict, dashboard disabled'); } else { throw err; } });
+    this.wss.on('error', (err) => {
+      console.error(`[Server] WebSocket error: ${err.message}`);
+    });
     this.wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'hello', dryRun: config.DRY_RUN, ts: Date.now() }));
     });
@@ -594,13 +596,29 @@ class Server {
 
   start() {
     const host = config.server.bindHost || '0.0.0.0';
-    this.httpServer.on("error", (err) => { if (err.code === "EADDRINUSE") { console.warn("[Server] port " + config.server.port + " in use, dashboard disabled"); } else { throw err; } });
-    this.httpServer.listen(config.server.port, host, () => {
-      console.log(`[Server] listening on ${host}:${config.server.port}`);
-      console.log(`[Server] dashboard: http://${host}:${config.server.port}`);
-      console.log(`[Server] webhook:   POST http://${host}:${config.server.port}/webhook/add-token`);
-      if (config.server.webhookSecret) console.log('[Server] webhook secret: ENABLED');
-      if (config.server.dashboardToken) console.log('[Server] dashboard auth: ENABLED');
+    return new Promise((resolve, reject) => {
+      const onError = (err) => {
+        this.httpServer.removeListener('listening', onListening);
+        if (err.code === 'EADDRINUSE') {
+          err.message =
+            `dashboard port ${config.server.port} is already in use; ` +
+            'another bot process may already be running';
+        }
+        reject(err);
+      };
+      const onListening = () => {
+        this.httpServer.removeListener('error', onError);
+        console.log(`[Server] listening on ${host}:${config.server.port}`);
+        console.log(`[Server] dashboard: http://${host}:${config.server.port}`);
+        console.log(`[Server] webhook:   POST http://${host}:${config.server.port}/webhook/add-token`);
+        if (config.server.webhookSecret) console.log('[Server] webhook secret: ENABLED');
+        if (config.server.dashboardToken) console.log('[Server] dashboard auth: ENABLED');
+        resolve();
+      };
+
+      this.httpServer.once('error', onError);
+      this.httpServer.once('listening', onListening);
+      this.httpServer.listen(config.server.port, host);
     });
   }
 }

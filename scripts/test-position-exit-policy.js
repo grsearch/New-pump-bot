@@ -81,7 +81,7 @@ function run() {
   assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
   assert.strictEqual(config.strategy.trailingActivatePct, 8);
   assert.strictEqual(config.strategy.trailingDrawdownPct, 3);
-  assert.strictEqual(config.strategy.takeProfitPct, 0);
+  assert.strictEqual(config.strategy.takeProfitPct, 10);
   assert.strictEqual(config.strategy.fixedStopLossPct, -25);
   assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
   assert.strictEqual(config.strategy.maxHoldMs, 20_000);
@@ -126,6 +126,21 @@ function run() {
     const manager = managerWith(first);
     manager._checkExit('p1', 0.81);
     assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 25% must stay open');
+  }
+
+  {
+    const now = Date.now();
+    const manager = managerWith(position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1,
+      highWaterMarkTs: now,
+      openedAt: now,
+      reconciledAt: now,
+    }));
+    manager._checkExit('p1', 1.099);
+    assert.strictEqual(manager._exitCalls.length, 0, '+9.9% must stay below fixed take profit');
+    manager._checkExit('p1', 1.1);
+    assert.strictEqual(manager._exitCalls[0].reason, 'TAKE_PROFIT');
   }
 
   {

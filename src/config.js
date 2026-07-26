@@ -59,7 +59,7 @@ const config = {
     // 当前固定止盈：达到 TAKE_PROFIT_PCT 立即卖，不等双确认。
     //   优先级高于移动止盈（_checkExit 里先检查 TP 再检查 trailing）。
     //   tpConfirmCount/tpConfirmMinGapMs 保留字段但已不在固定止盈路径使用。
-    takeProfitPct: 0,
+    takeProfitPct: 10,
     tpConfirmCount: parseInt(process.env.TP_CONFIRM_COUNT || '2', 10),
     tpConfirmMinGapMs: parseInt(process.env.TP_CONFIRM_MIN_GAP_MS || '300', 10),
 

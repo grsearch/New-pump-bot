@@ -1,7 +1,7 @@
 'use strict';
 
 process.env.ACTIVITY_FLOW_FORCE_DISABLED = 'false';
-process.env.ACTIVITY_FLOW_ENTRY_MODE = 'AGE3_BREADTH_V7';
+process.env.ACTIVITY_FLOW_ENTRY_MODE = 'ONE_SECOND_REBOUND_V8';
 process.env.REBOUND_MIN_RECOVERY_PCT = '5';
 process.env.MAX_MINT_AGE_MINUTES = '10';
 
@@ -55,10 +55,10 @@ function tracker(overrides = {}) {
     reboundWindowMs: 1_000,
     reboundMinDropPct: 20,
     reboundMaxDropPct: 65,
-    reboundMinRecoveryPct: 2,
+    reboundMinRecoveryPct: 5,
     reboundMaxRecoveryPct: 10,
     reboundConfirmMinGapMs: 1_000,
-    reboundConfirmMaxGapMs: 3_000,
+    reboundConfirmMaxGapMs: 10_000,
     reboundMinUniqueBuyers1s: 2,
     reboundCooldownMs: 60_000,
     maxSignalAgeMs: 0,
@@ -74,8 +74,9 @@ function collectSignals(subject) {
 
 async function run() {
   assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
-  assert.strictEqual(config.activityFlow.reboundMinRecoveryPct, 2);
+  assert.strictEqual(config.activityFlow.reboundMinRecoveryPct, 5);
   assert.strictEqual(config.activityFlow.reboundMaxDropPct, 65);
+  assert.strictEqual(config.activityFlow.reboundConfirmMaxGapMs, 10_000);
   assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
   assert.strictEqual(config.strategy.maxMintAgeMinutes, 120);
 
@@ -95,12 +96,12 @@ async function run() {
   assert.strictEqual(passingSignals.length, 0, 'a 1% recovery must not buy');
   passing.handleSwap(event(passingMint, 1_100, {
     wallet: 'buyer-b',
-    price: 0.714,
+    price: 0.735,
   }));
-  assert.strictEqual(passingSignals.length, 1, 'a confirmed 2% recovery with two buyers should buy');
+  assert.strictEqual(passingSignals.length, 1, 'a confirmed 5% recovery with two buyers should buy');
   assert.strictEqual(passingSignals[0]._reboundEntry, true);
   assert.strictEqual(passingSignals[0]._flow.entryRebound.dropDepthPct, 30);
-  assert(passingSignals[0]._flow.entryRebound.recoveryPct >= 2);
+  assert(passingSignals[0]._flow.entryRebound.recoveryPct >= 5);
   assert.strictEqual(passingSignals[0]._flow.entryRebound.uniqueBuyers1s, 2);
 
   const extremeMint = nextMint();
@@ -154,10 +155,30 @@ async function run() {
   }));
   lowerLow.handleSwap(event(lowerLowMint, 1_700, {
     wallet: 'buyer-b',
-    price: 0.664,
+    price: 0.683,
   }));
   assert.strictEqual(lowerLowSignals.length, 1, 'a new low must restart the confirmation clock');
   assert.strictEqual(lowerLowSignals[0]._flow.entryRebound.confirmGapMs, 1_000);
+
+  const lateConfirmMint = nextMint();
+  const lateConfirm = tracker();
+  const lateConfirmSignals = collectSignals(lateConfirm);
+  lateConfirm.handleSwap(event(lateConfirmMint, 0, {
+    side: 'SELL',
+    wallet: 'late-seller',
+    priceBefore: 1,
+    price: 0.7,
+  }));
+  lateConfirm.handleSwap(event(lateConfirmMint, 8_500, {
+    wallet: 'late-buyer-a',
+    price: 0.714,
+  }));
+  lateConfirm.handleSwap(event(lateConfirmMint, 9_000, {
+    wallet: 'late-buyer-b',
+    price: 0.735,
+  }));
+  assert.strictEqual(lateConfirmSignals.length, 1, 'a valid rebound may confirm in the ninth second');
+  assert.strictEqual(lateConfirmSignals[0]._flow.entryRebound.confirmGapMs, 9_000);
 
   const oneBuyerMint = nextMint();
   const oneBuyer = tracker();
@@ -173,13 +194,13 @@ async function run() {
   }));
   oneBuyer.handleSwap(event(oneBuyerMint, 1_100, {
     wallet: 'same-buyer',
-    price: 0.714,
+    price: 0.735,
   }));
   assert.strictEqual(oneBuyerSignals.length, 0, 'one wallet must not satisfy buyer breadth');
 
   const panel = passing.getStrategyCandidates(10, BASE + 1_100);
   assert.strictEqual(panel.mode, 'ONE_SECOND_REBOUND_V8');
-  assert.strictEqual(panel.thresholds.reboundMinRecoveryPct, 2);
+  assert.strictEqual(panel.thresholds.reboundMinRecoveryPct, 5);
   assert.strictEqual(panel.thresholds.reboundMaxDropPct, 65);
   assert.strictEqual(panel.candidates[0].stage, 'signaled');
 

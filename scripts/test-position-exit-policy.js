@@ -79,10 +79,10 @@ function run() {
   const mint = 'TestMint111111111111111111111111111111111';
   assert.strictEqual(config.strategy.rebuyCooldownMs, 60_000, 'default post-sale cooldown must be 60 seconds');
   assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
-  assert.strictEqual(config.strategy.trailingActivatePct, 8);
+  assert.strictEqual(config.strategy.trailingActivatePct, 15);
   assert.strictEqual(config.strategy.trailingDrawdownPct, 3);
   assert.strictEqual(config.strategy.takeProfitPct, 0);
-  assert.strictEqual(config.strategy.fixedStopLossPct, -25);
+  assert.strictEqual(config.strategy.fixedStopLossPct, -10);
   assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
   assert.strictEqual(config.strategy.maxHoldMs, 20_000);
   assert.strictEqual(config.strategy.maxTokenAgeMs, 7_200_000);
@@ -124,8 +124,8 @@ function run() {
       _stabilizeSamples: [],
     });
     const manager = managerWith(first);
-    manager._checkExit('p1', 0.81);
-    assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 25% must stay open');
+    manager._checkExit('p1', 0.91);
+    assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 10% must stay open');
   }
 
   {
@@ -147,8 +147,23 @@ function run() {
     });
     const manager = managerWith(first);
     manager._checkExit('p1', 1.066);
-    assert.strictEqual(manager._exitCalls.length, 1, '3% drawdown after +8% trailing arm should sell');
+    assert.strictEqual(manager._exitCalls.length, 1, '3% drawdown after +15% trailing arm should sell');
     assert.strictEqual(manager._exitCalls[0].reason, 'TRAILING_STOP');
+  }
+
+  {
+    const now = Date.now();
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1,
+      openedAt: now - 10_000,
+      reconciledAt: now - 10_000,
+    });
+    const manager = managerWith(first);
+    manager._checkExit('p1', 1.2);
+    assert.strictEqual(manager._exitCalls.length, 0, 'fixed take profit must remain disabled');
+    manager._checkExit('p1', 1.2);
+    assert.strictEqual(first.trailingArmed, true, 'a 20% gain must arm the 15% trailing stop');
   }
 
   {

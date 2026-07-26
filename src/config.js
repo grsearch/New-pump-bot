@@ -68,7 +68,7 @@ const config = {
     //   trailingDrawdownPct: armed 后，价格从 HWM 回撤此 % 立即 SELL
     //   trailingMinHwmAgeMs: HWM 必须稳定至少此毫秒数（防单 tick 污染）
     //   设 trailingActivatePct=0 或 trailingDrawdownPct=0 可禁用移动止盈
-    trailingActivatePct: 8,
+    trailingActivatePct: 15,
     trailingDrawdownPct: 3,
     trailingMinHwmAgeMs: 500,
 
@@ -103,7 +103,7 @@ const config = {
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: -25,
+    fixedStopLossPct: -10,
     emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
@@ -239,10 +239,10 @@ const config = {
     reboundWindowMs: 1_000,
     reboundMinDropPct: 20,
     reboundMaxDropPct: 65,
-    reboundMinRecoveryPct: 2,
+    reboundMinRecoveryPct: 5,
     reboundMaxRecoveryPct: 10,
     reboundConfirmMinGapMs: 1_000,
-    reboundConfirmMaxGapMs: 3_000,
+    reboundConfirmMaxGapMs: 10_000,
     reboundMinUniqueBuyers1s: 2,
     reboundCooldownMs: 60_000,
     age3EntryTargetMs: parseInt(process.env.AGE3_ENTRY_TARGET_MS || '180000', 10),

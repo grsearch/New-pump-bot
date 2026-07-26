@@ -144,7 +144,7 @@ class OrderFlowTracker extends EventEmitter {
     this.reboundMinRecoveryPct =
       opts.reboundMinRecoveryPct ??
       flowConfig.reboundMinRecoveryPct ??
-      numEnv('REBOUND_MIN_RECOVERY_PCT', 2);
+      numEnv('REBOUND_MIN_RECOVERY_PCT', 5);
     this.reboundMaxRecoveryPct =
       opts.reboundMaxRecoveryPct ??
       flowConfig.reboundMaxRecoveryPct ??
@@ -156,7 +156,7 @@ class OrderFlowTracker extends EventEmitter {
     this.reboundConfirmMaxGapMs =
       opts.reboundConfirmMaxGapMs ??
       flowConfig.reboundConfirmMaxGapMs ??
-      numEnv('REBOUND_CONFIRM_MAX_GAP_MS', 3_000);
+      numEnv('REBOUND_CONFIRM_MAX_GAP_MS', 10_000);
     this.reboundMinUniqueBuyers1s =
       opts.reboundMinUniqueBuyers1s ??
       flowConfig.reboundMinUniqueBuyers1s ??

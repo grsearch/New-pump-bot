@@ -816,6 +816,12 @@ class SignalEngine extends EventEmitter {
       return;
     }
 
+    if (signal._aggregated && !config.strategy.allowAggregatedDumpSignals) {
+      monitor.inc('SignalEngine.rejectedAggregatedDump', 1, 'SignalEngine');
+      this._logReject(signal, 'aggregated dump entry disabled');
+      return;
+    }
+
     const safeSellSol = Number(sellSol);
     const safeImpactPct = Number(priceImpactPct);
     const safePoolQuoteSol = Number(poolQuoteAfter);

@@ -489,6 +489,8 @@ class OrderFlowTracker extends EventEmitter {
         const impactPct = Number(dump?.priceImpactPct || 0);
         const poolQuoteSol = Number(dump?.poolQuoteAfter || 0);
         conditions = {
+          singleSell:
+            !dump?._aggregated || config.strategy.allowAggregatedDumpSignals,
           sellSize: sellSol >= config.strategy.minSellSol,
           impactRange:
             impactPct >= config.strategy.minPriceImpactPct &&
@@ -756,6 +758,7 @@ class OrderFlowTracker extends EventEmitter {
       now,
       thresholds: {
         dumpMinSellSol: config.strategy.minSellSol,
+        dumpAllowAggregated: config.strategy.allowAggregatedDumpSignals,
         dumpMinImpactPct: config.strategy.minPriceImpactPct,
         dumpMaxImpactPct: config.strategy.maxPriceImpactPct,
         dumpMinPoolQuoteSol: config.strategy.minPoolQuoteSol,

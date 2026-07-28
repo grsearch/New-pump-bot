@@ -56,6 +56,7 @@ async function main() {
     console.log(
       `Entry: ${config.activityFlow.entryMode} ` +
         `(sell>=${config.strategy.minSellSol}SOL, ` +
+        `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'}, ` +
         `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%, ` +
         `pool>=${config.strategy.minPoolQuoteSol}SOL, ` +
         `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, no rebound confirmation)`,
@@ -261,6 +262,7 @@ async function main() {
   );
   const activityFlowDescription = activityFlowTracker.entryMode === 'DUMP_BACKRUN_V9'
     ? `sell>=${config.strategy.minSellSol}SOL ` +
+      `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'} ` +
       `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}% ` +
       `pool>=${config.strategy.minPoolQuoteSol}SOL ` +
       `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms`

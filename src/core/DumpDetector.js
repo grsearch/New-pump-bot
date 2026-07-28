@@ -598,6 +598,12 @@ class DumpDetector extends EventEmitter {
     }
 
     // 达标!立即触发聚合信号
+    if (!config.strategy.allowAggregatedDumpSignals) {
+      monitor.inc('DumpDetector.aggregatedEntriesSuppressed', 1, 'DumpDetector');
+      this._checkRug(bucket, totalSellSol, sellers, lastSell);
+      return;
+    }
+
     bucket.fired = true;
     monitor.inc('DumpDetector.dumpSignalsAggregated', 1, 'DumpDetector');
     console.log(

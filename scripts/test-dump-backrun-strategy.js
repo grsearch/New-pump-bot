@@ -33,9 +33,9 @@ function makeSignal(overrides = {}) {
   return {
     mint,
     symbol: 'V9TEST',
-    sellSol: 6.5,
+    sellSol: 8.5,
     priceImpactPct: 12,
-    poolQuoteAfter: 45,
+    poolQuoteAfter: 150,
     seller: `seller-${mintSequence}`,
     signature: `signature-${mintSequence}-${Date.now()}`,
     ts: Date.now() - 50,
@@ -72,11 +72,13 @@ async function run() {
   assert.strictEqual(config.activityFlow.entryMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.activityFlow.replaceDumpSignal, false);
   assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
-  assert.strictEqual(config.strategy.minSellSol, 6);
+  assert.strictEqual(config.strategy.minSellSol, 8);
+  assert.strictEqual(config.strategy.allowAggregatedDumpSignals, false);
   assert.strictEqual(config.strategy.minPriceImpactPct, 8);
   assert.strictEqual(config.strategy.maxPriceImpactPct, 65);
-  assert.strictEqual(config.strategy.minPoolQuoteSol, 30);
+  assert.strictEqual(config.strategy.minPoolQuoteSol, 120);
   assert.strictEqual(config.strategy.dumpBackrunMaxSignalAgeMs, 1_500);
+  assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
 
   const accepted = makeEngine();
   const buyOrders = [];
@@ -110,6 +112,18 @@ async function run() {
   assert.strictEqual(catastrophicOrders.length, 0, 'a 65% dump must be rejected');
   catastrophic.engine.shutdown();
 
+  const aggregated = makeEngine();
+  const aggregatedOrders = [];
+  aggregated.engine.on('buyOrder', (order) => aggregatedOrders.push(order));
+  await aggregated.engine.handleDumpSignal(makeSignal({
+    sellSol: 12,
+    poolQuoteAfter: 180,
+    _aggregated: true,
+    _sellers: ['seller-a', 'seller-b'],
+  }));
+  assert.strictEqual(aggregatedOrders.length, 0, 'an aggregated dump must not buy');
+  aggregated.engine.shutdown();
+
   const shallow = makeEngine();
   const shallowOrders = [];
   shallow.engine.on('buyOrder', (order) => shallowOrders.push(order));
@@ -118,6 +132,15 @@ async function run() {
   }));
   assert.strictEqual(shallowOrders.length, 0, 'a sub-threshold sell must not buy');
   shallow.engine.shutdown();
+
+  const lowLiquidity = makeEngine();
+  const lowLiquidityOrders = [];
+  lowLiquidity.engine.on('buyOrder', (order) => lowLiquidityOrders.push(order));
+  await lowLiquidity.engine.handleDumpSignal(makeSignal({
+    poolQuoteAfter: config.strategy.minPoolQuoteSol - 0.01,
+  }));
+  assert.strictEqual(lowLiquidityOrders.length, 0, 'a sub-threshold pool must not buy');
+  lowLiquidity.engine.shutdown();
 
   const open = makeEngine({ hasOpenPosition: true });
   const openOrders = [];
@@ -157,6 +180,8 @@ async function run() {
   }));
   let panel = tracker.getStrategyCandidates(10, now + 100);
   assert.strictEqual(panel.mode, 'DUMP_BACKRUN_V9');
+  assert.strictEqual(panel.thresholds.dumpAllowAggregated, false);
+  assert.strictEqual(panel.candidates[0].conditions.singleSell, true);
   assert.strictEqual(panel.candidates[0].conditions.sellSize, true);
   assert.strictEqual(panel.candidates[0].conditions.impactRange, true);
   assert.strictEqual(panel.candidates[0].conditions.poolLiquidity, true);

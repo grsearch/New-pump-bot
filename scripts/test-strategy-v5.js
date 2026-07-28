@@ -274,7 +274,7 @@ function runSlippageTests() {
   };
   assert(Math.abs(estimateBuySlippagePct(virtualState, 1.537, 1_000_000, 6)) < 1e-9);
   assert.strictEqual(config.strategy.buySlippageBps, 5000);
-  assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 15);
+  assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
   assert.strictEqual(config.strategy.buyMaxPoolStateAgeMs, 500);
   assert.strictEqual(config.strategy.buyMaxEstimatedSlippagePct, 5);
   assert.strictEqual(config.strategy.noBounceExitMs, 90_000);

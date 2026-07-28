@@ -254,7 +254,7 @@ async function main() {
     const exact = extractBuyExactQuoteInAmounts(instructions);
     assert.ok(exact, 'buy_exact_quote_in instruction missing');
     assert.strictEqual(exact.spendableQuoteIn, 200000000n);
-    assert.strictEqual(exact.minBaseAmountOut, 173914n);
+    assert.strictEqual(exact.minBaseAmountOut, 176992n);
     assert.strictEqual(exact.trackVolume, true);
     return {
       serialized: Buffer.alloc(65),
@@ -275,10 +275,10 @@ async function main() {
   assert.strictEqual(quoteCalls, 1);
   assert.strictEqual(liveResult.stateSource, 'rpc-forced');
   assert.strictEqual(liveResult.buyMode, 'buy_exact_quote_in');
-  assert.ok(liveResult.effectiveSlippagePct > 10 && liveResult.effectiveSlippagePct < 11);
-  assert.ok(liveResult.maxPrice === 1.15);
+  assert.ok(liveResult.effectiveSlippagePct > 8 && liveResult.effectiveSlippagePct < 9);
+  assert.ok(liveResult.maxPrice === 1.13);
   assert.strictEqual(liveResult.maxQuoteSol, 0.2);
-  assert.strictEqual(liveResult.minBaseAmountOutRaw, '173914');
+  assert.strictEqual(liveResult.minBaseAmountOutRaw, '176992');
   assert.strictEqual(liveResult.virtualQuoteReservesRaw, '5000000000');
 
   console.log('PASS test-buy-execution-guard');

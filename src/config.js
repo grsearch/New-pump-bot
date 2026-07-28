@@ -28,10 +28,12 @@ const config = {
   strategy: {
     exitMode: 'DUMP_BACKRUN_V9',
     // 触发条件（DumpDetector）
-    // v3.17.20 用户调参：MIN_SELL_SOL 6.0, MIN_PRICE_IMPACT_PCT 10.0
+    // V9.1 entry defaults come from the latest live-data audit.
     // Dedicated names prevent stale thresholds from older deployments from
     // silently overriding the live V9 backrun strategy.
-    minSellSol: parseFloat(process.env.DUMP_BACKRUN_MIN_SELL_SOL || '6'),
+    minSellSol: parseFloat(process.env.DUMP_BACKRUN_MIN_SELL_SOL || '8'),
+    allowAggregatedDumpSignals:
+      (process.env.DUMP_BACKRUN_ALLOW_AGGREGATED ?? 'false').toLowerCase() === 'true',
     minPriceImpactPct: parseFloat(
       process.env.DUMP_BACKRUN_MIN_PRICE_IMPACT_PCT || '8',
     ),
@@ -57,7 +59,7 @@ const config = {
       process.env.DUMP_BACKRUN_MAX_PRICE_IMPACT_PCT || '65',
     ),
     minPoolQuoteSol: parseFloat(
-      process.env.DUMP_BACKRUN_MIN_POOL_QUOTE_SOL || '30',
+      process.env.DUMP_BACKRUN_MIN_POOL_QUOTE_SOL || '120',
     ),
     dumpBackrunMaxSignalAgeMs: parseInt(
       process.env.DUMP_BACKRUN_MAX_SIGNAL_AGE_MS || '1500',
@@ -183,7 +185,7 @@ const config = {
     // BUY now uses buy_exact_quote_in. BUY_SLIPPAGE_BPS remains telemetry-only;
     // the fixed quote input and minimum base output enforce the price cap.
     buySlippageBps: parseInt(process.env.BUY_SLIPPAGE_BPS || '5000', 10),
-    buyMaxPriceDeviationPct: parseFloat(process.env.BUY_MAX_PRICE_DEVIATION_PCT || '15'),
+    buyMaxPriceDeviationPct: parseFloat(process.env.BUY_MAX_PRICE_DEVIATION_PCT || '13'),
     buyMaxPoolStateAgeMs: parseInt(process.env.BUY_MAX_POOL_STATE_AGE_MS || '500', 10),
     // Kept for exported-config compatibility; no longer used as the price guard.
     buyMaxEstimatedSlippagePct: parseFloat(process.env.BUY_MAX_ESTIMATED_SLIPPAGE_PCT || '5'),

@@ -181,6 +181,10 @@ class SignalEngine extends EventEmitter {
     const _signalReceivedAt = Date.now();
     const { mint, symbol, sellSol, priceImpactPct, seller, signature, ts, slot } = signal;
 
+    if (signal._dumpBackrunEntry) {
+      return this._handleDumpBackrunSignal(signal, _signalReceivedAt);
+    }
+
     if (signal._reboundEntry) {
       return this._handleReboundEntrySignal(signal, _signalReceivedAt);
     }
@@ -767,9 +771,227 @@ class SignalEngine extends EventEmitter {
     });
   }
 
-  //   出场：EMA9下穿EMA20清仓 / 20%止盈 / 10%激活3%回撤移动止盈
-  //   加仓：首仓价跌>=15% 允许加仓1次，独立止盈
-  //   无止损、无其他过滤
+  // Keep the dump-to-order hot path synchronous; persistence happens after emit.
+  _handleDumpBackrunSignal(signal, signalReceivedAt) {
+    const {
+      mint,
+      symbol,
+      sellSol,
+      priceImpactPct,
+      poolQuoteAfter,
+      seller,
+      signature,
+      ts,
+      slot,
+      priceAfter,
+    } = signal;
+    if (!mint) return;
+
+    if (signature && this.ourSignatures.has(signature)) {
+      monitor.inc('SignalEngine.rejectedSelfTrigger', 1, 'SignalEngine');
+      this._logReject(signal, 'self-triggered');
+      return;
+    }
+
+    if (
+      this.tokenRegistry &&
+      typeof this.tokenRegistry.isActive === 'function' &&
+      !this.tokenRegistry.isActive(mint)
+    ) {
+      monitor.inc('SignalEngine.rejectedInactiveMint', 1, 'SignalEngine');
+      this._logReject(signal, 'mint is no longer active');
+      return;
+    }
+
+    const signalAgeMs = ts ? Math.max(0, signalReceivedAt - ts) : 0;
+    if (
+      config.strategy.dumpBackrunMaxSignalAgeMs > 0 &&
+      signalAgeMs > config.strategy.dumpBackrunMaxSignalAgeMs
+    ) {
+      monitor.inc('SignalEngine.rejectedPushLag', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `dump backrun stale: ${signalAgeMs}ms>${config.strategy.dumpBackrunMaxSignalAgeMs}ms`,
+      );
+      return;
+    }
+
+    const safeSellSol = Number(sellSol);
+    const safeImpactPct = Number(priceImpactPct);
+    const safePoolQuoteSol = Number(poolQuoteAfter);
+    if (!Number.isFinite(priceAfter) || priceAfter <= 0) {
+      monitor.inc('SignalEngine.rejectedInvalidPrice', 1, 'SignalEngine');
+      this._logReject(signal, 'trusted post-dump price missing');
+      return;
+    }
+    if (!Number.isFinite(safeSellSol) || safeSellSol < config.strategy.minSellSol) {
+      monitor.inc('SignalEngine.rejectedSellSol', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `sell ${Number.isFinite(safeSellSol) ? safeSellSol.toFixed(2) : 'n/a'}SOL<` +
+          `${config.strategy.minSellSol}SOL`,
+      );
+      return;
+    }
+    if (
+      !Number.isFinite(safeImpactPct) ||
+      safeImpactPct < config.strategy.minPriceImpactPct ||
+      safeImpactPct >= config.strategy.maxPriceImpactPct
+    ) {
+      monitor.inc('SignalEngine.rejectedImpact', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `impact ${Number.isFinite(safeImpactPct) ? safeImpactPct.toFixed(2) : 'n/a'}% ` +
+          `outside ${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%`,
+      );
+      return;
+    }
+    if (
+      !Number.isFinite(safePoolQuoteSol) ||
+      safePoolQuoteSol < config.strategy.minPoolQuoteSol
+    ) {
+      monitor.inc('SignalEngine.rejectedLiquidity', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `pool ${Number.isFinite(safePoolQuoteSol) ? safePoolQuoteSol.toFixed(2) : 'n/a'}SOL<` +
+          `${config.strategy.minPoolQuoteSol}SOL`,
+      );
+      return;
+    }
+
+    const sellCount10s = Number(signal._sellCount10s || signal._sellCount || 1);
+    if (sellCount10s < config.strategy.minTriggerSellCount) {
+      monitor.inc('SignalEngine.rejectedLowSellCount', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `recent sell count ${sellCount10s}<${config.strategy.minTriggerSellCount}`,
+      );
+      return;
+    }
+
+    if (signature) {
+      const expireAt = this.triggeredSellerTxs.get(signature);
+      if (expireAt && expireAt > signalReceivedAt) {
+        monitor.inc('SignalEngine.rejectedDuplicateSellerTx', 1, 'SignalEngine');
+        this._logReject(signal, 'duplicate seller transaction');
+        return;
+      }
+    }
+    const sellerMintKey = seller && mint ? `${seller}:${mint}` : null;
+    if (sellerMintKey && config.strategy.sellerMintDedupMs > 0) {
+      const expireAt = this.triggeredSellerMintPairs.get(sellerMintKey);
+      if (expireAt && expireAt > signalReceivedAt) {
+        monitor.inc('SignalEngine.rejectedSellerMintPair', 1, 'SignalEngine');
+        this._logReject(signal, 'same seller and mint are in cooldown');
+        return;
+      }
+    }
+
+    if (this.tokenRegistry) {
+      const tokenInfo = this.tokenRegistry.getToken(mint);
+      const migrationTime = normalizeUnixMs(tokenInfo?.migration_time);
+      if (
+        migrationTime &&
+        config.strategy.maxTokenAgeMs > 0 &&
+        signalReceivedAt - migrationTime > config.strategy.maxTokenAgeMs
+      ) {
+        monitor.inc('SignalEngine.rejectedOldMint', 1, 'SignalEngine');
+        this._logReject(signal, `mint age > ${config.strategy.maxMintAgeMinutes}min`);
+        return;
+      }
+    }
+
+    const openCount = this.positionManager.openPositionCount();
+    const inflightCount = this.inflightBuys.size;
+    if (openCount + inflightCount >= config.strategy.maxConcurrentPositions) {
+      monitor.inc('SignalEngine.rejectedMaxConcurrent', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `max concurrent (${openCount} open + ${inflightCount} inflight / ` +
+          `${config.strategy.maxConcurrentPositions})`,
+      );
+      return;
+    }
+
+    const protectionRemainingMs = this._getMintProtectionRemainingMs(mint, signalReceivedAt);
+    if (protectionRemainingMs > 0) {
+      monitor.inc('SignalEngine.rejectedRebuyCooldown', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        `MINT_PROTECTION_COOLDOWN: ${Math.round(protectionRemainingMs / 1000)}s remaining`,
+      );
+      return;
+    }
+    if (this.inflightBuys.has(mint)) {
+      monitor.inc('SignalEngine.rejectedInflightBuy', 1, 'SignalEngine');
+      this._logReject(signal, 'buy in-flight');
+      return;
+    }
+    if (this.positionManager.hasOpenPosition(mint)) {
+      monitor.inc('SignalEngine.rejectedSameMintOpen', 1, 'SignalEngine');
+      this._logReject(signal, 'same mint already has open position');
+      return;
+    }
+
+    const reason =
+      `dump_backrun_v9: sell=${safeSellSol.toFixed(2)}SOL ` +
+      `impact=${safeImpactPct.toFixed(2)}% pool=${safePoolQuoteSol.toFixed(1)}SOL ` +
+      `age=${signalAgeMs}ms${signal._aggregated ? ' aggregated' : ''}`;
+
+    monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');
+    monitor.inc('SignalEngine.dumpBackrunAccepted', 1, 'SignalEngine');
+    this.inflightBuys.add(mint);
+    this.lastTriggerTs.set(mint, signalReceivedAt);
+    if (signature) {
+      this.triggeredSellerTxs.set(
+        signature,
+        signalReceivedAt + config.strategy.sellerTxDedupMs,
+      );
+    }
+    if (sellerMintKey && config.strategy.sellerMintDedupMs > 0) {
+      this.triggeredSellerMintPairs.set(
+        sellerMintKey,
+        signalReceivedAt + config.strategy.sellerMintDedupMs,
+      );
+    }
+
+    this.emit('buyOrder', {
+      ...signal,
+      reason,
+      sizeSol: config.strategy.positionSizeSol,
+      _signalReceivedAt: signalReceivedAt,
+    });
+    console.log(
+      `[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}`,
+    );
+
+    setImmediate(() => {
+      try {
+        this.tradeLogger.logSignal({
+          ts,
+          mint,
+          symbol,
+          kind: 'DUMP_BACKRUN',
+          sellSol: safeSellSol,
+          priceImpactPct: safeImpactPct,
+          seller,
+          sellerTx: signature,
+          notes: reason,
+          accepted: true,
+        });
+      } catch (err) {
+        monitor.recordError('SignalEngine', err, {
+          phase: 'dump_backrun_log_signal',
+          mint,
+        });
+      }
+    });
+
+    const inSignalEngineMs = Date.now() - signalReceivedAt;
+    monitor.set('SignalEngine.lastInEngineMs', inSignalEngineMs, 'SignalEngine');
+    monitor.set('SignalEngine.lastDumpBackrunSlot', slot || 0, 'SignalEngine');
+  }
+
   _handleReboundEntrySignal(signal, signalReceivedAt) {
     const {
       mint,
@@ -1121,7 +1343,11 @@ class SignalEngine extends EventEmitter {
       ts: signal.ts,
       mint: signal.mint,
       symbol: signal.symbol,
-      kind: signal._activityFlow ? 'ACTIVITY_FLOW' : 'DUMP_DETECTED',
+      kind: signal._dumpBackrunEntry
+        ? 'DUMP_BACKRUN'
+        : signal._activityFlow
+          ? 'ACTIVITY_FLOW'
+          : 'DUMP_DETECTED',
       sellSol: signal.sellSol,
       priceImpactPct: signal.priceImpactPct,
       seller: signal.seller,

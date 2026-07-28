@@ -52,7 +52,15 @@ async function main() {
   console.log(`Fixed TP: ${config.strategy.takeProfitPct > 0 ? `+${config.strategy.takeProfitPct}%` : 'disabled'}`);
   console.log(`Trailing: arm at +${config.strategy.trailingActivatePct}% / drawdown ${config.strategy.trailingDrawdownPct}%`);
   console.log('RSI exit: disabled');
-  if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
+  if (config.activityFlow.entryMode === 'DUMP_BACKRUN_V9') {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(sell>=${config.strategy.minSellSol}SOL, ` +
+        `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%, ` +
+        `pool>=${config.strategy.minPoolQuoteSol}SOL, ` +
+        `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, no rebound confirmation)`,
+    );
+  } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
     console.log(
       `Entry: ${config.activityFlow.entryMode} ` +
         `(drop=${config.activityFlow.reboundMinDropPct}%-<${config.activityFlow.reboundMaxDropPct}%/` +
@@ -75,7 +83,11 @@ async function main() {
       `(2 closed 15s net-flow values, + to -` +
       `${config.strategy.flowReversalExitRequireSellerBreadth ? ', sellers>=buyers' : ''})`
     : 'Flow exit: disabled');
-  console.log(`Legacy dumpSignal: ${config.activityFlow.replaceDumpSignal ? 'suppressed' : 'allowed fallback'}`);
+  console.log(
+    `Native dumpSignal: ${config.activityFlow.enabled
+      ? (config.activityFlow.replaceDumpSignal ? 'telemetry only' : 'live entry enabled')
+      : 'disabled by activity-flow kill switch'}`,
+  );
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
@@ -247,7 +259,12 @@ async function main() {
       `jump<=${swapSanitizer.maxJumpRatio}x market<=${swapSanitizer.marketMaxRatio}x ` +
       `independentSources>=${swapSanitizer.confirmMinIndependentSources}`,
   );
-  const activityFlowDescription = activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
+  const activityFlowDescription = activityFlowTracker.entryMode === 'DUMP_BACKRUN_V9'
+    ? `sell>=${config.strategy.minSellSol}SOL ` +
+      `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}% ` +
+      `pool>=${config.strategy.minPoolQuoteSol}SOL ` +
+      `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms`
+    : activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
     ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
       `${activityFlowTracker.reboundWindowMs}ms ` +
       `recovery=${activityFlowTracker.reboundMinRecoveryPct}-${activityFlowTracker.reboundMaxRecoveryPct}% ` +
@@ -559,7 +576,10 @@ async function main() {
   // v3.34: SS 自动发现新币 — ShredStream 收到未知 mint 的 Pump AMM 卖单时
   // 自动添加到 tokenRegistry + 更新 LS 订阅，让后续信号走实时路径
   // 阈值: 只自动添加卖单 ≥ MIN_SELL_SOL 的新币（避免添加垃圾币）
-  const SS_NEW_MINT_MIN_SELL_SOL = parseFloat(process.env.SS_NEW_MINT_MIN_SELL_SOL || process.env.MIN_SELL_SOL || '20');
+  const SS_NEW_MINT_MIN_SELL_SOL = parseFloat(
+    process.env.SS_NEW_MINT_MIN_SELL_SOL ||
+      String(config.strategy.minSellSol),
+  );
   const _newMintDedup = new Map(); // mint → lastAddTs
   const NEW_MINT_DEDUP_MS = 60000; // 同一 mint 60s 内不重复 add
   tickStream.on('newMintDiscovered', (info) => {
@@ -764,11 +784,21 @@ async function main() {
     //   refreshOne 的 RPC(30-100ms)永远追不上当次 BUY,对当前信号无意义。
     //   PoolStateCache 后台滚动刷新(POOL_STATE_REFRESH_MS=5000)已经保证 cache 新鲜。
     //   如果希望砸盘瞬间池子状态更新,把 POOL_STATE_REFRESH_MS 调到 2000-3000。
+    activityFlowTracker.noteDumpSignal(signal);
+    if (!activityFlowTracker.enabled && activityFlowTracker.entryMode === 'DUMP_BACKRUN_V9') {
+      activityFlowTracker.noteSuppressedDumpSignal(signal);
+      return;
+    }
     if (activityFlowTracker.enabled && activityFlowTracker.replaceDumpSignal) {
       activityFlowTracker.noteSuppressedDumpSignal(signal);
       return;
     }
-    signalEngine.handleDumpSignal(signal);
+    if (activityFlowTracker.entryMode === 'DUMP_BACKRUN_V9') {
+      signal._dumpBackrunEntry = true;
+    }
+    Promise.resolve(signalEngine.handleDumpSignal(signal)).catch((err) => {
+      console.error(`[DumpBackrun] SignalEngine error: ${err.message}`);
+    });
   });
 
   // v3.17.15: RUG 信号 — 同 slot 5+ 笔卖出、合计 > 5 SOL → 持仓立即卖出
@@ -793,6 +823,9 @@ async function main() {
   // ============ buyOrder → BUY → register position ============
   signalEngine.on('buyOrder', async (order) => {
     console.log(`[main] buyOrder received: ${order.symbol || order.mint.slice(0,6)} mint=${order.mint.slice(0,8)}.. reason=${order.reason} sig=${order.signature?.slice(0,12)}..`);
+    if (order._dumpBackrunEntry) {
+      activityFlowTracker.noteDumpAccepted(order.mint, Date.now());
+    }
     const _t0 = Date.now();
     const tokenInfo = tokenRegistry.getToken(order.mint);
     const _t1 = Date.now();

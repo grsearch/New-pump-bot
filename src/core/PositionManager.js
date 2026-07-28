@@ -41,6 +41,7 @@ const SELL_RETRY_DELAYS_MS = [500, 1500, 3000, 5000, 10_000, 20_000]; // 之后�
 const DEDICATED_EXIT_MODES = new Set([
   'AGE3_TRAILING_V7',
   'ONE_SECOND_REBOUND_V8',
+  'DUMP_BACKRUN_V9',
 ]);
 
 function usesDedicatedExitPolicy() {
@@ -2175,7 +2176,11 @@ class PositionManager extends EventEmitter {
       let rebuyCooldownMs;
       if (isSmartStop) {
         rebuyCooldownMs = parseInt(process.env.SMART_STOP_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
-      } else if (isTimeout && config.strategy.exitMode !== 'ONE_SECOND_REBOUND_V8') {
+      } else if (
+        isTimeout &&
+        config.strategy.exitMode !== 'ONE_SECOND_REBOUND_V8' &&
+        config.strategy.exitMode !== 'DUMP_BACKRUN_V9'
+      ) {
         rebuyCooldownMs = parseInt(process.env.TIMEOUT_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
       } else {
         rebuyCooldownMs = config.strategy.rebuyCooldownMs;

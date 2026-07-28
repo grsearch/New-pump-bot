@@ -340,7 +340,7 @@
     <div class="panel-head"><h2>📜 实时日志</h2></div>
     <div class="tabs">
       <div class="tab active" data-tab="positions">持仓 / 平仓</div>
-      <div class="tab" data-tab="signals">V5 信号</div>
+      <div class="tab" data-tab="signals">策略信号</div>
       <div class="tab" data-tab="trades">交易</div>
     </div>
     <div class="panel-body">
@@ -388,7 +388,7 @@
         <div id="strategySignalMeta" class="strategy-meta"><span>等待实时数据</span></div>
         <div class="table-wrap" style="overflow:auto;">
           <table class="strategy-table">
-            <thead><tr id="strategySignalsHeader"><th>更新</th><th>Symbol</th><th>CA</th><th>1秒跌幅</th><th>低点反弹</th><th>1秒买家</th><th>确认等待</th><th>阶段</th></tr></thead>
+            <thead><tr id="strategySignalsHeader"><th>更新</th><th>Symbol</th><th>CA</th><th>卖出量</th><th>跌幅</th><th>池子</th><th>信号延迟</th><th>阶段</th></tr></thead>
             <tbody id="signalsTbody"><tr><td colspan="8" class="empty">暂无活跃成交</td></tr></tbody>
           </table>
         </div>
@@ -805,6 +805,58 @@ async function refreshSignals() {
   const summary = r.summary || {};
   const thresholds = r.thresholds || {};
   const rows = r.candidates || [];
+  if (r.mode === 'DUMP_BACKRUN_V9') {
+    $('strategySignalsHeader').innerHTML =
+      '<th>更新</th><th>Symbol</th><th>CA</th><th>卖出量</th>' +
+      '<th>跌幅</th><th>池子</th><th>信号延迟</th><th>阶段</th>';
+    meta.innerHTML = [
+      `<span>模式 <b>${escapeHtml(r.mode)}</b></span>`,
+      `<span>活跃 <b>${summary.active || 0}</b></span>`,
+      `<span>大卖单 <b>${summary.sellReady || 0}</b></span>`,
+      `<span>跌幅达标 <b>${summary.impactReady || 0}</b></span>`,
+      `<span>池子达标 <b>${summary.poolReady || 0}</b></span>`,
+      `<span>延迟达标 <b>${summary.freshReady || 0}</b></span>`,
+      `<span>买入信号 <b>${summary.signaled || 0}</b></span>`,
+    ].join('');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无大卖单信号</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(candidate => {
+      const conditions = candidate.conditions || {};
+      const trigger = candidate.trigger || {};
+      return `
+        <tr>
+          <td class="mono">${fmtTime(candidate.updatedAt)}</td>
+          <td><b>${escapeHtml(candidate.symbol || (candidate.mint || '').slice(0,6))}</b></td>
+          ${caCell(candidate.mint)}
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.sellSol, 2)} / ${_strategyNumber(thresholds.dumpMinSellSol, 2)} SOL`,
+            conditions.sellSize,
+          )}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.impactPct, 2)}% / ${_strategyNumber(thresholds.dumpMinImpactPct, 1)}%-<${_strategyNumber(thresholds.dumpMaxImpactPct, 1)}%`,
+            conditions.impactRange,
+            '超过上限视为灾难性砸盘',
+          )}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.poolQuoteSol, 1)} / ${_strategyNumber(thresholds.dumpMinPoolQuoteSol, 1)} SOL`,
+            conditions.poolLiquidity,
+          )}</td>
+          <td>${_strategyCondition(
+            `${trigger.signalAgeMs == null ? '-' : trigger.signalAgeMs + 'ms'} / ≤${thresholds.dumpMaxSignalAgeMs}ms`,
+            conditions.signalFresh,
+            '不等待反弹确认',
+          )}</td>
+          <td>${_strategyStage(candidate, r.now || Date.now())}</td>
+        </tr>`;
+    }).join('');
+    return;
+  }
+
+  $('strategySignalsHeader').innerHTML =
+    '<th>更新</th><th>Symbol</th><th>CA</th><th>1秒跌幅</th>' +
+    '<th>低点反弹</th><th>1秒买家</th><th>确认等待</th><th>阶段</th>';
   meta.innerHTML = [
     `<span>模式 <b>${escapeHtml(r.mode || '-')}</b></span>`,
     `<span>活跃 <b>${summary.active || 0}</b></span>`,

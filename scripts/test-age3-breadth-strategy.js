@@ -66,10 +66,10 @@ function seedBuyers(subject, count, firstOffset = 125_000, price = PRICE_PASS) {
 }
 
 async function run() {
-  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
-  assert.strictEqual(config.activityFlow.enabled, true, 'V8 must run live unless the emergency kill switch is set');
-  assert.strictEqual(config.activityFlow.replaceDumpSignal, true, 'V8 must suppress legacy dump entries');
-  assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.activityFlow.entryMode, 'DUMP_BACKRUN_V9');
+  assert.strictEqual(config.activityFlow.enabled, true, 'V9 telemetry must run unless the emergency kill switch is set');
+  assert.strictEqual(config.activityFlow.replaceDumpSignal, false, 'V9 must allow native dump signals');
+  assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
 
   const subject = tracker();
   const signals = [];

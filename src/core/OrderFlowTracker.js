@@ -60,8 +60,8 @@ class OrderFlowTracker extends EventEmitter {
       boolEnv('ACTIVITY_FLOW_REPLACE_DUMP_SIGNAL', boolEnv('ORDER_FLOW_REPLACE_DUMP_SIGNAL', true));
 
     const requestedEntryMode = String(
-      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'ONE_SECOND_REBOUND_V8') ||
-        'ONE_SECOND_REBOUND_V8',
+      (opts.entryMode ?? flowConfig.entryMode ?? process.env.ACTIVITY_FLOW_ENTRY_MODE ?? 'DUMP_BACKRUN_V9') ||
+        'DUMP_BACKRUN_V9',
     ).toUpperCase();
     // Existing production .env files still name V5. Remap them so deployment cannot silently keep old entry rules.
     this.entryMode = requestedEntryMode === 'ACTIVITY_BURST_V5' ? 'BREADTH_BURST_V6' : requestedEntryMode;
@@ -411,6 +411,10 @@ class OrderFlowTracker extends EventEmitter {
       state.firstBuySeen.set(ev.signer, ev.ts);
     }
 
+    // V9 uses DumpDetector's native same-transaction fast path. Keep these
+    // rolling states for telemetry, but never emit a delayed flow entry.
+    if (this.entryMode === 'DUMP_BACKRUN_V9') return;
+
     if (
       this.entryMode === 'FLOW_ACCEL_15S' ||
       this.entryMode === 'ACTIVITY_BURST_V5' ||
@@ -423,10 +427,22 @@ class OrderFlowTracker extends EventEmitter {
     }
   }
 
-  noteSuppressedDumpSignal(signal) {
+  noteDumpSignal(signal) {
     if (!signal || !signal.mint) return;
     const state = this._stateOf(signal.mint);
     state.lastDumpSignal = signal;
+    state.dumpDecision = 'detected';
+  }
+
+  noteDumpAccepted(mint, ts = Date.now()) {
+    if (!mint) return;
+    const state = this._stateOf(mint);
+    state.lastDumpAcceptedTs = ts;
+    state.dumpDecision = 'signaled';
+  }
+
+  noteSuppressedDumpSignal(signal) {
+    this.noteDumpSignal(signal);
   }
 
   getStrategyCandidates(limit = 100, now = Date.now()) {
@@ -440,6 +456,10 @@ class OrderFlowTracker extends EventEmitter {
       buyersReady: 0,
       dropReady: 0,
       recoveryReady: 0,
+      sellReady: 0,
+      impactReady: 0,
+      poolReady: 0,
+      freshReady: 0,
       armReady: 0,
       armed: 0,
       waiting: 0,
@@ -462,7 +482,34 @@ class OrderFlowTracker extends EventEmitter {
       let triggerReady;
       let trigger;
       let age3 = null;
-      if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+      if (this.entryMode === 'DUMP_BACKRUN_V9') {
+        const dump = state.lastDumpSignal;
+        const signalAgeMs = dump?.ts ? Math.max(0, now - dump.ts) : null;
+        const sellSol = Number(dump?.sellSol || 0);
+        const impactPct = Number(dump?.priceImpactPct || 0);
+        const poolQuoteSol = Number(dump?.poolQuoteAfter || 0);
+        conditions = {
+          sellSize: sellSol >= config.strategy.minSellSol,
+          impactRange:
+            impactPct >= config.strategy.minPriceImpactPct &&
+            impactPct < config.strategy.maxPriceImpactPct,
+          poolLiquidity: poolQuoteSol >= config.strategy.minPoolQuoteSol,
+          signalFresh:
+            signalAgeMs != null &&
+            signalAgeMs <= config.strategy.dumpBackrunMaxSignalAgeMs,
+        };
+        armReady = Object.values(conditions).every(Boolean);
+        triggerReady = armReady;
+        trigger = {
+          sellSol: round(sellSol, 4),
+          impactPct: round(impactPct, 3),
+          poolQuoteSol: round(poolQuoteSol, 3),
+          signalAgeMs,
+          seller: dump?.seller || null,
+          signature: dump?.signature || null,
+          aggregated: !!dump?._aggregated,
+        };
+      } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         const arm = state.reboundArm;
         const currentPrice = latest.price;
         const observedDropPct = Math.max(
@@ -591,7 +638,13 @@ class OrderFlowTracker extends EventEmitter {
         state.lastArmCancelTs != null && now - state.lastArmCancelTs <= this.window15Ms;
 
       let stage = 'monitoring';
-      if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
+      if (this.entryMode === 'DUMP_BACKRUN_V9') {
+        const acceptedRecently =
+          state.lastDumpAcceptedTs != null &&
+          now - state.lastDumpAcceptedTs <= this.window60Ms;
+        if (acceptedRecently) stage = 'signaled';
+        else if (state.lastDumpSignal) stage = triggerReady ? 'ready' : 'cancelled';
+      } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         if (recentlySignaled) stage = 'signaled';
         else if (reboundArmed && triggerReady) stage = 'ready';
         else if (reboundArmed && conditions.confirmWindow) stage = 'confirming';
@@ -618,6 +671,10 @@ class OrderFlowTracker extends EventEmitter {
       if (conditions.buyers1s) summary.buyersReady++;
       if (conditions.dropRange) summary.dropReady++;
       if (conditions.recovery) summary.recoveryReady++;
+      if (conditions.sellSize) summary.sellReady++;
+      if (conditions.impactRange) summary.impactReady++;
+      if (conditions.poolLiquidity) summary.poolReady++;
+      if (conditions.signalFresh) summary.freshReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
       if (stage === 'waiting') summary.waiting++;
@@ -627,8 +684,18 @@ class OrderFlowTracker extends EventEmitter {
       candidates.push({
         mint,
         symbol: state.symbol || null,
-        updatedAt: latest.ts,
-        ageMs: Math.max(0, now - latest.ts),
+        updatedAt:
+          this.entryMode === 'DUMP_BACKRUN_V9' && state.lastDumpSignal?.ts
+            ? state.lastDumpSignal.ts
+            : latest.ts,
+        ageMs: Math.max(
+          0,
+          now - (
+            this.entryMode === 'DUMP_BACKRUN_V9' && state.lastDumpSignal?.ts
+              ? state.lastDumpSignal.ts
+              : latest.ts
+          ),
+        ),
         stage,
         armReady,
         triggerReady,
@@ -639,7 +706,9 @@ class OrderFlowTracker extends EventEmitter {
         cancelReason: recentlyCancelled ? state.lastArmCancelReason : null,
         waitReason: armed ? state.lastArmWaitReason : null,
         decision:
-          this.entryMode === 'ONE_SECOND_REBOUND_V8'
+          this.entryMode === 'DUMP_BACKRUN_V9'
+            ? state.dumpDecision
+            : this.entryMode === 'ONE_SECOND_REBOUND_V8'
             ? state.reboundDecision
             : state.age3Decision,
         tokenAgeMs: age3?.tokenAgeMs ?? null,
@@ -667,6 +736,11 @@ class OrderFlowTracker extends EventEmitter {
           ((b.s60.uniqueBuyers || 0) - (a.s60.uniqueBuyers || 0)) ||
           (b.updatedAt - a.updatedAt);
       }
+      if (this.entryMode === 'DUMP_BACKRUN_V9') {
+        return (Number(b.conditions.signalFresh) - Number(a.conditions.signalFresh)) ||
+          ((b.trigger.sellSol || 0) - (a.trigger.sellSol || 0)) ||
+          (b.updatedAt - a.updatedAt);
+      }
       if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         return (Number(b.conditions.dropRange) - Number(a.conditions.dropRange)) ||
           ((b.trigger.recoveryPct || 0) - (a.trigger.recoveryPct || 0)) ||
@@ -681,6 +755,11 @@ class OrderFlowTracker extends EventEmitter {
       mode: this.entryMode,
       now,
       thresholds: {
+        dumpMinSellSol: config.strategy.minSellSol,
+        dumpMinImpactPct: config.strategy.minPriceImpactPct,
+        dumpMaxImpactPct: config.strategy.maxPriceImpactPct,
+        dumpMinPoolQuoteSol: config.strategy.minPoolQuoteSol,
+        dumpMaxSignalAgeMs: config.strategy.dumpBackrunMaxSignalAgeMs,
         volume1mUsd: this.minVolume1mUsd,
         volume1mSol: this.minVolume1mSol,
         trades1m: this.minTrades1m,
@@ -740,6 +819,8 @@ class OrderFlowTracker extends EventEmitter {
         poolAddress: null,
         lastPoolQuoteAfter: null,
         lastDumpSignal: null,
+        lastDumpAcceptedTs: null,
+        dumpDecision: null,
         lastEntrySignalBucket: null,
         firstSeenTs: null,
         armedAt: null,

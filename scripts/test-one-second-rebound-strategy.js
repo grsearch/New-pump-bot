@@ -73,11 +73,11 @@ function collectSignals(subject) {
 }
 
 async function run() {
-  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.activityFlow.entryMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.activityFlow.reboundMinRecoveryPct, 5);
   assert.strictEqual(config.activityFlow.reboundMaxDropPct, 65);
   assert.strictEqual(config.activityFlow.reboundConfirmMaxGapMs, 10_000);
-  assert.strictEqual(config.strategy.exitMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.strategy.maxMintAgeMinutes, 120);
 
   const passingMint = nextMint();

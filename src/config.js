@@ -26,12 +26,19 @@ const config = {
 
   // ============ Strategy ============
   strategy: {
-    exitMode: 'ONE_SECOND_REBOUND_V8',
+    exitMode: 'DUMP_BACKRUN_V9',
     // 触发条件（DumpDetector）
     // v3.17.20 用户调参：MIN_SELL_SOL 6.0, MIN_PRICE_IMPACT_PCT 10.0
-    minSellSol: parseFloat(process.env.MIN_SELL_SOL || '20'),
-    minPriceImpactPct: parseFloat(process.env.MIN_PRICE_IMPACT_PCT || '10.0'),
-    minTriggerSellCount: parseInt(process.env.MIN_TRIGGER_SELL_COUNT || "2", 10),
+    // Dedicated names prevent stale thresholds from older deployments from
+    // silently overriding the live V9 backrun strategy.
+    minSellSol: parseFloat(process.env.DUMP_BACKRUN_MIN_SELL_SOL || '6'),
+    minPriceImpactPct: parseFloat(
+      process.env.DUMP_BACKRUN_MIN_PRICE_IMPACT_PCT || '8',
+    ),
+    minTriggerSellCount: parseInt(
+      process.env.DUMP_BACKRUN_MIN_SELL_COUNT || '1',
+      10,
+    ),
     // v3.17.39: 距近期高点跌幅过滤 — 防止"高位接刀"(价格刚从 ATH 小幅回落就追入)
     minDropFromRecentHighPct: parseFloat(process.env.MIN_DROP_FROM_RECENT_HIGH_PCT || '0'),
     minDropLookbackSec: parseInt(process.env.MIN_DROP_LOOKBACK_SEC || '1200', 10),
@@ -46,8 +53,16 @@ const config = {
     // v3.10: 实盘观察 — 阈值过宽抓"伪砸盘"（大池子 10 SOL 卖单价格几乎不动），
     // 也抓"流动性已死"（小池子 30%+ impact 但反弹空间小且滑点巨大）
     // 加这两条过滤
-    maxPriceImpactPct: parseFloat(process.env.MAX_PRICE_IMPACT_PCT || '30.0'),
-    minPoolQuoteSol: parseFloat(process.env.MIN_POOL_QUOTE_SOL || '30.0'),
+    maxPriceImpactPct: parseFloat(
+      process.env.DUMP_BACKRUN_MAX_PRICE_IMPACT_PCT || '65',
+    ),
+    minPoolQuoteSol: parseFloat(
+      process.env.DUMP_BACKRUN_MIN_POOL_QUOTE_SOL || '30',
+    ),
+    dumpBackrunMaxSignalAgeMs: parseInt(
+      process.env.DUMP_BACKRUN_MAX_SIGNAL_AGE_MS || '1500',
+      10,
+    ),
 
     // 仓位
     positionSizeSol: parseFloat(process.env.POSITION_SIZE_SOL || '0.1'),
@@ -68,7 +83,7 @@ const config = {
     //   trailingDrawdownPct: armed 后，价格从 HWM 回撤此 % 立即 SELL
     //   trailingMinHwmAgeMs: HWM 必须稳定至少此毫秒数（防单 tick 污染）
     //   设 trailingActivatePct=0 或 trailingDrawdownPct=0 可禁用移动止盈
-    trailingActivatePct: 15,
+    trailingActivatePct: 10,
     trailingDrawdownPct: 3,
     trailingMinHwmAgeMs: 500,
 
@@ -103,7 +118,7 @@ const config = {
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: -10,
+    fixedStopLossPct: -30,
     emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
@@ -231,11 +246,11 @@ const config = {
 
   // ============ Activity-flow entry ============
   activityFlow: {
-    // Strategy V8: buy a confirmed rebound after a trusted one-second dump.
-    // V8 is the live strategy, not a shadow feed. FORCE_DISABLED remains the emergency kill switch.
+    // Strategy V9: keep flow telemetry enabled while native trusted dump
+    // signals use the dedicated low-latency backrun path.
     enabled: !activityFlowForceDisabled,
-    replaceDumpSignal: !activityFlowForceDisabled,
-    entryMode: 'ONE_SECOND_REBOUND_V8',
+    replaceDumpSignal: false,
+    entryMode: 'DUMP_BACKRUN_V9',
     reboundWindowMs: 1_000,
     reboundMinDropPct: 20,
     reboundMaxDropPct: 65,

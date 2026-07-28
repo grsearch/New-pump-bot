@@ -25,6 +25,7 @@
     "test:strategy-v6": "node scripts/test-strategy-v5.js",
     "test:strategy-v7": "node scripts/test-age3-breadth-strategy.js",
     "test:strategy-v8": "node scripts/test-one-second-rebound-strategy.js",
+    "test:strategy-v9": "node scripts/test-dump-backrun-strategy.js",
     "test:buy-guard": "node scripts/test-buy-execution-guard.js",
     "test:chain-failure-diagnostics": "node scripts/test-chain-failure-diagnostics.js",
     "test:pump-swap-pricing": "node scripts/test-pump-swap-pricing.js",

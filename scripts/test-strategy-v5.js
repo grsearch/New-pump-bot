@@ -281,7 +281,7 @@ function runSlippageTests() {
   assert.strictEqual(config.strategy.noBounceExitEnabled, false);
   assert.strictEqual(config.strategy.maxHoldMs, 20_000);
   assert.strictEqual(config.activityFlow.minPoolQuoteSol, undefined);
-  assert.strictEqual(config.activityFlow.entryMode, 'ONE_SECOND_REBOUND_V8');
+  assert.strictEqual(config.activityFlow.entryMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.activityFlow.age3EntryTargetMs, 180_000);
   assert.strictEqual(config.activityFlow.age3EntryToleranceMs, 15_000);
   assert.strictEqual(config.activityFlow.age3MinFdvUsd, 40_000);

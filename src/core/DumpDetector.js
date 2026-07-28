@@ -216,6 +216,7 @@ class DumpDetector extends EventEmitter {
         source: parsed.source,
         priceReliable: parsed.priceReliable,
       });
+      let publishSanitizedSwap = null;
       if (sanitized.event) {
         const swap = sanitized.event;
         const hasTrustedPrice = swap.featureEligible === true &&
@@ -230,28 +231,40 @@ class DumpDetector extends EventEmitter {
           1,
           'DumpDetector',
         );
-        if (hasTrustedPrice) {
-          monitor.inc('DumpDetector.priceTicks', 1, 'DumpDetector');
-          this.emit('priceTick', {
-            mint: swap.mint,
-            price: swap.price,
-            ts: swap.ts,
-            slot: swap.slot,
-            signature: swap.signature,
-            poolAddress: swap.poolAddress,
-            side: swap.side,
-            solVolume: swap.solVolume,
-            poolQuoteAfter: swap.poolQuoteAfter,
-            poolBaseAfter: parsed.poolBaseAfter,
-            baseDecimals: parsed.baseDecimals,
-            rawPrice: parsed.rawPriceAfter,
-            virtualQuoteReserveSol: parsed.virtualQuoteReserveSol,
-            effectiveQuoteReserveSol: parsed.effectiveQuoteReserveSol,
-            priceSanitized: swap.priceSanitized,
-            dataQualityVersion: swap.dataQualityVersion,
-          });
+        publishSanitizedSwap = () => {
+          if (hasTrustedPrice) {
+            monitor.inc('DumpDetector.priceTicks', 1, 'DumpDetector');
+            this.emit('priceTick', {
+              mint: swap.mint,
+              price: swap.price,
+              ts: swap.ts,
+              slot: swap.slot,
+              signature: swap.signature,
+              poolAddress: swap.poolAddress,
+              side: swap.side,
+              solVolume: swap.solVolume,
+              poolQuoteAfter: swap.poolQuoteAfter,
+              poolBaseAfter: parsed.poolBaseAfter,
+              baseDecimals: parsed.baseDecimals,
+              rawPrice: parsed.rawPriceAfter,
+              virtualQuoteReserveSol: parsed.virtualQuoteReserveSol,
+              effectiveQuoteReserveSol: parsed.effectiveQuoteReserveSol,
+              priceSanitized: swap.priceSanitized,
+              dataQualityVersion: swap.dataQualityVersion,
+            });
+          }
+          this.emit('swapParsed', swap);
+        };
+
+        // V9 starts the order before synchronous analytics/database listeners.
+        // Other modes retain the original event ordering for RSI compatibility.
+        if (
+          config.strategy.exitMode !== 'DUMP_BACKRUN_V9' ||
+          parsed.side !== 'SELL'
+        ) {
+          publishSanitizedSwap();
+          publishSanitizedSwap = null;
         }
-        this.emit('swapParsed', swap);
       } else {
         monitor.inc('DumpDetector.swapSanitizerRejected', 1, 'DumpDetector');
         return;
@@ -329,7 +342,12 @@ class DumpDetector extends EventEmitter {
       // v3.27: 新币允许更低的impact(竞对 impact<5% 94.4%胜率赚331 SOL)
       const newCoinMinImpact = parseFloat(process.env.NEW_COIN_MIN_IMPACT_PCT || '0');
       let effectiveMinImpact = config.strategy.minPriceImpactPct;
-      if (newCoinMinImpact >= 0 && newCoinMinImpact < effectiveMinImpact && parsed.baseMint) {
+      if (
+        config.strategy.exitMode !== 'DUMP_BACKRUN_V9' &&
+        newCoinMinImpact >= 0 &&
+        newCoinMinImpact < effectiveMinImpact &&
+        parsed.baseMint
+      ) {
         const _ti = this.tokenRegistry?.getToken(parsed.baseMint);
         if (_ti && _ti.added_at) {
           const _age = Date.now() - _ti.added_at;
@@ -340,7 +358,7 @@ class DumpDetector extends EventEmitter {
         }
       }
       const passImpact = priceImpactPct >= effectiveMinImpact
-                      && priceImpactPct <= config.strategy.maxPriceImpactPct;
+                      && priceImpactPct < config.strategy.maxPriceImpactPct;
       const passLiquidity = effectivePoolQuoteSol >= config.strategy.minPoolQuoteSol;
       const passAll = passSize && passImpact && passLiquidity;
 
@@ -397,7 +415,12 @@ class DumpDetector extends EventEmitter {
           );
         }
         monitor.inc('DumpDetector.dumpSignals', 1, 'DumpDetector');
-        this._emitSingleDumpSignal(parsed, sellSol, priceImpactPct, poolQuoteAfter);
+        this._emitSingleDumpSignal(
+          parsed,
+          sellSol,
+          priceImpactPct,
+          effectivePoolQuoteSol || poolQuoteAfter,
+        );
         // 把这笔加入 slot 桶,但标记 fired=true(避免 AGGREGATED 路径重复 emit)
         this._accumulateSlotSell(parsed, /* alreadyFired */ true);
       } else {
@@ -406,6 +429,7 @@ class DumpDetector extends EventEmitter {
         // 每笔小单记录到 slot 桶,立即检查桶内总 SOL 和累积 impact
         this._accumulateSlotSell(parsed);
       }
+      if (publishSanitizedSwap) publishSanitizedSwap();
     } catch (err) {
       monitor.inc('DumpDetector.parseErrors', 1, 'DumpDetector');
       monitor.recordError('DumpDetector', err, {
@@ -540,7 +564,11 @@ class DumpDetector extends EventEmitter {
     // v3.27: 新币允许更低的impact
     const newCoinMinImpact = parseFloat(process.env.NEW_COIN_MIN_IMPACT_PCT || '0');
     let effectiveAggMinImpact = config.strategy.minPriceImpactPct;
-    if (newCoinMinImpact >= 0 && newCoinMinImpact < effectiveAggMinImpact) {
+    if (
+      config.strategy.exitMode !== 'DUMP_BACKRUN_V9' &&
+      newCoinMinImpact >= 0 &&
+      newCoinMinImpact < effectiveAggMinImpact
+    ) {
       const aggTokenInfo = this.tokenRegistry?.getToken(lastSell.mint);
       const aggTokenAgeMs = Date.now() - (aggTokenInfo?.added_at || 0);
       const newCoinThresholdMs = parseFloat(process.env.NEW_COIN_AGE_THRESHOLD_MS || '0');
@@ -549,7 +577,7 @@ class DumpDetector extends EventEmitter {
       }
     }
     const passImpact = cumulativeImpactPct >= effectiveAggMinImpact
-                    && cumulativeImpactPct <= config.strategy.maxPriceImpactPct;
+                    && cumulativeImpactPct < config.strategy.maxPriceImpactPct;
     // v3.27-fix: 同单笔路径的修复，Pump.fun解析值偏低用tokenRegistry
     let effectiveAggPoolQuoteSol = poolQuoteAfter;
     if (lastSell.mint) {
@@ -585,7 +613,7 @@ class DumpDetector extends EventEmitter {
       symbol: lastSell.symbol,
       sellSol: totalSellSol,
       priceImpactPct: cumulativeImpactPct,
-      poolQuoteAfter,
+      poolQuoteAfter: effectiveAggPoolQuoteSol || poolQuoteAfter,
       seller: sellers[0], // 主卖家(第一个)
       signature: lastSell.signature, // 用最后一笔的 sig
       ts: lastSell.ts,

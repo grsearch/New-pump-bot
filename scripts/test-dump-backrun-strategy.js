@@ -33,7 +33,7 @@ function makeSignal(overrides = {}) {
   return {
     mint,
     symbol: 'V9TEST',
-    sellSol: 8.5,
+    sellSol: 7.5,
     priceImpactPct: 12,
     poolQuoteAfter: 150,
     seller: `seller-${mintSequence}`,
@@ -48,11 +48,15 @@ function makeSignal(overrides = {}) {
   };
 }
 
-function makeEngine({ hasOpenPosition = false } = {}) {
+function makeEngine({
+  hasOpenPosition = false,
+  timeoutBlockedMints = [],
+} = {}) {
   const logged = [];
   const engine = new SignalEngine({
     tradeLogger: {
       getRecentAcceptedSellerTxs: () => [],
+      getDumpBackrunTimeoutMints: () => timeoutBlockedMints,
       loadRecentPriceSamples: () => new Map(),
       logSignal: (row) => logged.push(row),
     },
@@ -72,12 +76,13 @@ async function run() {
   assert.strictEqual(config.activityFlow.entryMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.activityFlow.replaceDumpSignal, false);
   assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
-  assert.strictEqual(config.strategy.minSellSol, 8);
+  assert.strictEqual(config.strategy.minSellSol, 7);
   assert.strictEqual(config.strategy.allowAggregatedDumpSignals, false);
   assert.strictEqual(config.strategy.minPriceImpactPct, 8);
   assert.strictEqual(config.strategy.maxPriceImpactPct, 65);
   assert.strictEqual(config.strategy.minPoolQuoteSol, 120);
   assert.strictEqual(config.strategy.dumpBackrunMaxSignalAgeMs, 1_500);
+  assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
 
   const accepted = makeEngine();
@@ -123,6 +128,45 @@ async function run() {
   }));
   assert.strictEqual(aggregatedOrders.length, 0, 'an aggregated dump must not buy');
   aggregated.engine.shutdown();
+
+  const restoredBlockedMint = nextMint();
+  const restoredBlocked = makeEngine({
+    timeoutBlockedMints: [restoredBlockedMint],
+  });
+  const restoredBlockedOrders = [];
+  restoredBlocked.engine.on('buyOrder', (order) => restoredBlockedOrders.push(order));
+  await restoredBlocked.engine.handleDumpSignal(makeSignal({
+    mint: restoredBlockedMint,
+  }));
+  assert.strictEqual(
+    restoredBlockedOrders.length,
+    0,
+    'a persisted V9 timeout block must survive restart',
+  );
+  restoredBlocked.engine.shutdown();
+
+  const runtimeBlockedMint = nextMint();
+  const runtimeBlocked = makeEngine();
+  const runtimeBlockedOrders = [];
+  runtimeBlocked.engine.on('buyOrder', (order) => runtimeBlockedOrders.push(order));
+  assert.strictEqual(
+    runtimeBlocked.engine.blockDumpBackrunMintAfterTimeout(runtimeBlockedMint),
+    true,
+  );
+  assert.strictEqual(
+    runtimeBlocked.engine.blockDumpBackrunMintAfterTimeout(runtimeBlockedMint),
+    false,
+    'only the first timeout should add the mint',
+  );
+  await runtimeBlocked.engine.handleDumpSignal(makeSignal({
+    mint: runtimeBlockedMint,
+  }));
+  assert.strictEqual(
+    runtimeBlockedOrders.length,
+    0,
+    'a runtime V9 timeout block must prevent future buys',
+  );
+  runtimeBlocked.engine.shutdown();
 
   const shallow = makeEngine();
   const shallowOrders = [];

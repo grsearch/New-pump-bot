@@ -57,6 +57,7 @@ class SignalEngine extends EventEmitter {
     this.triggeredSellerMintPairs = new Map();
     // v3.24: 同币卖出后冷却 — 避免短时间重复买入同一币
     this._exitCooldowns = new Map(); // mint → cooldownExpireAt
+    this._dumpBackrunTimeoutBlockedMints = new Set();
 
     // v3.17.15: 同卖家短期累计卖出追踪
     //   同一卖家可能拆分多笔 tx 砸盘，每笔 < MIN_SELL_SOL 但合计 > MIN_SELL_SOL
@@ -73,6 +74,7 @@ class SignalEngine extends EventEmitter {
 
     // 启动时从 DB 恢复最近的 accepted seller_tx，防止重启后 LaserStream 重推同砸单
     this._restoreSellerTxsFromDb();
+    this._restoreDumpBackrunTimeoutBlocks();
     this._restorePriceSamplesFromDb();
 
     // 后台定期清理过期项（避免内存泄漏；setTimeout 也有但 Map 用一个统一清理更可靠）
@@ -109,6 +111,50 @@ class SignalEngine extends EventEmitter {
       monitor.recordError('SignalEngine', err, { phase: 'restoreSellerTxs' });
       console.warn(`[SignalEngine] failed to restore seller_tx dedup: ${err.message}`);
     }
+  }
+
+  _restoreDumpBackrunTimeoutBlocks() {
+    if (
+      !config.strategy.dumpBackrunBlockMintAfterTimeout ||
+      typeof this.tradeLogger.getDumpBackrunTimeoutMints !== 'function'
+    ) {
+      return;
+    }
+    try {
+      const mints = this.tradeLogger.getDumpBackrunTimeoutMints(config.DRY_RUN);
+      for (const mint of mints) {
+        if (mint) this._dumpBackrunTimeoutBlockedMints.add(mint);
+      }
+      if (mints.length > 0) {
+        console.log(
+          `[SignalEngine] restored ${mints.length} V9 timeout-blocked mints from DB`,
+        );
+      }
+      monitor.set(
+        'SignalEngine.dumpBackrunTimeoutBlockedMints',
+        this._dumpBackrunTimeoutBlockedMints.size,
+        'SignalEngine',
+      );
+    } catch (err) {
+      monitor.recordError('SignalEngine', err, {
+        phase: 'restoreDumpBackrunTimeoutBlocks',
+      });
+      console.warn(
+        `[SignalEngine] failed to restore V9 timeout blocks: ${err.message}`,
+      );
+    }
+  }
+
+  blockDumpBackrunMintAfterTimeout(mint) {
+    if (!config.strategy.dumpBackrunBlockMintAfterTimeout || !mint) return false;
+    const sizeBefore = this._dumpBackrunTimeoutBlockedMints.size;
+    this._dumpBackrunTimeoutBlockedMints.add(mint);
+    monitor.set(
+      'SignalEngine.dumpBackrunTimeoutBlockedMints',
+      this._dumpBackrunTimeoutBlockedMints.size,
+      'SignalEngine',
+    );
+    return this._dumpBackrunTimeoutBlockedMints.size > sizeBefore;
   }
 
   _cleanupExpired() {
@@ -800,6 +846,15 @@ class SignalEngine extends EventEmitter {
     ) {
       monitor.inc('SignalEngine.rejectedInactiveMint', 1, 'SignalEngine');
       this._logReject(signal, 'mint is no longer active');
+      return;
+    }
+
+    if (
+      config.strategy.dumpBackrunBlockMintAfterTimeout &&
+      this._dumpBackrunTimeoutBlockedMints.has(mint)
+    ) {
+      monitor.inc('SignalEngine.rejectedDumpBackrunTimeoutBlock', 1, 'SignalEngine');
+      this._logReject(signal, 'V9 timeout block: mint already timed out once');
       return;
     }
 

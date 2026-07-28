@@ -31,7 +31,7 @@ const config = {
     // V9.1 entry defaults come from the latest live-data audit.
     // Dedicated names prevent stale thresholds from older deployments from
     // silently overriding the live V9 backrun strategy.
-    minSellSol: parseFloat(process.env.DUMP_BACKRUN_MIN_SELL_SOL || '8'),
+    minSellSol: parseFloat(process.env.DUMP_BACKRUN_MIN_SELL_SOL || '7'),
     allowAggregatedDumpSignals:
       (process.env.DUMP_BACKRUN_ALLOW_AGGREGATED ?? 'false').toLowerCase() === 'true',
     minPriceImpactPct: parseFloat(
@@ -65,6 +65,8 @@ const config = {
       process.env.DUMP_BACKRUN_MAX_SIGNAL_AGE_MS || '1500',
       10,
     ),
+    dumpBackrunBlockMintAfterTimeout:
+      (process.env.DUMP_BACKRUN_BLOCK_MINT_AFTER_TIMEOUT ?? 'true').toLowerCase() === 'true',
 
     // 仓位
     positionSizeSol: parseFloat(process.env.POSITION_SIZE_SOL || '0.1'),

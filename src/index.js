@@ -59,7 +59,9 @@ async function main() {
         `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'}, ` +
         `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%, ` +
         `pool>=${config.strategy.minPoolQuoteSol}SOL, ` +
-        `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, no rebound confirmation)`,
+        `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, ` +
+        `${config.strategy.dumpBackrunBlockMintAfterTimeout ? 'first-timeout-blocks-mint' : 'timeout-reentry-enabled'}, ` +
+        `no rebound confirmation)`,
     );
   } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
     console.log(
@@ -1025,6 +1027,19 @@ async function main() {
     signalEngine.lastTriggerTs.set(pos.mint, Date.now());
     if (config.strategy.rebuyCooldownMs > 0) {
       signalEngine._exitCooldowns.set(pos.mint, Date.now() + config.strategy.rebuyCooldownMs);
+    }
+    if (
+      config.strategy.exitMode === 'DUMP_BACKRUN_V9' &&
+      typeof pos.exitReason === 'string' &&
+      pos.exitReason.startsWith('TIMEOUT')
+    ) {
+      const newlyBlocked = signalEngine.blockDumpBackrunMintAfterTimeout(pos.mint);
+      if (newlyBlocked) {
+        console.log(
+          `[main] V9 timeout block enabled for ${pos.symbol || pos.mint.slice(0, 6)}; ` +
+            'future dump signals remain recorded but cannot buy',
+        );
+      }
     }
     if (pos.removeAfterExit && !positionManager.hasOpenPosition(pos.mint)) {
       tokenRegistry.removeToken(pos.mint);

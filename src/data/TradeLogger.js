@@ -1358,6 +1358,23 @@ ${snapshotColumnsSql},
     return this.stmts.recentPositions.all(limit);
   }
 
+  getDumpBackrunTimeoutMints(dryRun = false) {
+    return this.db.prepare(`
+      SELECT DISTINCT p.mint
+      FROM positions p
+      WHERE p.dry_run = ?
+        AND p.exit_reason LIKE 'TIMEOUT%'
+        AND EXISTS (
+          SELECT 1
+          FROM trades t
+          WHERE t.position_id = p.position_id
+            AND t.side = 'BUY'
+            AND t.success = 1
+            AND t.reason LIKE 'dump_backrun_v9:%'
+        )
+    `).all(dryRun ? 1 : 0).map((row) => row.mint);
+  }
+
   getStuckPositions() {
     return this.stmts.stuckPositions.all();
   }

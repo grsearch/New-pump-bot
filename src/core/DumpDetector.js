@@ -198,6 +198,14 @@ class DumpDetector extends EventEmitter {
         monitor.inc('DumpDetector.parsedNull', 1, 'DumpDetector');
         return;
       }
+      const transactionIndexRaw =
+        txMessage?.transaction?.index ?? txMessage?.index ?? null;
+      const transactionIndex =
+        transactionIndexRaw == null ? null : Number(transactionIndexRaw);
+      parsed.transactionIndex =
+        Number.isInteger(transactionIndex) && transactionIndex >= 0
+          ? transactionIndex
+          : null;
 
       const sanitized = this.swapEventSanitizer.sanitize({
         mint: parsed.baseMint,
@@ -210,6 +218,7 @@ class DumpDetector extends EventEmitter {
         priceChangePct: parsed.priceChangePct,
         ts: parsed.ts,
         slot: parsed.slot,
+        transactionIndex: parsed.transactionIndex,
         signature: parsed.signature,
         poolAddress: parsed.poolAddress,
         poolQuoteAfter: parsed.effectiveQuoteReserveSol || parsed.poolQuoteAfter,
@@ -239,6 +248,7 @@ class DumpDetector extends EventEmitter {
               price: swap.price,
               ts: swap.ts,
               slot: swap.slot,
+              transactionIndex: swap.transactionIndex,
               signature: swap.signature,
               poolAddress: swap.poolAddress,
               side: swap.side,
@@ -477,6 +487,7 @@ class DumpDetector extends EventEmitter {
       signature: parsed.signature,
       ts: parsed.ts,
       slot: parsed.slot,
+      transactionIndex: parsed.transactionIndex,
       poolAddress: parsed.poolAddress,
       poolBaseVault: parsed.poolBaseVault,
       poolQuoteVault: parsed.poolQuoteVault,
@@ -484,6 +495,11 @@ class DumpDetector extends EventEmitter {
       priceBefore: parsed._analyticsPriceBefore ?? parsed.priceBefore,
       baseDecimals: parsed.baseDecimals,
       quoteDecimals: parsed.quoteDecimals,
+      signalPoolBaseAmountUi: parsed.poolBaseAfter,
+      signalRawPoolQuoteSol: parsed.poolQuoteAfter,
+      signalVirtualQuoteReserveSol: parsed.virtualQuoteReserveSol,
+      signalEffectiveQuoteReserveSol: parsed.effectiveQuoteReserveSol,
+      signalSource: parsed.source || null,
       _sellCount10s: recentStats ? recentStats.sellCount : 1,
       _totalSellSol10s: recentStats ? recentStats.totalSellSol : sellSol,
     });
@@ -507,6 +523,7 @@ class DumpDetector extends EventEmitter {
       signature: parsed.signature,
       ts: parsed.ts,
       slot: parsed.slot,
+      transactionIndex: parsed.transactionIndex,
       symbol: parsed.symbol,
       poolAddress: parsed.poolAddress,
       priceBefore: parsed._analyticsPriceBefore ?? parsed.priceBefore,
@@ -628,6 +645,7 @@ class DumpDetector extends EventEmitter {
       signature: lastSell.signature, // 用最后一笔的 sig
       ts: lastSell.ts,
       slot: lastSell.slot,
+      transactionIndex: lastSell.transactionIndex,
       poolAddress: lastSell.poolAddress,
       poolBaseVault: lastSell.poolBaseVault,
       poolQuoteVault: lastSell.poolQuoteVault,

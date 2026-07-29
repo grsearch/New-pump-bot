@@ -999,6 +999,13 @@ class SignalEngine extends EventEmitter {
       `dump_backrun_v9: sell=${safeSellSol.toFixed(2)}SOL ` +
       `impact=${safeImpactPct.toFixed(2)}% pool=${safePoolQuoteSol.toFixed(1)}SOL ` +
       `age=${signalAgeMs}ms${signal._aggregated ? ' aggregated' : ''}`;
+    const latestStreamSlotAtSignal = this.tickStream
+      ? Number(this.tickStream.latestSlot || 0)
+      : 0;
+    const slotGapAtSignal =
+      Number(slot) > 0 && latestStreamSlotAtSignal > 0
+        ? latestStreamSlotAtSignal - Number(slot)
+        : null;
 
     monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');
     monitor.inc('SignalEngine.dumpBackrunAccepted', 1, 'SignalEngine');
@@ -1022,9 +1029,14 @@ class SignalEngine extends EventEmitter {
       reason,
       sizeSol: config.strategy.positionSizeSol,
       _signalReceivedAt: signalReceivedAt,
+      _latestStreamSlotAtSignal: latestStreamSlotAtSignal,
+      _slotGapAtSignal: slotGapAtSignal,
     });
     console.log(
-      `[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}`,
+      `[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}` +
+        (slotGapAtSignal !== null
+          ? ` slot=${slot} latest=${latestStreamSlotAtSignal} gap=${slotGapAtSignal}`
+          : ''),
     );
 
     setImmediate(() => {
@@ -1038,7 +1050,11 @@ class SignalEngine extends EventEmitter {
           priceImpactPct: safeImpactPct,
           seller,
           sellerTx: signature,
-          notes: reason,
+          notes:
+            reason +
+            (slotGapAtSignal !== null
+              ? `, slot=${slot}, latest_slot=${latestStreamSlotAtSignal}, slot_gap=${slotGapAtSignal}`
+              : ''),
           accepted: true,
         });
       } catch (err) {

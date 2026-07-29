@@ -988,6 +988,15 @@ class Executor {
     const baseDecimals = order.baseDecimals ?? 6;
     const configuredSlippagePct = config.strategy.buySlippageBps / 100;
     let buyStage = 'validation';
+    const finiteOrNull = (value) => {
+      if (value == null || value === '') return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+    const signalSlot = Number(order.signalSlot) || null;
+    const signalReceivedAt = Number(order.signalReceivedAt) || null;
+    const latestStreamSlotAtSignal =
+      Number(order.latestStreamSlotAtSignal) || null;
     const buyDiagnostics = {
       buyMode: 'buy_exact_quote_in',
       configuredSlippagePct,
@@ -1001,6 +1010,40 @@ class Executor {
       stateSource: null,
       minBaseAmountOutRaw: null,
       virtualQuoteReservesRaw: null,
+      effectiveQuoteReserveRaw: null,
+      poolBaseAmountRaw: null,
+      poolQuoteAmountRaw: null,
+      poolAddress: order.poolAddress || null,
+      sellerTx: order.sellerTx || null,
+      signalPriceBefore: finiteOrNull(order.priceBefore),
+      signalPoolQuoteSol: finiteOrNull(order.poolQuoteAfterSignal),
+      signalPoolBaseAmountUi: finiteOrNull(order.signalPoolBaseAmountUi),
+      signalRawPoolQuoteSol: finiteOrNull(order.signalRawPoolQuoteSol),
+      signalVirtualQuoteReserveSol: finiteOrNull(order.signalVirtualQuoteReserveSol),
+      signalEffectiveQuoteReserveSol:
+        finiteOrNull(order.signalEffectiveQuoteReserveSol),
+      signalSource: order.signalSource || null,
+      baseDecimals,
+      signalSlot,
+      signalTransactionIndex: finiteOrNull(order.signalTransactionIndex),
+      signalTs: Number(order.signalTs) || null,
+      signalReceivedAt,
+      latestStreamSlotAtSignal,
+      latestStreamSlotAtOrder: Number(order.latestStreamSlotAtOrder) || null,
+      latestStreamSlotAtQuote: null,
+      slotGapAtSignal: finiteOrNull(order.slotGapAtSignal),
+      slotGapAtQuote: null,
+      rpcContextSlot: null,
+      rpcPoolContextSlot: null,
+      rpcReserveContextSlot: null,
+      rpcUserContextSlot: null,
+      rpcContextSlotApproximate: null,
+      rpcSlotGapFromSignal: null,
+      rpcFetchedAtMs: null,
+      quoteStartedAt: null,
+      quoteReadyAt: null,
+      quoteLatencyMs: null,
+      signalToQuoteMs: null,
     };
 
     // ============ DRY_RUN ============
@@ -1073,6 +1116,7 @@ class Executor {
       // 1. Only quote from a pool state fresh enough for BUY construction.
       buyStage = 'pool_state';
       const tS0 = Date.now();
+      buyDiagnostics.quoteStartedAt = tS0;
       if (this.poolStateCache?.isDead(order.poolAddress)) {
         monitor.inc('Executor.buyPoolDead', 1, 'Executor');
         return {
@@ -1116,6 +1160,14 @@ class Executor {
         stateSource: stateInfo.stateSource,
         cacheAgeBeforeMs: stateInfo.cacheAgeBeforeMs,
         cacheAgeAtBuildMs: stateInfo.cacheAgeAtBuildMs,
+        rpcContextSlot: stateInfo.rpcContextSlot,
+        rpcPoolContextSlot: stateInfo.rpcPoolContextSlot,
+        rpcReserveContextSlot: stateInfo.rpcReserveContextSlot,
+        rpcUserContextSlot: stateInfo.rpcUserContextSlot,
+        rpcContextSlotApproximate: stateInfo.rpcContextSlotApproximate == null
+          ? null
+          : stateInfo.rpcContextSlotApproximate === true ? 1 : 0,
+        rpcFetchedAtMs: stateInfo.rpcFetchedAtMs,
       });
       if (stateInfo.stateSource === 'cache') monitor.inc('Executor.cacheHit', 1, 'Executor');
       else monitor.inc('Executor.cacheMiss', 1, 'Executor');
@@ -1132,6 +1184,31 @@ class Executor {
         );
       }
       buyDiagnostics.virtualQuoteReservesRaw = virtualQuoteReserves.toString();
+      buyDiagnostics.poolBaseAmountRaw =
+        swapState?.poolBaseAmount?.toString?.() || null;
+      buyDiagnostics.poolQuoteAmountRaw =
+        swapState?.poolQuoteAmount?.toString?.() || null;
+      if (
+        buyDiagnostics.poolQuoteAmountRaw != null &&
+        buyDiagnostics.virtualQuoteReservesRaw != null
+      ) {
+        buyDiagnostics.effectiveQuoteReserveRaw = new BN(
+          buyDiagnostics.poolQuoteAmountRaw,
+        ).add(new BN(buyDiagnostics.virtualQuoteReservesRaw)).toString();
+      }
+      buyDiagnostics.latestStreamSlotAtQuote =
+        Number(order.getLatestStreamSlot?.()) ||
+        Number(order.latestStreamSlotAtOrder) ||
+        Number(this._latestBuySlot) ||
+        null;
+      buyDiagnostics.slotGapAtQuote =
+        signalSlot && buyDiagnostics.latestStreamSlotAtQuote
+          ? buyDiagnostics.latestStreamSlotAtQuote - signalSlot
+          : null;
+      buyDiagnostics.rpcSlotGapFromSignal =
+        signalSlot && buyDiagnostics.rpcContextSlot
+          ? buyDiagnostics.rpcContextSlot - signalSlot
+          : null;
 
       // ============ v3.17.20: BUY 前验证 pool 归属（防签名串） ============
       //   根因(图8)：DB 里不同代币共享了同一个 pool_address。
@@ -1243,6 +1320,12 @@ class Executor {
         baseDecimals,
         maxPriceDeviationPct: config.strategy.buyMaxPriceDeviationPct,
       });
+      buyDiagnostics.quoteReadyAt = Date.now();
+      buyDiagnostics.quoteLatencyMs =
+        buyDiagnostics.quoteReadyAt - buyDiagnostics.quoteStartedAt;
+      buyDiagnostics.signalToQuoteMs = signalReceivedAt
+        ? buyDiagnostics.quoteReadyAt - signalReceivedAt
+        : null;
       Object.assign(buyDiagnostics, {
         effectiveSlippagePct: guard.effectiveSlippagePct ?? 0,
         expectedPrice: guard.expectedPrice ?? null,
@@ -1256,7 +1339,10 @@ class Executor {
         const error = `buy_price_guard: ${guard.reason}`;
         console.warn(
           `[Executor:LIVE] BUY ABORTED ${order.symbol || order.mint.slice(0, 6)}: ${error} ` +
-            `(signal=${buyDiagnostics.signalPrice ?? 'n/a'} expected=${guard.expectedPrice || 'n/a'})`,
+            `(signal=${buyDiagnostics.signalPrice ?? 'n/a'} expected=${guard.expectedPrice || 'n/a'} ` +
+            `slots=${signalSlot ?? 'n/a'}/${buyDiagnostics.rpcContextSlot ?? 'n/a'}/` +
+            `${buyDiagnostics.latestStreamSlotAtQuote ?? 'n/a'} ` +
+            `timing=${buyDiagnostics.signalToQuoteMs ?? 'n/a'}ms)`,
         );
         return {
           success: false,
@@ -1296,7 +1382,10 @@ class Executor {
           `minBase=${buyDiagnostics.minBaseAmountOutRaw} ` +
           `outputTolerance=${guard.effectiveSlippagePct.toFixed(2)}% ` +
           `virtualQuote=${buyDiagnostics.virtualQuoteReservesRaw} ` +
-          `cache=${beforeAge}->${atBuildAge}[${buyDiagnostics.stateSource}]`,
+          `cache=${beforeAge}->${atBuildAge}[${buyDiagnostics.stateSource}] ` +
+          `slots=${signalSlot ?? 'n/a'}/${buyDiagnostics.rpcContextSlot ?? 'n/a'}/` +
+          `${buyDiagnostics.latestStreamSlotAtQuote ?? 'n/a'} ` +
+          `signalToQuote=${buyDiagnostics.signalToQuoteMs ?? 'n/a'}ms`,
       );
 
       const tokenAmount = guard.expectedTokenAmount;

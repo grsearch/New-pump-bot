@@ -846,7 +846,8 @@ async function main() {
     signalEngine.markBuyInflight(order.mint);
 
     // Record the current chain slot on BUY for execution metadata.
-    executor.setLatestSlot(tickStream.latestSlot || 0);
+    const latestStreamSlotAtOrder = Number(tickStream.latestSlot || 0);
+    executor.setLatestSlot(latestStreamSlotAtOrder);
 
     const _t2 = Date.now();
     let buyResult;
@@ -856,12 +857,63 @@ async function main() {
         symbol: order.symbol,
         sizeSol: order.sizeSol,
         priceAfter: order.priceAfter, // 用于 DRY_RUN 模拟
+        priceBefore: order.priceBefore,
         baseDecimals: order.baseDecimals ?? tokenInfo?.decimals ?? 6,
         poolAddress: tokenInfo?.pool_address, // Pump SDK 需要 pool address
+        signalSlot: order.slot,
+        signalTransactionIndex: order.transactionIndex,
+        signalTs: order.ts,
+        signalReceivedAt: order._signalReceivedAt,
+        latestStreamSlotAtSignal: order._latestStreamSlotAtSignal,
+        slotGapAtSignal: order._slotGapAtSignal,
+        latestStreamSlotAtOrder,
+        getLatestStreamSlot: () => Number(tickStream.latestSlot || 0),
+        sellerTx: order.signature,
+        poolQuoteAfterSignal: order.poolQuoteAfter,
+        signalPoolBaseAmountUi: order.signalPoolBaseAmountUi,
+        signalRawPoolQuoteSol: order.signalRawPoolQuoteSol,
+        signalVirtualQuoteReserveSol: order.signalVirtualQuoteReserveSol,
+        signalEffectiveQuoteReserveSol: order.signalEffectiveQuoteReserveSol,
+        signalSource: order.signalSource,
       });
     } finally {
       signalEngine.markBuyDone(order.mint);
     }
+    const buyForensics = buyResult ? {
+      effectiveQuoteReserveRaw: buyResult.effectiveQuoteReserveRaw,
+      poolBaseAmountRaw: buyResult.poolBaseAmountRaw,
+      poolQuoteAmountRaw: buyResult.poolQuoteAmountRaw,
+      poolAddress: buyResult.poolAddress,
+      sellerTx: buyResult.sellerTx,
+      signalPriceBefore: buyResult.signalPriceBefore,
+      signalPoolQuoteSol: buyResult.signalPoolQuoteSol,
+      signalPoolBaseAmountUi: buyResult.signalPoolBaseAmountUi,
+      signalRawPoolQuoteSol: buyResult.signalRawPoolQuoteSol,
+      signalVirtualQuoteReserveSol: buyResult.signalVirtualQuoteReserveSol,
+      signalEffectiveQuoteReserveSol: buyResult.signalEffectiveQuoteReserveSol,
+      signalSource: buyResult.signalSource,
+      baseDecimals: buyResult.baseDecimals,
+      signalSlot: buyResult.signalSlot,
+      signalTransactionIndex: buyResult.signalTransactionIndex,
+      signalTs: buyResult.signalTs,
+      signalReceivedAt: buyResult.signalReceivedAt,
+      latestStreamSlotAtSignal: buyResult.latestStreamSlotAtSignal,
+      latestStreamSlotAtOrder: buyResult.latestStreamSlotAtOrder,
+      latestStreamSlotAtQuote: buyResult.latestStreamSlotAtQuote,
+      slotGapAtSignal: buyResult.slotGapAtSignal,
+      slotGapAtQuote: buyResult.slotGapAtQuote,
+      rpcContextSlot: buyResult.rpcContextSlot,
+      rpcPoolContextSlot: buyResult.rpcPoolContextSlot,
+      rpcReserveContextSlot: buyResult.rpcReserveContextSlot,
+      rpcUserContextSlot: buyResult.rpcUserContextSlot,
+      rpcContextSlotApproximate: buyResult.rpcContextSlotApproximate,
+      rpcSlotGapFromSignal: buyResult.rpcSlotGapFromSignal,
+      rpcFetchedAtMs: buyResult.rpcFetchedAtMs,
+      quoteStartedAt: buyResult.quoteStartedAt,
+      quoteReadyAt: buyResult.quoteReadyAt,
+      quoteLatencyMs: buyResult.quoteLatencyMs,
+      signalToQuoteMs: buyResult.signalToQuoteMs,
+    } : {};
     if (order._signalReceivedAt && buyResult && buyResult.success) {
       console.log('[main] buyOrder_timing: getToken=%dms preBuy=%dms buy=%dms', _t1-_t0, _t2-_t1, Date.now()-_t2);
     }
@@ -915,6 +967,7 @@ async function main() {
             buyMode: buyResult.buyMode,
             minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
             virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
+            ...buyForensics,
           },
         });
       } catch (_) { /* analytics only */ }
@@ -951,6 +1004,7 @@ async function main() {
       buyMode: buyResult.buyMode,
       minBaseAmountOutRaw: buyResult.minBaseAmountOutRaw,
       virtualQuoteReservesRaw: buyResult.virtualQuoteReservesRaw,
+      ...buyForensics,
     });
 
     if (!buyResult.success) {

@@ -40,6 +40,7 @@ function makeSignal(overrides = {}) {
     signature: `signature-${mintSequence}-${Date.now()}`,
     ts: Date.now() - 50,
     slot: 500_000,
+    transactionIndex: 17,
     priceBefore: 1.2e-6,
     priceAfter: 1e-6,
     _sellCount10s: 1,
@@ -94,6 +95,7 @@ async function run() {
   assert.strictEqual(buyOrders.length, 1, 'a valid dump must emit BUY immediately');
   assert.match(buyOrders[0].reason, /dump_backrun_v9/);
   assert.strictEqual(buyOrders[0]._dumpBackrunEntry, true);
+  assert.strictEqual(buyOrders[0].transactionIndex, 17);
 
   accepted.engine.markBuyDone(validSignal.mint);
   await accepted.engine.handleDumpSignal(validSignal);

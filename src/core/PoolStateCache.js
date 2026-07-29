@@ -260,6 +260,48 @@ class PoolStateCache {
     }
   }
 
+  async _getMultipleAccountsInfoWithContext(publicKeys) {
+    const connection = this.onlineSdk.connection;
+    if (typeof connection.getMultipleAccountsInfoAndContext === 'function') {
+      const response = await connection.getMultipleAccountsInfoAndContext(publicKeys);
+      return {
+        accounts: response?.value || [],
+        contextSlot: Number(response?.context?.slot) || null,
+        approximate: false,
+      };
+    }
+
+    const accounts = await connection.getMultipleAccountsInfo(publicKeys);
+    let contextSlot = null;
+    if (typeof connection.getSlot === 'function') {
+      try {
+        contextSlot = Number(await connection.getSlot('processed')) || null;
+      } catch (_) {
+        contextSlot = null;
+      }
+    }
+    return { accounts, contextSlot, approximate: true };
+  }
+
+  async _fetchSdkStateWithContext(poolKey, user) {
+    const state = await this.onlineSdk.swapSolanaState(poolKey, user);
+    if (!state) return state;
+
+    let contextSlot = null;
+    const connection = this.onlineSdk.connection;
+    if (typeof connection?.getSlot === 'function') {
+      try {
+        contextSlot = Number(await connection.getSlot('processed')) || null;
+      } catch (_) {
+        contextSlot = null;
+      }
+    }
+    state._rpcContextSlot = contextSlot;
+    state._rpcContextSlotApproximate = true;
+    state._rpcFetchedAtMs = Date.now();
+    return state;
+  }
+
   /**
    * v3.17.22: 核心 — 合并 RPC 调用，自建 swapSolanaState 等价对象
    *
@@ -297,7 +339,7 @@ class PoolStateCache {
 
     // 全局配置未缓存则 fallback 到原始 swapSolanaState
     if (!this._globalConfigFetched || !this._globalConfig) {
-      return await this.onlineSdk.swapSolanaState(poolKey, user);
+      return await this._fetchSdkStateWithContext(poolKey, user);
     }
 
     // 尝试 1 次 RPC 路径：如果 cache 里有这个 pool 的旧 state，
@@ -319,15 +361,7 @@ class PoolStateCache {
           quoteMint, user, true, quoteTokenProgram,
         );
 
-        const [
-          poolAccountInfo,
-          baseMintAccountInfo,
-          quoteMintAccountInfo,
-          poolBaseAccountInfo,
-          poolQuoteAccountInfo,
-          userBaseAccountInfo,
-          userQuoteAccountInfo,
-        ] = await connection.getMultipleAccountsInfo([
+        const fastResponse = await this._getMultipleAccountsInfoWithContext([
           poolKey,
           baseMint,
           quoteMint,
@@ -336,6 +370,15 @@ class PoolStateCache {
           userBaseTokenAccount,
           userQuoteTokenAccount,
         ]);
+        const [
+          poolAccountInfo,
+          baseMintAccountInfo,
+          quoteMintAccountInfo,
+          poolBaseAccountInfo,
+          poolQuoteAccountInfo,
+          userBaseAccountInfo,
+          userQuoteAccountInfo,
+        ] = fastResponse.accounts;
 
         if (!poolAccountInfo) return null;
 
@@ -378,6 +421,12 @@ class PoolStateCache {
           userQuoteTokenAccount,
           userBaseAccountInfo,
           userQuoteAccountInfo,
+          _rpcContextSlot: fastResponse.contextSlot,
+          _rpcPoolContextSlot: fastResponse.contextSlot,
+          _rpcReserveContextSlot: fastResponse.contextSlot,
+          _rpcUserContextSlot: fastResponse.contextSlot,
+          _rpcContextSlotApproximate: fastResponse.approximate,
+          _rpcFetchedAtMs: Date.now(),
         };
       } catch (err) {
         // 快速路径失败，fallback 到慢路径
@@ -418,7 +467,8 @@ class PoolStateCache {
     // 所以必须分两步：先查 pool，再查其余
 
     // 实际方案：第1次只查 pool（1 账户），拿到地址后第2次查 6 账户
-    const [poolAccountInfo] = await connection.getMultipleAccountsInfo([poolKey]);
+    const poolResponse = await this._getMultipleAccountsInfoWithContext([poolKey]);
+    const [poolAccountInfo] = poolResponse.accounts;
     if (!poolAccountInfo) return null;
 
     // v3.32: 检查pool owner是否还是Pump AMM程序
@@ -434,17 +484,18 @@ class PoolStateCache {
 
     // 第2次：4 账户（baseMint, quoteMint, poolBaseToken, poolQuoteToken）
     // 拿到 baseTokenProgram 后再派生 user ATA
-    const [
-      baseMintAccountInfo,
-      quoteMintAccountInfo,
-      poolBaseAccountInfo,
-      poolQuoteAccountInfo,
-    ] = await connection.getMultipleAccountsInfo([
+    const reserveResponse = await this._getMultipleAccountsInfoWithContext([
       baseMint,
       quoteMint,
       poolBaseTokenAccount,
       poolQuoteTokenAccount,
     ]);
+    const [
+      baseMintAccountInfo,
+      quoteMintAccountInfo,
+      poolBaseAccountInfo,
+      poolQuoteAccountInfo,
+    ] = reserveResponse.accounts;
 
     if (!baseMintAccountInfo || !quoteMintAccountInfo || !poolBaseAccountInfo || !poolQuoteAccountInfo) return null;
 
@@ -466,10 +517,11 @@ class PoolStateCache {
     // 第3次：2 账户（user token accounts）
     // 这第3次在慢路径里无法避免，因为需要 tokenProgram 才能派生 ATA
     // 但慢路径只在首次 refresh 时走，后续全走快速路径（1 次 RPC）
-    const [userBaseAccountInfo, userQuoteAccountInfo] = await connection.getMultipleAccountsInfo([
+    const userResponse = await this._getMultipleAccountsInfoWithContext([
       userBaseTokenAccount,
       userQuoteTokenAccount,
     ]);
+    const [userBaseAccountInfo, userQuoteAccountInfo] = userResponse.accounts;
 
     return {
       globalConfig: this._globalConfig,
@@ -488,6 +540,15 @@ class PoolStateCache {
       userQuoteTokenAccount,
       userBaseAccountInfo,
       userQuoteAccountInfo,
+      _rpcContextSlot: reserveResponse.contextSlot || poolResponse.contextSlot,
+      _rpcPoolContextSlot: poolResponse.contextSlot,
+      _rpcReserveContextSlot: reserveResponse.contextSlot,
+      _rpcUserContextSlot: userResponse.contextSlot,
+      _rpcContextSlotApproximate:
+        poolResponse.approximate ||
+        reserveResponse.approximate ||
+        userResponse.approximate,
+      _rpcFetchedAtMs: Date.now(),
     };
   }
 

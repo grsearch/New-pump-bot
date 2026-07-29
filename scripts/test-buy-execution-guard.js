@@ -79,7 +79,15 @@ async function main() {
   let cacheAge = 1200;
   let refreshCalls = 0;
   const staleState = { version: 'stale' };
-  const freshState = { version: 'fresh' };
+  const freshState = {
+    version: 'fresh',
+    _rpcContextSlot: 500,
+    _rpcPoolContextSlot: 499,
+    _rpcReserveContextSlot: 500,
+    _rpcUserContextSlot: 501,
+    _rpcContextSlotApproximate: false,
+    _rpcFetchedAtMs: 123456,
+  };
   const cache = {
     get: () => staleState,
     getAge: () => cacheAge,
@@ -105,6 +113,30 @@ async function main() {
   assert.strictEqual(state.stateSource, 'rpc-forced');
   assert.strictEqual(state.cacheAgeBeforeMs, 1200);
   assert.strictEqual(state.cacheAgeAtBuildMs, 0);
+  assert.strictEqual(state.rpcContextSlot, 500);
+  assert.strictEqual(state.rpcPoolContextSlot, 499);
+  assert.strictEqual(state.rpcReserveContextSlot, 500);
+  assert.strictEqual(state.rpcUserContextSlot, 501);
+  assert.strictEqual(state.rpcContextSlotApproximate, false);
+  assert.strictEqual(state.rpcFetchedAtMs, 123456);
+
+  const PoolStateCache = require('../src/core/PoolStateCache');
+  const contextCache = new PoolStateCache({
+    onlineSdk: {
+      connection: {
+        getMultipleAccountsInfoAndContext: async () => ({
+          context: { slot: 777 },
+          value: ['account'],
+        }),
+      },
+    },
+    user: 'user',
+    getMintList: () => [],
+  });
+  const contextRead = await contextCache._getMultipleAccountsInfoWithContext(['key']);
+  assert.deepStrictEqual(contextRead.accounts, ['account']);
+  assert.strictEqual(contextRead.contextSlot, 777);
+  assert.strictEqual(contextRead.approximate, false);
 
   cacheAge = 10;
   refreshCalls = 0;
@@ -215,6 +247,12 @@ async function main() {
     poolBaseAmount: 1_000_000_000_000n,
     poolQuoteAmount: 100_000_000_000n,
     baseTokenProgram: null,
+    _rpcContextSlot: 505,
+    _rpcPoolContextSlot: 504,
+    _rpcReserveContextSlot: 505,
+    _rpcUserContextSlot: 506,
+    _rpcContextSlotApproximate: false,
+    _rpcFetchedAtMs: 123500,
   };
   executor.dryRun = false;
   executor.keypair = { publicKey: 'user' };
@@ -269,6 +307,22 @@ async function main() {
     priceAfter: 1,
     baseDecimals: 6,
     poolAddress,
+    priceBefore: 1.2,
+    signalSlot: 500,
+    signalTransactionIndex: 17,
+    signalTs: 1000,
+    signalReceivedAt: Date.now() - 5,
+    latestStreamSlotAtSignal: 502,
+    slotGapAtSignal: 2,
+    latestStreamSlotAtOrder: 503,
+    getLatestStreamSlot: () => 507,
+    sellerTx: 'SellerTx',
+    poolQuoteAfterSignal: 100,
+    signalPoolBaseAmountUi: 123456,
+    signalRawPoolQuoteSol: 95,
+    signalVirtualQuoteReserveSol: 5,
+    signalEffectiveQuoteReserveSol: 100,
+    signalSource: 'direct',
   });
   assert.strictEqual(liveResult.success, true);
   assert.strictEqual(forcedRefreshCalls, 1);
@@ -280,6 +334,25 @@ async function main() {
   assert.strictEqual(liveResult.maxQuoteSol, 0.2);
   assert.strictEqual(liveResult.minBaseAmountOutRaw, '176992');
   assert.strictEqual(liveResult.virtualQuoteReservesRaw, '5000000000');
+  assert.strictEqual(liveResult.effectiveQuoteReserveRaw, '105000000000');
+  assert.strictEqual(liveResult.poolBaseAmountRaw, '1000000000000');
+  assert.strictEqual(liveResult.poolQuoteAmountRaw, '100000000000');
+  assert.strictEqual(liveResult.signalSlot, 500);
+  assert.strictEqual(liveResult.signalTransactionIndex, 17);
+  assert.strictEqual(liveResult.rpcContextSlot, 505);
+  assert.strictEqual(liveResult.latestStreamSlotAtQuote, 507);
+  assert.strictEqual(liveResult.slotGapAtSignal, 2);
+  assert.strictEqual(liveResult.slotGapAtQuote, 7);
+  assert.strictEqual(liveResult.rpcSlotGapFromSignal, 5);
+  assert.strictEqual(liveResult.sellerTx, 'SellerTx');
+  assert.strictEqual(liveResult.signalPoolBaseAmountUi, 123456);
+  assert.strictEqual(liveResult.signalRawPoolQuoteSol, 95);
+  assert.strictEqual(liveResult.signalVirtualQuoteReserveSol, 5);
+  assert.strictEqual(liveResult.signalEffectiveQuoteReserveSol, 100);
+  assert.strictEqual(liveResult.signalSource, 'direct');
+  assert.strictEqual(liveResult.baseDecimals, 6);
+  assert.ok(liveResult.quoteLatencyMs >= 0);
+  assert.ok(liveResult.signalToQuoteMs >= 0);
 
   console.log('PASS test-buy-execution-guard');
   process.exit(0);

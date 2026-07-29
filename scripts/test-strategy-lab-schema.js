@@ -57,6 +57,39 @@ function run() {
     buyMode: 'buy_exact_quote_in',
     minBaseAmountOutRaw: '173914',
     virtualQuoteReservesRaw: '5000000000',
+    effectiveQuoteReserveRaw: '105000000000',
+    poolBaseAmountRaw: '1000000000000',
+    poolQuoteAmountRaw: '100000000000',
+    poolAddress: 'PoolAddress',
+    sellerTx: 'SellerTx',
+    signalPriceBefore: 1.2,
+    signalPoolQuoteSol: 100,
+    signalPoolBaseAmountUi: 123456,
+    signalRawPoolQuoteSol: 95,
+    signalVirtualQuoteReserveSol: 5,
+    signalEffectiveQuoteReserveSol: 100,
+    signalSource: 'direct',
+    baseDecimals: 6,
+    signalSlot: 500,
+    signalTransactionIndex: 17,
+    signalTs: 1_799_999_999_990,
+    signalReceivedAt: 1_800_000_000_000,
+    latestStreamSlotAtSignal: 502,
+    latestStreamSlotAtOrder: 503,
+    latestStreamSlotAtQuote: 507,
+    slotGapAtSignal: 2,
+    slotGapAtQuote: 7,
+    rpcContextSlot: 505,
+    rpcPoolContextSlot: 504,
+    rpcReserveContextSlot: 505,
+    rpcUserContextSlot: 506,
+    rpcContextSlotApproximate: 0,
+    rpcSlotGapFromSignal: 5,
+    rpcFetchedAtMs: 1_800_000_000_003,
+    quoteStartedAt: 1_800_000_000_004,
+    quoteReadyAt: 1_800_000_000_011,
+    quoteLatencyMs: 7,
+    signalToQuoteMs: 11,
   });
   const tradeDiagnostic = db.prepare("SELECT * FROM trades WHERE mint = 'TradeMint'").get();
   assert.strictEqual(tradeDiagnostic.configured_slippage_pct, 50);
@@ -71,6 +104,27 @@ function run() {
   assert.strictEqual(tradeDiagnostic.buy_mode, 'buy_exact_quote_in');
   assert.strictEqual(tradeDiagnostic.min_base_amount_out_raw, '173914');
   assert.strictEqual(tradeDiagnostic.virtual_quote_reserves_raw, '5000000000');
+  assert.strictEqual(tradeDiagnostic.effective_quote_reserve_raw, '105000000000');
+  assert.strictEqual(tradeDiagnostic.pool_base_amount_raw, '1000000000000');
+  assert.strictEqual(tradeDiagnostic.pool_quote_amount_raw, '100000000000');
+  assert.strictEqual(tradeDiagnostic.pool_address, 'PoolAddress');
+  assert.strictEqual(tradeDiagnostic.seller_tx, 'SellerTx');
+  assert.strictEqual(tradeDiagnostic.signal_price_before, 1.2);
+  assert.strictEqual(tradeDiagnostic.signal_pool_quote_sol, 100);
+  assert.strictEqual(tradeDiagnostic.signal_pool_base_amount_ui, 123456);
+  assert.strictEqual(tradeDiagnostic.signal_raw_pool_quote_sol, 95);
+  assert.strictEqual(tradeDiagnostic.signal_virtual_quote_reserve_sol, 5);
+  assert.strictEqual(tradeDiagnostic.signal_effective_quote_reserve_sol, 100);
+  assert.strictEqual(tradeDiagnostic.signal_source, 'direct');
+  assert.strictEqual(tradeDiagnostic.base_decimals, 6);
+  assert.strictEqual(tradeDiagnostic.signal_slot, 500);
+  assert.strictEqual(tradeDiagnostic.signal_transaction_index, 17);
+  assert.strictEqual(tradeDiagnostic.latest_stream_slot_at_quote, 507);
+  assert.strictEqual(tradeDiagnostic.slot_gap_at_quote, 7);
+  assert.strictEqual(tradeDiagnostic.rpc_context_slot, 505);
+  assert.strictEqual(tradeDiagnostic.rpc_slot_gap_from_signal, 5);
+  assert.strictEqual(tradeDiagnostic.quote_latency_ms, 7);
+  assert.strictEqual(tradeDiagnostic.signal_to_quote_ms, 11);
   assert.strictEqual(logger.markBuyChainFailed('BuyFailSig', {
     error: '{"InstructionError":[6,{"Custom":1}]}',
     errorClass: 'TOKEN_PROGRAM_INSUFFICIENT_FUNDS',
@@ -94,6 +148,7 @@ function run() {
   const swapColumns = new Set(db.pragma('table_info(swap_events)').map((row) => row.name));
   assert.strictEqual(snapshotColumns.length, logger._snapshotColumnNames().length + 1);
   for (const name of [
+    'transaction_index',
     'source',
     'price_reliable',
     'price_sanitized',
@@ -150,7 +205,14 @@ function run() {
   });
 
   const events = [
-    { ts: ts + 10_000, price: 1.1, quality: 4, signature: 'clean-10', eligible: true },
+    {
+      ts: ts + 10_000,
+      price: 1.1,
+      quality: 4,
+      signature: 'clean-10',
+      eligible: true,
+      transactionIndex: 9,
+    },
     { ts: ts + 60_000, price: 1.2, quality: 4, signature: 'clean-60', eligible: true },
     { ts: ts + 90_000, price: 100, quality: 1, signature: 'legacy-outlier' },
     { ts: ts + 120_000, price: 1000, quality: 4, signature: 'filtered-outlier' },
@@ -164,12 +226,18 @@ function run() {
       price: event.price,
       priceBefore: event.price,
       ts: event.ts,
+      transactionIndex: event.transactionIndex,
       signature: event.signature,
       priceReliable: event.eligible === true,
       featureEligible: event.eligible === true,
       dataQualityVersion: event.quality,
     });
   }
+  assert.strictEqual(
+    db.prepare("SELECT transaction_index FROM swap_events WHERE signature = 'clean-10'").get()
+      .transaction_index,
+    9,
+  );
   logger.logSwapEvent({
     mint: 'NullPriceMint',
     side: 'SELL',

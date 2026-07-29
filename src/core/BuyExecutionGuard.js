@@ -228,6 +228,18 @@ async function resolveFreshPoolState({
   maxAgeMs = 500,
   forceRefresh = false,
 }) {
+  const stateDiagnostics = (swapState) => {
+    const approximate = swapState?._rpcContextSlotApproximate;
+    return {
+      rpcContextSlot: Number(swapState?._rpcContextSlot) || null,
+      rpcPoolContextSlot: Number(swapState?._rpcPoolContextSlot) || null,
+      rpcReserveContextSlot: Number(swapState?._rpcReserveContextSlot) || null,
+      rpcUserContextSlot: Number(swapState?._rpcUserContextSlot) || null,
+      rpcContextSlotApproximate:
+        approximate == null ? null : approximate === true,
+      rpcFetchedAtMs: Number(swapState?._rpcFetchedAtMs) || null,
+    };
+  };
   const ageLimit = Math.max(0, Number(maxAgeMs) || 0);
   let cacheAgeBeforeMs = null;
   let cachedState = null;
@@ -246,6 +258,7 @@ async function resolveFreshPoolState({
         stateSource: 'cache',
         cacheAgeBeforeMs,
         cacheAgeAtBuildMs: cacheAgeBeforeMs,
+        ...stateDiagnostics(cachedState),
       };
     }
 
@@ -261,17 +274,32 @@ async function resolveFreshPoolState({
         stateSource: forceRefresh ? 'rpc-forced' : 'rpc',
         cacheAgeBeforeMs,
         cacheAgeAtBuildMs: refreshedAge,
+        ...stateDiagnostics(refreshed),
       };
     }
   }
 
   const swapState = await onlineSdk.swapSolanaState(poolKey, user);
   if (!swapState) throw new Error('pool state refresh returned no state');
+  let rpcContextSlot = null;
+  if (typeof onlineSdk?.connection?.getSlot === 'function') {
+    try {
+      rpcContextSlot = Number(await onlineSdk.connection.getSlot('processed')) || null;
+    } catch (_) {
+      rpcContextSlot = null;
+    }
+  }
   return {
     swapState,
     stateSource: forceRefresh ? 'rpc-direct-forced' : 'rpc-direct',
     cacheAgeBeforeMs,
     cacheAgeAtBuildMs: 0,
+    rpcContextSlot,
+    rpcPoolContextSlot: null,
+    rpcReserveContextSlot: null,
+    rpcUserContextSlot: null,
+    rpcContextSlotApproximate: true,
+    rpcFetchedAtMs: Date.now(),
   };
 }
 

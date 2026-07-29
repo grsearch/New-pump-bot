@@ -1,5 +1,7 @@
 'use strict';
 
+const BN = require('bn.js');
+
 const PUMP_AMM_PROGRAM_ID = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
 const BUY_DISCRIMINATOR = Buffer.from([102, 6, 61, 18, 1, 218, 235, 234]);
 const BUY_EXACT_QUOTE_IN_DISCRIMINATOR = Buffer.from([198, 46, 21, 82, 180, 217, 232, 112]);
@@ -219,6 +221,107 @@ function extractBuyExactQuoteInAmounts(instructions) {
   return null;
 }
 
+function buildStreamPostSwapState({
+  cachedState,
+  cacheAgeMs,
+  signalSource,
+  signalPoolBaseAmountRaw,
+  signalPoolQuoteAmountRaw,
+  signalVirtualQuoteReservesRaw,
+  signalSlot,
+  latestStreamSlot,
+  signalTs,
+  nowMs = Date.now(),
+  maxSignalAgeMs = 300,
+  maxSlotGap = 1,
+  maxCacheAgeMs = 500,
+}) {
+  const signalAgeMs = Number.isFinite(Number(signalTs))
+    ? Math.max(0, Number(nowMs) - Number(signalTs))
+    : null;
+  const slot = Number(signalSlot);
+  const latestSlot = Number(latestStreamSlot);
+  const slotGap =
+    Number.isFinite(slot) && slot > 0 &&
+    Number.isFinite(latestSlot) && latestSlot > 0
+      ? latestSlot - slot
+      : null;
+  const reject = (reason) => ({
+    allowed: false,
+    reason,
+    signalAgeMs,
+    slotGap,
+  });
+
+  if (String(signalSource || '').toLowerCase() !== 'direct') {
+    return reject('signal source is not direct');
+  }
+  if (
+    !cachedState ||
+    !cachedState.pool ||
+    !cachedState.globalConfig ||
+    !cachedState.poolAccountInfo ||
+    !cachedState.poolKey ||
+    !cachedState.baseMint ||
+    !cachedState.baseTokenProgram
+  ) {
+    return reject('cached pool metadata unavailable');
+  }
+  const cacheAge = Number(cacheAgeMs);
+  if (
+    !Number.isFinite(cacheAge) ||
+    cacheAge < 0 ||
+    cacheAge > Math.max(0, Number(maxCacheAgeMs) || 0)
+  ) {
+    return reject('cached pool metadata is stale');
+  }
+  const ageLimit = Math.max(0, Number(maxSignalAgeMs) || 0);
+  if (signalAgeMs == null || signalAgeMs > ageLimit) {
+    return reject('stream signal is stale');
+  }
+  const gapLimit = Math.max(0, Number(maxSlotGap) || 0);
+  if (slotGap == null || slotGap < 0 || slotGap > gapLimit) {
+    return reject('stream slot gap is outside fast-path limit');
+  }
+
+  let poolBaseAmount;
+  let poolQuoteAmount;
+  let virtualQuoteReserves;
+  try {
+    poolBaseAmount = new BN(String(signalPoolBaseAmountRaw));
+    poolQuoteAmount = new BN(String(signalPoolQuoteAmountRaw));
+    virtualQuoteReserves = new BN(String(signalVirtualQuoteReservesRaw));
+  } catch (_) {
+    return reject('invalid stream reserve encoding');
+  }
+  if (
+    poolBaseAmount.lte(new BN(0)) ||
+    poolQuoteAmount.lte(new BN(0)) ||
+    virtualQuoteReserves.isNeg()
+  ) {
+    return reject('invalid stream reserve values');
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    signalAgeMs,
+    slotGap,
+    swapState: {
+      ...cachedState,
+      pool: {
+        ...cachedState.pool,
+        virtualQuoteReserves,
+      },
+      poolBaseAmount,
+      poolQuoteAmount,
+      _streamSignalSlot: slot,
+      _streamSignalTs: Number(signalTs),
+      _streamBuiltAtMs: Number(nowMs),
+    },
+  };
+}
+
 async function resolveFreshPoolState({
   poolStateCache,
   onlineSdk,
@@ -311,6 +414,7 @@ module.exports = {
   encodeBuyExactQuoteInData,
   extractBuyInstructionAmounts,
   extractBuyExactQuoteInAmounts,
+  buildStreamPostSwapState,
   replaceBuyWithExactQuoteIn,
   resolveFreshPoolState,
 };

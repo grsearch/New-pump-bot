@@ -4,6 +4,7 @@ const assert = require('assert');
 const {
   BUY_DISCRIMINATOR,
   BUY_EXACT_QUOTE_IN_DISCRIMINATOR,
+  buildStreamPostSwapState,
   calculateBuyPriceGuard,
   calculateExactQuoteBuyGuard,
   extractBuyExactQuoteInAmounts,
@@ -75,6 +76,84 @@ async function main() {
   });
   assert.strictEqual(exactRejected.allowed, false);
   assert.strictEqual(exactRejected.reason, 'expected price above signal cap');
+
+  const BN = require('bn.js');
+  const streamMetadataState = {
+    globalConfig: {},
+    poolKey: {},
+    poolAccountInfo: { owner: { toBase58: () => 'pump-owner' } },
+    pool: { virtualQuoteReserves: new BN('1') },
+    baseMint: {},
+    baseTokenProgram: {},
+  };
+  const streamState = buildStreamPostSwapState({
+    cachedState: streamMetadataState,
+    cacheAgeMs: 20,
+    signalSource: 'direct',
+    signalPoolBaseAmountRaw: '1000000000000',
+    signalPoolQuoteAmountRaw: '100000000000',
+    signalVirtualQuoteReservesRaw: '5000000000',
+    signalSlot: 500,
+    latestStreamSlot: 501,
+    signalTs: 1_000,
+    nowMs: 1_100,
+    maxSignalAgeMs: 300,
+    maxSlotGap: 1,
+    maxCacheAgeMs: 500,
+  });
+  assert.strictEqual(streamState.allowed, true);
+  assert.strictEqual(streamState.signalAgeMs, 100);
+  assert.strictEqual(streamState.slotGap, 1);
+  assert.strictEqual(streamState.swapState.poolBaseAmount.toString(), '1000000000000');
+  assert.strictEqual(streamState.swapState.poolQuoteAmount.toString(), '100000000000');
+  assert.strictEqual(
+    streamState.swapState.pool.virtualQuoteReserves.toString(),
+    '5000000000',
+  );
+  assert.strictEqual(streamMetadataState.pool.virtualQuoteReserves.toString(), '1');
+  assert.strictEqual(buildStreamPostSwapState({
+    cachedState: streamMetadataState,
+    cacheAgeMs: 20,
+    signalSource: 'cpi',
+    signalPoolBaseAmountRaw: '1',
+    signalPoolQuoteAmountRaw: '1',
+    signalVirtualQuoteReservesRaw: '1',
+    signalSlot: 500,
+    latestStreamSlot: 500,
+    signalTs: 1_000,
+    nowMs: 1_100,
+  }).reason, 'signal source is not direct');
+  assert.strictEqual(buildStreamPostSwapState({
+    cachedState: streamMetadataState,
+    cacheAgeMs: 20,
+    signalSource: 'direct',
+    signalPoolBaseAmountRaw: '1',
+    signalPoolQuoteAmountRaw: '1',
+    signalVirtualQuoteReservesRaw: '1',
+    signalSlot: 500,
+    latestStreamSlot: 502,
+    signalTs: 1_000,
+    nowMs: 1_100,
+  }).reason, 'stream slot gap is outside fast-path limit');
+  assert.strictEqual(buildStreamPostSwapState({
+    cachedState: streamMetadataState,
+    cacheAgeMs: 20,
+    signalSource: 'direct',
+    signalPoolBaseAmountRaw: '1',
+    signalPoolQuoteAmountRaw: '1',
+    signalVirtualQuoteReservesRaw: '1',
+    signalSlot: 500,
+    latestStreamSlot: 500,
+    signalTs: 1_000,
+    nowMs: 1_301,
+  }).reason, 'stream signal is stale');
+  const DumpDetector = require('../src/core/DumpDetector');
+  const dumpDetector = Object.create(DumpDetector.prototype);
+  assert.strictEqual(dumpDetector._findRawBalance([{
+    accountIndex: 7,
+    mint: 'Mint',
+    uiTokenAmount: { amount: '123456789' },
+  }], 7, 'Mint'), '123456789');
 
   let cacheAge = 1200;
   let refreshCalls = 0;
@@ -242,11 +321,18 @@ async function main() {
   const poolAddress = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
   const mint = '11111111111111111111111111111111';
   const swapState = {
+    globalConfig: {},
+    poolKey: {},
+    poolAccountInfo: {
+      owner: {
+        toBase58: () => 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',
+      },
+    },
     baseMint: { toBase58: () => mint },
     pool: { virtualQuoteReserves: new (require('bn.js'))(5_000_000_000) },
     poolBaseAmount: 1_000_000_000_000n,
     poolQuoteAmount: 100_000_000_000n,
-    baseTokenProgram: null,
+    baseTokenProgram: {},
     _rpcContextSlot: 505,
     _rpcPoolContextSlot: 504,
     _rpcReserveContextSlot: 505,
@@ -258,6 +344,7 @@ async function main() {
   executor.keypair = { publicKey: 'user' };
   executor.onlineSdk = { swapSolanaState: async () => { throw new Error('unexpected direct RPC'); } };
   let forcedRefreshCalls = 0;
+  let refreshCallsAtSubmit = null;
   executor.poolStateCache = {
     _ownerVerified: new Set([poolAddress]),
     get: () => swapState,
@@ -299,7 +386,10 @@ async function main() {
       feeInfo: { totalLamports: 1, source: 'test' },
     };
   };
-  executor._submitTx = async () => {};
+  executor._submitTx = async () => {
+    refreshCallsAtSubmit = forcedRefreshCalls;
+  };
+  const signalNow = Date.now();
   const liveResult = await executor.buy({
     mint,
     symbol: 'TEST',
@@ -310,24 +400,29 @@ async function main() {
     priceBefore: 1.2,
     signalSlot: 500,
     signalTransactionIndex: 17,
-    signalTs: 1000,
-    signalReceivedAt: Date.now() - 5,
-    latestStreamSlotAtSignal: 502,
-    slotGapAtSignal: 2,
-    latestStreamSlotAtOrder: 503,
-    getLatestStreamSlot: () => 507,
+    signalTs: signalNow - 50,
+    signalReceivedAt: signalNow - 45,
+    latestStreamSlotAtSignal: 500,
+    slotGapAtSignal: 0,
+    latestStreamSlotAtOrder: 500,
+    getLatestStreamSlot: () => 501,
     sellerTx: 'SellerTx',
     poolQuoteAfterSignal: 100,
     signalPoolBaseAmountUi: 123456,
     signalRawPoolQuoteSol: 95,
     signalVirtualQuoteReserveSol: 5,
     signalEffectiveQuoteReserveSol: 100,
+    signalPoolBaseAmountRaw: '1000000000000',
+    signalPoolQuoteAmountRaw: '100000000000',
+    signalVirtualQuoteReservesRaw: '5000000000',
+    signalStreamRegion: 'SS',
     signalSource: 'direct',
+    _dumpBackrunEntry: true,
   });
   assert.strictEqual(liveResult.success, true);
-  assert.strictEqual(forcedRefreshCalls, 1);
+  assert.strictEqual(refreshCallsAtSubmit, 0);
   assert.strictEqual(quoteCalls, 1);
-  assert.strictEqual(liveResult.stateSource, 'rpc-forced');
+  assert.strictEqual(liveResult.stateSource, 'stream-post-swap');
   assert.strictEqual(liveResult.buyMode, 'buy_exact_quote_in');
   assert.ok(liveResult.effectiveSlippagePct > 8 && liveResult.effectiveSlippagePct < 9);
   assert.ok(liveResult.maxPrice === 1.13);
@@ -339,18 +434,26 @@ async function main() {
   assert.strictEqual(liveResult.poolQuoteAmountRaw, '100000000000');
   assert.strictEqual(liveResult.signalSlot, 500);
   assert.strictEqual(liveResult.signalTransactionIndex, 17);
-  assert.strictEqual(liveResult.rpcContextSlot, 505);
-  assert.strictEqual(liveResult.latestStreamSlotAtQuote, 507);
-  assert.strictEqual(liveResult.slotGapAtSignal, 2);
-  assert.strictEqual(liveResult.slotGapAtQuote, 7);
-  assert.strictEqual(liveResult.rpcSlotGapFromSignal, 5);
+  assert.strictEqual(liveResult.rpcContextSlot, null);
+  assert.strictEqual(liveResult.latestStreamSlotAtQuote, 501);
+  assert.strictEqual(liveResult.slotGapAtSignal, 0);
+  assert.strictEqual(liveResult.slotGapAtQuote, 1);
+  assert.strictEqual(liveResult.rpcSlotGapFromSignal, null);
   assert.strictEqual(liveResult.sellerTx, 'SellerTx');
   assert.strictEqual(liveResult.signalPoolBaseAmountUi, 123456);
   assert.strictEqual(liveResult.signalRawPoolQuoteSol, 95);
   assert.strictEqual(liveResult.signalVirtualQuoteReserveSol, 5);
   assert.strictEqual(liveResult.signalEffectiveQuoteReserveSol, 100);
+  assert.strictEqual(liveResult.signalPoolBaseAmountRaw, '1000000000000');
+  assert.strictEqual(liveResult.signalPoolQuoteAmountRaw, '100000000000');
+  assert.strictEqual(liveResult.signalVirtualQuoteReservesRaw, '5000000000');
+  assert.strictEqual(liveResult.signalStreamRegion, 'SS');
   assert.strictEqual(liveResult.signalSource, 'direct');
   assert.strictEqual(liveResult.baseDecimals, 6);
+  assert.strictEqual(liveResult.streamFastPath, 1);
+  assert.ok(liveResult.streamSignalAgeMs >= 0);
+  assert.strictEqual(liveResult.streamSlotGap, 1);
+  assert.strictEqual(liveResult.streamStateFallbackReason, null);
   assert.ok(liveResult.quoteLatencyMs >= 0);
   assert.ok(liveResult.signalToQuoteMs >= 0);
 

@@ -68,6 +68,20 @@ const config = {
       process.env.DUMP_BACKRUN_MAX_SIGNAL_AGE_MS || '1500',
       10,
     ),
+    dumpBackrunStreamFastBuyEnabled:
+      (process.env.DUMP_BACKRUN_STREAM_FAST_BUY_ENABLED ?? 'true').toLowerCase() === 'true',
+    dumpBackrunFastBuyMaxSignalAgeMs: parseInt(
+      process.env.DUMP_BACKRUN_FAST_BUY_MAX_SIGNAL_AGE_MS || '300',
+      10,
+    ),
+    dumpBackrunFastBuyMaxSlotGap: parseInt(
+      process.env.DUMP_BACKRUN_FAST_BUY_MAX_SLOT_GAP || '1',
+      10,
+    ),
+    dumpBackrunFastBuyMaxMetadataAgeMs: parseInt(
+      process.env.DUMP_BACKRUN_FAST_BUY_MAX_METADATA_AGE_MS || '5000',
+      10,
+    ),
     dumpBackrunBlockMintAfterTimeout:
       (process.env.DUMP_BACKRUN_BLOCK_MINT_AFTER_TIMEOUT ?? 'true').toLowerCase() === 'true',
 

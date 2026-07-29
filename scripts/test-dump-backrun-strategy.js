@@ -1,7 +1,9 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
 const Module = require('module');
+const path = require('path');
 
 // Simulate a production .env left behind by an older strategy. V9 must use
 // its dedicated defaults unless a DUMP_BACKRUN_* override is explicitly set.
@@ -84,8 +86,18 @@ async function run() {
   assert.strictEqual(config.strategy.minPoolQuoteSol, 80);
   assert.strictEqual(config.strategy.maxPoolQuoteSol, 120);
   assert.strictEqual(config.strategy.dumpBackrunMaxSignalAgeMs, 1_500);
+  assert.strictEqual(config.strategy.dumpBackrunStreamFastBuyEnabled, true);
+  assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSignalAgeMs, 300);
+  assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSlotGap, 1);
+  assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs, 5_000);
   assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
+  const mainSource = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
+  assert.match(
+    mainSource,
+    /_dumpBackrunEntry:\s*order\._dumpBackrunEntry\s*===\s*true/,
+    'the main BUY bridge must preserve the V9 fast-path marker',
+  );
 
   const accepted = makeEngine();
   const buyOrders = [];

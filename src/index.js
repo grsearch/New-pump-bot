@@ -60,6 +60,11 @@ async function main() {
         `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%, ` +
         `pool=${config.strategy.minPoolQuoteSol}-<${config.strategy.maxPoolQuoteSol}SOL, ` +
         `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, ` +
+        `fast=${config.strategy.dumpBackrunStreamFastBuyEnabled
+          ? `direct<=${config.strategy.dumpBackrunFastBuyMaxSignalAgeMs}ms/` +
+            `gap<=${config.strategy.dumpBackrunFastBuyMaxSlotGap}/` +
+            `meta<=${config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs}ms`
+          : 'disabled'}, ` +
         `${config.strategy.dumpBackrunBlockMintAfterTimeout ? 'first-timeout-blocks-mint' : 'timeout-reentry-enabled'}, ` +
         `no rebound confirmation)`,
     );
@@ -267,7 +272,12 @@ async function main() {
       `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'} ` +
       `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}% ` +
       `pool=${config.strategy.minPoolQuoteSol}-<${config.strategy.maxPoolQuoteSol}SOL ` +
-      `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms`
+      `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms ` +
+      `fast=${config.strategy.dumpBackrunStreamFastBuyEnabled
+        ? `direct<=${config.strategy.dumpBackrunFastBuyMaxSignalAgeMs}ms/` +
+          `gap<=${config.strategy.dumpBackrunFastBuyMaxSlotGap}/` +
+          `meta<=${config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs}ms`
+        : 'disabled'}`
     : activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
     ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
       `${activityFlowTracker.reboundWindowMs}ms ` +
@@ -496,7 +506,9 @@ async function main() {
 
   // ============ 事件连线 ============
 
-  tickStream.on('transaction', (tx) => dumpDetector.handleTransaction(tx));
+  tickStream.on('transaction', (tx, streamMeta) => {
+    dumpDetector.handleTransaction(tx, streamMeta);
+  });
 
   // ============ v3.17.23: VaultBalanceWatcher ============
   // 直接查链上 vault 余额变化检测砸单，不受 Jupiter 聚合路由影响
@@ -874,7 +886,12 @@ async function main() {
         signalRawPoolQuoteSol: order.signalRawPoolQuoteSol,
         signalVirtualQuoteReserveSol: order.signalVirtualQuoteReserveSol,
         signalEffectiveQuoteReserveSol: order.signalEffectiveQuoteReserveSol,
+        signalPoolBaseAmountRaw: order.signalPoolBaseAmountRaw,
+        signalPoolQuoteAmountRaw: order.signalPoolQuoteAmountRaw,
+        signalVirtualQuoteReservesRaw: order.signalVirtualQuoteReservesRaw,
+        signalStreamRegion: order.signalStreamRegion,
         signalSource: order.signalSource,
+        _dumpBackrunEntry: order._dumpBackrunEntry === true,
       });
     } finally {
       signalEngine.markBuyDone(order.mint);
@@ -891,6 +908,10 @@ async function main() {
       signalRawPoolQuoteSol: buyResult.signalRawPoolQuoteSol,
       signalVirtualQuoteReserveSol: buyResult.signalVirtualQuoteReserveSol,
       signalEffectiveQuoteReserveSol: buyResult.signalEffectiveQuoteReserveSol,
+      signalPoolBaseAmountRaw: buyResult.signalPoolBaseAmountRaw,
+      signalPoolQuoteAmountRaw: buyResult.signalPoolQuoteAmountRaw,
+      signalVirtualQuoteReservesRaw: buyResult.signalVirtualQuoteReservesRaw,
+      signalStreamRegion: buyResult.signalStreamRegion,
       signalSource: buyResult.signalSource,
       baseDecimals: buyResult.baseDecimals,
       signalSlot: buyResult.signalSlot,
@@ -913,6 +934,10 @@ async function main() {
       quoteReadyAt: buyResult.quoteReadyAt,
       quoteLatencyMs: buyResult.quoteLatencyMs,
       signalToQuoteMs: buyResult.signalToQuoteMs,
+      streamFastPath: buyResult.streamFastPath,
+      streamSignalAgeMs: buyResult.streamSignalAgeMs,
+      streamSlotGap: buyResult.streamSlotGap,
+      streamStateFallbackReason: buyResult.streamStateFallbackReason,
     } : {};
     if (order._signalReceivedAt && buyResult && buyResult.success) {
       console.log('[main] buyOrder_timing: getToken=%dms preBuy=%dms buy=%dms', _t1-_t0, _t2-_t1, Date.now()-_t2);

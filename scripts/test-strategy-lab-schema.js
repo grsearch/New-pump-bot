@@ -68,6 +68,10 @@ function run() {
     signalRawPoolQuoteSol: 95,
     signalVirtualQuoteReserveSol: 5,
     signalEffectiveQuoteReserveSol: 100,
+    signalPoolBaseAmountRaw: '1000000000000',
+    signalPoolQuoteAmountRaw: '95000000000',
+    signalVirtualQuoteReservesRaw: '5000000000',
+    signalStreamRegion: 'SS',
     signalSource: 'direct',
     baseDecimals: 6,
     signalSlot: 500,
@@ -90,6 +94,10 @@ function run() {
     quoteReadyAt: 1_800_000_000_011,
     quoteLatencyMs: 7,
     signalToQuoteMs: 11,
+    streamFastPath: 1,
+    streamSignalAgeMs: 80,
+    streamSlotGap: 1,
+    streamStateFallbackReason: null,
   });
   const tradeDiagnostic = db.prepare("SELECT * FROM trades WHERE mint = 'TradeMint'").get();
   assert.strictEqual(tradeDiagnostic.configured_slippage_pct, 50);
@@ -115,6 +123,10 @@ function run() {
   assert.strictEqual(tradeDiagnostic.signal_raw_pool_quote_sol, 95);
   assert.strictEqual(tradeDiagnostic.signal_virtual_quote_reserve_sol, 5);
   assert.strictEqual(tradeDiagnostic.signal_effective_quote_reserve_sol, 100);
+  assert.strictEqual(tradeDiagnostic.signal_pool_base_amount_raw, '1000000000000');
+  assert.strictEqual(tradeDiagnostic.signal_pool_quote_amount_raw, '95000000000');
+  assert.strictEqual(tradeDiagnostic.signal_virtual_quote_reserves_raw, '5000000000');
+  assert.strictEqual(tradeDiagnostic.signal_stream_region, 'SS');
   assert.strictEqual(tradeDiagnostic.signal_source, 'direct');
   assert.strictEqual(tradeDiagnostic.base_decimals, 6);
   assert.strictEqual(tradeDiagnostic.signal_slot, 500);
@@ -125,6 +137,9 @@ function run() {
   assert.strictEqual(tradeDiagnostic.rpc_slot_gap_from_signal, 5);
   assert.strictEqual(tradeDiagnostic.quote_latency_ms, 7);
   assert.strictEqual(tradeDiagnostic.signal_to_quote_ms, 11);
+  assert.strictEqual(tradeDiagnostic.stream_fast_path, 1);
+  assert.strictEqual(tradeDiagnostic.stream_signal_age_ms, 80);
+  assert.strictEqual(tradeDiagnostic.stream_slot_gap, 1);
   assert.strictEqual(logger.markBuyChainFailed('BuyFailSig', {
     error: '{"InstructionError":[6,{"Custom":1}]}',
     errorClass: 'TOKEN_PROGRAM_INSUFFICIENT_FUNDS',
@@ -149,6 +164,7 @@ function run() {
   assert.strictEqual(snapshotColumns.length, logger._snapshotColumnNames().length + 1);
   for (const name of [
     'transaction_index',
+    'stream_region',
     'source',
     'price_reliable',
     'price_sanitized',
@@ -227,6 +243,7 @@ function run() {
       priceBefore: event.price,
       ts: event.ts,
       transactionIndex: event.transactionIndex,
+      streamRegion: event.transactionIndex == null ? null : 'SS',
       signature: event.signature,
       priceReliable: event.eligible === true,
       featureEligible: event.eligible === true,
@@ -237,6 +254,11 @@ function run() {
     db.prepare("SELECT transaction_index FROM swap_events WHERE signature = 'clean-10'").get()
       .transaction_index,
     9,
+  );
+  assert.strictEqual(
+    db.prepare("SELECT stream_region FROM swap_events WHERE signature = 'clean-10'").get()
+      .stream_region,
+    'SS',
   );
   logger.logSwapEvent({
     mint: 'NullPriceMint',

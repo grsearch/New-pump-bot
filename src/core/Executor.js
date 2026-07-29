@@ -44,6 +44,7 @@ const { config } = require('../config');
 const { getMonitor } = require('../monitor/HealthMonitor');
 const { estimateBuySlippagePct } = require('./ExecutionMath');
 const {
+  buildStreamPostSwapState,
   calculateExactQuoteBuyGuard,
   extractBuyInstructionAmounts,
   replaceBuyWithExactQuoteIn,
@@ -1022,6 +1023,10 @@ class Executor {
       signalVirtualQuoteReserveSol: finiteOrNull(order.signalVirtualQuoteReserveSol),
       signalEffectiveQuoteReserveSol:
         finiteOrNull(order.signalEffectiveQuoteReserveSol),
+      signalPoolBaseAmountRaw: order.signalPoolBaseAmountRaw || null,
+      signalPoolQuoteAmountRaw: order.signalPoolQuoteAmountRaw || null,
+      signalVirtualQuoteReservesRaw: order.signalVirtualQuoteReservesRaw || null,
+      signalStreamRegion: order.signalStreamRegion || null,
       signalSource: order.signalSource || null,
       baseDecimals,
       signalSlot,
@@ -1044,6 +1049,10 @@ class Executor {
       quoteReadyAt: null,
       quoteLatencyMs: null,
       signalToQuoteMs: null,
+      streamFastPath: 0,
+      streamSignalAgeMs: null,
+      streamSlotGap: null,
+      streamStateFallbackReason: null,
     };
 
     // ============ DRY_RUN ============
@@ -1127,6 +1136,76 @@ class Executor {
           latencyMs: Date.now() - t0,
         };
       }
+      const cachedPoolState = this.poolStateCache?.get(order.poolAddress) || null;
+      const cacheAgeBeforeMs = this.poolStateCache
+        ? this.poolStateCache.getAge(order.poolAddress)
+        : null;
+      const latestStreamSlot =
+        Number(order.getLatestStreamSlot?.()) ||
+        Number(order.latestStreamSlotAtOrder) ||
+        Number(this._latestBuySlot) ||
+        null;
+      const fastPathRequested =
+        config.strategy.dumpBackrunStreamFastBuyEnabled === true &&
+        order._dumpBackrunEntry === true;
+      const streamStateAttempt = fastPathRequested
+        ? buildStreamPostSwapState({
+          cachedState: cachedPoolState,
+          cacheAgeMs: cacheAgeBeforeMs,
+          signalSource: order.signalSource,
+          signalPoolBaseAmountRaw: order.signalPoolBaseAmountRaw,
+          signalPoolQuoteAmountRaw: order.signalPoolQuoteAmountRaw,
+          signalVirtualQuoteReservesRaw: order.signalVirtualQuoteReservesRaw,
+          signalSlot,
+          latestStreamSlot,
+          signalTs: order.signalTs,
+          nowMs: Date.now(),
+          maxSignalAgeMs: config.strategy.dumpBackrunFastBuyMaxSignalAgeMs,
+          maxSlotGap: config.strategy.dumpBackrunFastBuyMaxSlotGap,
+          maxCacheAgeMs: config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs,
+        })
+        : {
+          allowed: false,
+          reason: order._dumpBackrunEntry
+            ? 'stream fast path disabled'
+            : 'not a V9 dump-backrun order',
+          signalAgeMs: null,
+          slotGap: null,
+        };
+      Object.assign(buyDiagnostics, {
+        streamFastPath: streamStateAttempt.allowed ? 1 : 0,
+        streamSignalAgeMs: streamStateAttempt.signalAgeMs,
+        streamSlotGap: streamStateAttempt.slotGap,
+        streamStateFallbackReason: streamStateAttempt.reason,
+      });
+      if (streamStateAttempt.allowed) {
+        monitor.inc('Executor.buyStreamFastPath', 1, 'Executor');
+      } else if (fastPathRequested) {
+        monitor.inc('Executor.buyStreamFastPathFallback', 1, 'Executor');
+      }
+
+      if (this.poolStateCache && !this.poolStateCache._ownerVerified?.has(order.poolAddress)) {
+        const cachedOwner =
+          cachedPoolState?.poolAccountInfo?.owner?.toBase58?.() ||
+          cachedPoolState?.poolAccountInfo?.owner?.toString?.() ||
+          null;
+        if (cachedOwner === config.programs.pumpAmm) {
+          if (!this.poolStateCache._ownerVerified) {
+            this.poolStateCache._ownerVerified = new Set();
+          }
+          this.poolStateCache._ownerVerified.add(order.poolAddress);
+        } else if (cachedOwner) {
+          this.poolStateCache.markDead(order.poolAddress);
+          monitor.inc('Executor.buyPoolDead', 1, 'Executor');
+          return {
+            success: false,
+            error: 'pool_dead: cached owner is not Pump AMM',
+            poolDead: true,
+            ...buyDiagnostics,
+            latencyMs: Date.now() - t0,
+          };
+        }
+      }
       if (this.poolStateCache && !this.poolStateCache._ownerVerified?.has(order.poolAddress)) {
         try {
           const poolAcc = await this.rpc.getAccountInfo(poolKey);
@@ -1146,15 +1225,28 @@ class Executor {
           this.poolStateCache._ownerVerified.add(order.poolAddress);
         } catch (_) { /* the state refresh below also validates the pool */ }
       }
-      const stateInfo = await resolveFreshPoolState({
-        poolStateCache: this.poolStateCache,
-        onlineSdk: this.onlineSdk,
-        poolAddress: order.poolAddress,
-        poolKey,
-        user: this.keypair.publicKey,
-        maxAgeMs: config.strategy.buyMaxPoolStateAgeMs,
-        forceRefresh: true,
-      });
+      const stateInfo = streamStateAttempt.allowed
+        ? {
+          swapState: streamStateAttempt.swapState,
+          stateSource: 'stream-post-swap',
+          cacheAgeBeforeMs,
+          cacheAgeAtBuildMs: cacheAgeBeforeMs,
+          rpcContextSlot: null,
+          rpcPoolContextSlot: null,
+          rpcReserveContextSlot: null,
+          rpcUserContextSlot: null,
+          rpcContextSlotApproximate: null,
+          rpcFetchedAtMs: null,
+        }
+        : await resolveFreshPoolState({
+          poolStateCache: this.poolStateCache,
+          onlineSdk: this.onlineSdk,
+          poolAddress: order.poolAddress,
+          poolKey,
+          user: this.keypair.publicKey,
+          maxAgeMs: config.strategy.buyMaxPoolStateAgeMs,
+          forceRefresh: true,
+        });
       const swapState = stateInfo.swapState;
       Object.assign(buyDiagnostics, {
         stateSource: stateInfo.stateSource,
@@ -1423,6 +1515,22 @@ class Executor {
       await this._submitTx(serialized, 'BUY');
       buyStage = 'submitted';
       const sendLatencyMs = Date.now() - tSend0;
+      if (streamStateAttempt.allowed && this.poolStateCache) {
+        setImmediate(() => {
+          this.poolStateCache.refreshOne(order.poolAddress, {
+            force: true,
+            maxAgeMs: 0,
+            throwOnError: false,
+          }).catch((err) => {
+            monitor.recordError('Executor', err, {
+              side: 'BUY',
+              phase: 'post_submit_pool_refresh',
+              mint: order.mint,
+              poolAddress: order.poolAddress,
+            });
+          });
+        });
+      }
       monitor.inc('Executor.buySuccess', 1, 'Executor');
 
       const sig = realSig; // 用链上真实 sig

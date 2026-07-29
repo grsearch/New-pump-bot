@@ -179,7 +179,7 @@ class DumpDetector extends EventEmitter {
     return { maxSingleSellSol, maxSellImpactPct, maxSellSlot, totalSellSol, sellCount: sells.length };
   }
 
-  handleTransaction(txMessage) {
+  handleTransaction(txMessage, streamMeta = null) {
     // v3.18: signature 去重 — 多 LS region 重推同一笔交易时跳过
     const _sig = txMessage?.transaction?.signature || txMessage?.signature;
     if (_sig) {
@@ -206,6 +206,7 @@ class DumpDetector extends EventEmitter {
         Number.isInteger(transactionIndex) && transactionIndex >= 0
           ? transactionIndex
           : null;
+      parsed.streamRegion = streamMeta?.firstRegion || null;
 
       const sanitized = this.swapEventSanitizer.sanitize({
         mint: parsed.baseMint,
@@ -219,6 +220,7 @@ class DumpDetector extends EventEmitter {
         ts: parsed.ts,
         slot: parsed.slot,
         transactionIndex: parsed.transactionIndex,
+        streamRegion: parsed.streamRegion,
         signature: parsed.signature,
         poolAddress: parsed.poolAddress,
         poolQuoteAfter: parsed.effectiveQuoteReserveSol || parsed.poolQuoteAfter,
@@ -499,6 +501,10 @@ class DumpDetector extends EventEmitter {
       signalRawPoolQuoteSol: parsed.poolQuoteAfter,
       signalVirtualQuoteReserveSol: parsed.virtualQuoteReserveSol,
       signalEffectiveQuoteReserveSol: parsed.effectiveQuoteReserveSol,
+      signalPoolBaseAmountRaw: parsed.poolBaseAfterRaw || null,
+      signalPoolQuoteAmountRaw: parsed.poolQuoteAfterRaw || null,
+      signalVirtualQuoteReservesRaw: parsed.virtualQuoteReservesRaw || null,
+      signalStreamRegion: parsed.streamRegion || null,
       signalSource: parsed.source || null,
       _sellCount10s: recentStats ? recentStats.sellCount : 1,
       _totalSellSol10s: recentStats ? recentStats.totalSellSol : sellSol,
@@ -841,6 +847,8 @@ class DumpDetector extends EventEmitter {
     const baseAfter = this._findBalance(postBalances, baseVaultIdx, baseMint);
     const quoteBefore = this._findBalance(preBalances, quoteVaultIdx, WSOL_MINT);
     const quoteAfter = this._findBalance(postBalances, quoteVaultIdx, WSOL_MINT);
+    const baseAfterRaw = this._findRawBalance(postBalances, baseVaultIdx, baseMint);
+    const quoteAfterRaw = this._findRawBalance(postBalances, quoteVaultIdx, WSOL_MINT);
 
     if (
       baseBefore === null || baseAfter === null ||
@@ -905,6 +913,10 @@ class DumpDetector extends EventEmitter {
       poolQuoteVault,
       poolQuoteAfter: quoteAfter,
       poolBaseAfter: baseAfter,
+      poolQuoteAfterRaw: quoteAfterRaw,
+      poolBaseAfterRaw: baseAfterRaw,
+      virtualQuoteReservesRaw:
+        poolState?.pool?.virtualQuoteReserves?.toString?.() || null,
       _poolBaseDelta: poolBaseDelta,
       source: 'direct',
       priceReliable: true,
@@ -1106,6 +1118,17 @@ class DumpDetector extends EventEmitter {
       const v = safeTokenAmount(b.uiTokenAmount);
       if (v <= 0 && b.uiTokenAmount?.amount !== '0') return null; // amount有值但解析0 → 异常
       return v;
+    }
+    return null;
+  }
+
+  _findRawBalance(balances, accountIndex, expectedMint) {
+    for (const balance of balances) {
+      if (balance.accountIndex !== accountIndex) continue;
+      if (expectedMint && balance.mint !== expectedMint) continue;
+      const raw = balance.uiTokenAmount?.amount;
+      if (raw == null || !/^\d+$/.test(String(raw))) return null;
+      return String(raw);
     }
     return null;
   }

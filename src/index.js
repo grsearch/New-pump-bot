@@ -58,7 +58,7 @@ async function main() {
         `(sell>=${config.strategy.minSellSol}SOL, ` +
         `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'}, ` +
         `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}%, ` +
-        `pool>=${config.strategy.minPoolQuoteSol}SOL, ` +
+        `pool=${config.strategy.minPoolQuoteSol}-<${config.strategy.maxPoolQuoteSol}SOL, ` +
         `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms, ` +
         `${config.strategy.dumpBackrunBlockMintAfterTimeout ? 'first-timeout-blocks-mint' : 'timeout-reentry-enabled'}, ` +
         `no rebound confirmation)`,
@@ -266,7 +266,7 @@ async function main() {
     ? `sell>=${config.strategy.minSellSol}SOL ` +
       `${config.strategy.allowAggregatedDumpSignals ? 'single+aggregated' : 'single-sell-only'} ` +
       `impact=${config.strategy.minPriceImpactPct}%-<${config.strategy.maxPriceImpactPct}% ` +
-      `pool>=${config.strategy.minPoolQuoteSol}SOL ` +
+      `pool=${config.strategy.minPoolQuoteSol}-<${config.strategy.maxPoolQuoteSol}SOL ` +
       `age<=${config.strategy.dumpBackrunMaxSignalAgeMs}ms`
     : activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
     ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
@@ -765,7 +765,12 @@ async function main() {
       }
     }
     if (!info.passLiquidity) {
-      reasons.push(`liq:${(info.poolQuoteAfter ?? 0).toFixed(0)} SOL<${config.strategy.minPoolQuoteSol}`);
+      const poolSol = info.poolQuoteAfter ?? 0;
+      if (poolSol < config.strategy.minPoolQuoteSol) {
+        reasons.push(`liq:${poolSol.toFixed(0)} SOL<${config.strategy.minPoolQuoteSol}`);
+      } else {
+        reasons.push(`liq:${poolSol.toFixed(0)} SOL>=${config.strategy.maxPoolQuoteSol}`);
+      }
     }
     tradeLogger.logSignal({
       ts: info.ts,

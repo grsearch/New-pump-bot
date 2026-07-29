@@ -909,13 +909,14 @@ class SignalEngine extends EventEmitter {
     }
     if (
       !Number.isFinite(safePoolQuoteSol) ||
-      safePoolQuoteSol < config.strategy.minPoolQuoteSol
+      safePoolQuoteSol < config.strategy.minPoolQuoteSol ||
+      safePoolQuoteSol >= config.strategy.maxPoolQuoteSol
     ) {
       monitor.inc('SignalEngine.rejectedLiquidity', 1, 'SignalEngine');
       this._logReject(
         signal,
-        `pool ${Number.isFinite(safePoolQuoteSol) ? safePoolQuoteSol.toFixed(2) : 'n/a'}SOL<` +
-          `${config.strategy.minPoolQuoteSol}SOL`,
+        `pool ${Number.isFinite(safePoolQuoteSol) ? safePoolQuoteSol.toFixed(2) : 'n/a'}SOL ` +
+          `outside ${config.strategy.minPoolQuoteSol}-<${config.strategy.maxPoolQuoteSol}SOL`,
       );
       return;
     }

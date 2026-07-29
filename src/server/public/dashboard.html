@@ -840,7 +840,7 @@ async function refreshSignals() {
             '超过上限视为灾难性砸盘',
           )}</td>
           <td>${_strategyCondition(
-            `${_strategyNumber(trigger.poolQuoteSol, 1)} / ${_strategyNumber(thresholds.dumpMinPoolQuoteSol, 1)} SOL`,
+            `${_strategyNumber(trigger.poolQuoteSol, 1)} / ${_strategyNumber(thresholds.dumpMinPoolQuoteSol, 1)}-<${_strategyNumber(thresholds.dumpMaxPoolQuoteSol, 1)} SOL`,
             conditions.poolLiquidity,
           )}</td>
           <td>${_strategyCondition(

@@ -359,7 +359,9 @@ class DumpDetector extends EventEmitter {
       }
       const passImpact = priceImpactPct >= effectiveMinImpact
                       && priceImpactPct < config.strategy.maxPriceImpactPct;
-      const passLiquidity = effectivePoolQuoteSol >= config.strategy.minPoolQuoteSol;
+      const passLiquidity =
+        effectivePoolQuoteSol >= config.strategy.minPoolQuoteSol &&
+        effectivePoolQuoteSol < config.strategy.maxPoolQuoteSol;
       const passAll = passSize && passImpact && passLiquidity;
 
       this.emit('sellAnalyzed', {
@@ -589,7 +591,9 @@ class DumpDetector extends EventEmitter {
         }
       }
     }
-    const passLiquidity = effectiveAggPoolQuoteSol >= config.strategy.minPoolQuoteSol;
+    const passLiquidity =
+      effectiveAggPoolQuoteSol >= config.strategy.minPoolQuoteSol &&
+      effectiveAggPoolQuoteSol < config.strategy.maxPoolQuoteSol;
 
     if (!passSize || !passImpact || !passLiquidity) {
       // 还不够触发 AGGREGATED buy signal,但仍要检查 RUG(防止只数小卖单的场景漏掉)

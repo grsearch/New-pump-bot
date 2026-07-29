@@ -34,8 +34,8 @@ function makeSignal(overrides = {}) {
     mint,
     symbol: 'V9TEST',
     sellSol: 7.5,
-    priceImpactPct: 12,
-    poolQuoteAfter: 150,
+    priceImpactPct: 20,
+    poolQuoteAfter: 100,
     seller: `seller-${mintSequence}`,
     signature: `signature-${mintSequence}-${Date.now()}`,
     ts: Date.now() - 50,
@@ -78,9 +78,10 @@ async function run() {
   assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.strategy.minSellSol, 7);
   assert.strictEqual(config.strategy.allowAggregatedDumpSignals, false);
-  assert.strictEqual(config.strategy.minPriceImpactPct, 8);
-  assert.strictEqual(config.strategy.maxPriceImpactPct, 65);
-  assert.strictEqual(config.strategy.minPoolQuoteSol, 120);
+  assert.strictEqual(config.strategy.minPriceImpactPct, 15);
+  assert.strictEqual(config.strategy.maxPriceImpactPct, 40);
+  assert.strictEqual(config.strategy.minPoolQuoteSol, 80);
+  assert.strictEqual(config.strategy.maxPoolQuoteSol, 120);
   assert.strictEqual(config.strategy.dumpBackrunMaxSignalAgeMs, 1_500);
   assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
@@ -99,6 +100,33 @@ async function run() {
   assert.strictEqual(buyOrders.length, 1, 'the same seller transaction must be deduplicated');
   accepted.engine.shutdown();
 
+  const lowerBoundaries = makeEngine();
+  const lowerBoundaryOrders = [];
+  lowerBoundaries.engine.on('buyOrder', (order) => lowerBoundaryOrders.push(order));
+  await lowerBoundaries.engine.handleDumpSignal(makeSignal({
+    priceImpactPct: config.strategy.minPriceImpactPct,
+    poolQuoteAfter: config.strategy.minPoolQuoteSol,
+  }));
+  assert.strictEqual(
+    lowerBoundaryOrders.length,
+    1,
+    'the lower impact and pool boundaries must be accepted',
+  );
+  lowerBoundaries.engine.shutdown();
+
+  const weakImpact = makeEngine();
+  const weakImpactOrders = [];
+  weakImpact.engine.on('buyOrder', (order) => weakImpactOrders.push(order));
+  await weakImpact.engine.handleDumpSignal(makeSignal({
+    priceImpactPct: config.strategy.minPriceImpactPct - 0.01,
+  }));
+  assert.strictEqual(
+    weakImpactOrders.length,
+    0,
+    'a sub-threshold impact must not buy',
+  );
+  weakImpact.engine.shutdown();
+
   const stale = makeEngine();
   const staleOrders = [];
   stale.engine.on('buyOrder', (order) => staleOrders.push(order));
@@ -114,7 +142,7 @@ async function run() {
   await catastrophic.engine.handleDumpSignal(makeSignal({
     priceImpactPct: config.strategy.maxPriceImpactPct,
   }));
-  assert.strictEqual(catastrophicOrders.length, 0, 'a 65% dump must be rejected');
+  assert.strictEqual(catastrophicOrders.length, 0, 'a 40% dump must be rejected');
   catastrophic.engine.shutdown();
 
   const aggregated = makeEngine();
@@ -122,7 +150,7 @@ async function run() {
   aggregated.engine.on('buyOrder', (order) => aggregatedOrders.push(order));
   await aggregated.engine.handleDumpSignal(makeSignal({
     sellSol: 12,
-    poolQuoteAfter: 180,
+    poolQuoteAfter: 100,
     _aggregated: true,
     _sellers: ['seller-a', 'seller-b'],
   }));
@@ -185,6 +213,19 @@ async function run() {
   }));
   assert.strictEqual(lowLiquidityOrders.length, 0, 'a sub-threshold pool must not buy');
   lowLiquidity.engine.shutdown();
+
+  const excessiveLiquidity = makeEngine();
+  const excessiveLiquidityOrders = [];
+  excessiveLiquidity.engine.on('buyOrder', (order) => excessiveLiquidityOrders.push(order));
+  await excessiveLiquidity.engine.handleDumpSignal(makeSignal({
+    poolQuoteAfter: config.strategy.maxPoolQuoteSol,
+  }));
+  assert.strictEqual(
+    excessiveLiquidityOrders.length,
+    0,
+    'a pool at the upper boundary must not buy',
+  );
+  excessiveLiquidity.engine.shutdown();
 
   const open = makeEngine({ hasOpenPosition: true });
   const openOrders = [];

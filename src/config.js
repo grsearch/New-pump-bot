@@ -35,7 +35,7 @@ const config = {
     allowAggregatedDumpSignals:
       (process.env.DUMP_BACKRUN_ALLOW_AGGREGATED ?? 'false').toLowerCase() === 'true',
     minPriceImpactPct: parseFloat(
-      process.env.DUMP_BACKRUN_MIN_PRICE_IMPACT_PCT || '8',
+      process.env.DUMP_BACKRUN_MIN_PRICE_IMPACT_PCT || '15',
     ),
     minTriggerSellCount: parseInt(
       process.env.DUMP_BACKRUN_MIN_SELL_COUNT || '1',
@@ -56,10 +56,13 @@ const config = {
     // 也抓"流动性已死"（小池子 30%+ impact 但反弹空间小且滑点巨大）
     // 加这两条过滤
     maxPriceImpactPct: parseFloat(
-      process.env.DUMP_BACKRUN_MAX_PRICE_IMPACT_PCT || '65',
+      process.env.DUMP_BACKRUN_MAX_PRICE_IMPACT_PCT || '40',
     ),
     minPoolQuoteSol: parseFloat(
-      process.env.DUMP_BACKRUN_MIN_POOL_QUOTE_SOL || '120',
+      process.env.DUMP_BACKRUN_MIN_POOL_QUOTE_SOL || '80',
+    ),
+    maxPoolQuoteSol: parseFloat(
+      process.env.DUMP_BACKRUN_MAX_POOL_QUOTE_SOL || '120',
     ),
     dumpBackrunMaxSignalAgeMs: parseInt(
       process.env.DUMP_BACKRUN_MAX_SIGNAL_AGE_MS || '1500',

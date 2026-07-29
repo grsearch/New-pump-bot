@@ -495,7 +495,9 @@ class OrderFlowTracker extends EventEmitter {
           impactRange:
             impactPct >= config.strategy.minPriceImpactPct &&
             impactPct < config.strategy.maxPriceImpactPct,
-          poolLiquidity: poolQuoteSol >= config.strategy.minPoolQuoteSol,
+          poolLiquidity:
+            poolQuoteSol >= config.strategy.minPoolQuoteSol &&
+            poolQuoteSol < config.strategy.maxPoolQuoteSol,
           signalFresh:
             signalAgeMs != null &&
             signalAgeMs <= config.strategy.dumpBackrunMaxSignalAgeMs,
@@ -762,6 +764,7 @@ class OrderFlowTracker extends EventEmitter {
         dumpMinImpactPct: config.strategy.minPriceImpactPct,
         dumpMaxImpactPct: config.strategy.maxPriceImpactPct,
         dumpMinPoolQuoteSol: config.strategy.minPoolQuoteSol,
+        dumpMaxPoolQuoteSol: config.strategy.maxPoolQuoteSol,
         dumpMaxSignalAgeMs: config.strategy.dumpBackrunMaxSignalAgeMs,
         volume1mUsd: this.minVolume1mUsd,
         volume1mSol: this.minVolume1mSol,

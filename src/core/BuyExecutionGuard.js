@@ -234,7 +234,7 @@ function buildStreamPostSwapState({
   nowMs = Date.now(),
   maxSignalAgeMs = 300,
   maxSlotGap = 1,
-  maxCacheAgeMs = 500,
+  maxCacheAgeMs = 60_000,
 }) {
   const signalAgeMs = Number.isFinite(Number(signalTs))
     ? Math.max(0, Number(nowMs) - Number(signalTs))
@@ -280,7 +280,7 @@ function buildStreamPostSwapState({
     return reject('stream signal is stale');
   }
   const gapLimit = Math.max(0, Number(maxSlotGap) || 0);
-  if (slotGap == null || slotGap < 0 || slotGap > gapLimit) {
+  if (slotGap == null || Math.abs(slotGap) > gapLimit) {
     return reject('stream slot gap is outside fast-path limit');
   }
 

@@ -73,6 +73,10 @@ class PoolStateCache {
     this.metadataRetentionMs = parseInt(
       process.env.POOL_STATE_METADATA_RETENTION_MS || '7200000', 10,
     );
+    this.signalHotTtlMs = parseInt(
+      process.env.POOL_STATE_SIGNAL_HOT_TTL_MS || '60000',
+      10,
+    );
     this.timer = null;
     this._refreshing = false;
 
@@ -129,12 +133,17 @@ class PoolStateCache {
    * @param {boolean} [isPosition=false] - true=持仓币(500ms刷新), false=信号币(2000ms刷新)
    */
   addHot(mint, poolAddress, isPosition = false) {
-    if (!mint || !poolAddress) return;
+    if (!mint || !poolAddress) return null;
     const already = this.hotMints.has(mint);
     const prevInfo = already ? this.hotMints.get(mint) : null;
+    const effectiveIsPosition = Boolean(isPosition || prevInfo?.isPosition);
     // v3.17.27: isPosition 升级时也打印日志（之前 already=true 时静默跳过，导致"持仓没进 hotMints"的误判）
-    const isUpgrade = already && isPosition && prevInfo && !prevInfo.isPosition;
-    this.hotMints.set(mint, { poolAddress, addedAt: Date.now(), isPosition });
+    const isUpgrade = already && effectiveIsPosition && prevInfo && !prevInfo.isPosition;
+    this.hotMints.set(mint, {
+      poolAddress,
+      addedAt: Date.now(),
+      isPosition: effectiveIsPosition,
+    });
     monitor.set('PoolStateCache.hotMintsSize', this.hotMints.size, 'PoolStateCache');
     if (!already || isUpgrade) {
       const label = isPosition ? '💰' : '🔥';
@@ -143,8 +152,9 @@ class PoolStateCache {
     }
     // 立即刷新一次，确保 BUY 路径能命中 cache（仅首次或升级时）
     if (!already || isUpgrade) {
-      this.refreshOne(poolAddress).catch(() => {});
+      return this.refreshOne(poolAddress).catch(() => null);
     }
+    return null;
   }
 
   /**
@@ -560,14 +570,22 @@ class PoolStateCache {
     this._refreshing = true;
     try {
       const targets = [];
+      const now = Date.now();
       for (const [mint, info] of this.hotMints) {
+        if (
+          !info.isPosition &&
+          this.signalHotTtlMs > 0 &&
+          now - info.addedAt > this.signalHotTtlMs
+        ) {
+          this.hotMints.delete(mint);
+          continue;
+        }
         targets.push({ mint, poolAddress: info.poolAddress, isPosition: info.isPosition });
       }
 
       if (targets.length === 0) {
         // 无热币：只做清理
         let removed = 0;
-        const now = Date.now();
         for (const [addr, entry] of this.cache) {
           if (now - entry.fetchedAt > this.metadataRetentionMs) {
             this.cache.delete(addr);
@@ -586,7 +604,6 @@ class PoolStateCache {
       // 清理 cache 中已不在 hotMints 的 entry
       const hotAddresses = new Set(targets.map((t) => t.poolAddress));
       let removed = 0;
-      const now = Date.now();
       for (const [addr, entry] of this.cache) {
         if (!hotAddresses.has(addr) && now - entry.fetchedAt > this.metadataRetentionMs) {
           this.cache.delete(addr);

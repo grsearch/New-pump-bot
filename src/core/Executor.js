@@ -1455,9 +1455,11 @@ class Executor {
         minBaseAmountOut: guard.minBaseAmountOut,
         trackVolume: true,
       });
-      buyDiagnostics.cacheAgeAtBuildMs = this.poolStateCache
-        ? this.poolStateCache.getAge(order.poolAddress)
-        : Date.now() - stateReadyAt;
+      if (!streamStateAttempt.allowed) {
+        buyDiagnostics.cacheAgeAtBuildMs = this.poolStateCache
+          ? this.poolStateCache.getAge(order.poolAddress)
+          : Date.now() - stateReadyAt;
+      }
       const buildLatencyMs = Date.now() - tB0;
 
       const beforeAge = buyDiagnostics.cacheAgeBeforeMs == null

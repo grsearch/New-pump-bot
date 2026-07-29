@@ -33,7 +33,16 @@ monitor.registerModule('SignalEngine', { staleMs: 3600_000, label: 'Signal Engin
  *           恢复最近 N 分钟内 accepted=1 的 seller_tx 进内存，重启不丢。
  */
 class SignalEngine extends EventEmitter {
-  constructor({ tradeLogger, positionManager, tickStream = null, dumpDetector = null, rsiCalculator = null, tokenRegistry = null, emaService = null }) {
+  constructor({
+    tradeLogger,
+    positionManager,
+    tickStream = null,
+    dumpDetector = null,
+    rsiCalculator = null,
+    tokenRegistry = null,
+    emaService = null,
+    poolStateCache = null,
+  }) {
     super();
     this.tradeLogger = tradeLogger;
     this.positionManager = positionManager;
@@ -44,6 +53,7 @@ class SignalEngine extends EventEmitter {
     this.dumpDetector = dumpDetector;
     // v3.17.17: 可选 RSI 计算器,用于"反弹起点"过滤
     this.rsiCalculator = rsiCalculator;
+    this.poolStateCache = poolStateCache;
     // v3.26: tokenRegistry — 用于新币策略（按 token age 区分策略）
     this.tokenRegistry = tokenRegistry;
     this.lastTriggerTs = new Map();    // mint → ts
@@ -993,6 +1003,10 @@ class SignalEngine extends EventEmitter {
       monitor.inc('SignalEngine.rejectedSameMintOpen', 1, 'SignalEngine');
       this._logReject(signal, 'same mint already has open position');
       return;
+    }
+
+    if (this.poolStateCache && signal.poolAddress) {
+      this.poolStateCache.addHot(mint, signal.poolAddress, false);
     }
 
     const reason =

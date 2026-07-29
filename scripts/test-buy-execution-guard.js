@@ -111,6 +111,23 @@ async function main() {
     '5000000000',
   );
   assert.strictEqual(streamMetadataState.pool.virtualQuoteReserves.toString(), '1');
+  const leadingStreamState = buildStreamPostSwapState({
+    cachedState: streamMetadataState,
+    cacheAgeMs: 50_000,
+    signalSource: 'direct',
+    signalPoolBaseAmountRaw: '1000000000000',
+    signalPoolQuoteAmountRaw: '100000000000',
+    signalVirtualQuoteReservesRaw: '5000000000',
+    signalSlot: 500,
+    latestStreamSlot: 499,
+    signalTs: 1_000,
+    nowMs: 1_100,
+    maxSignalAgeMs: 300,
+    maxSlotGap: 1,
+    maxCacheAgeMs: 60_000,
+  });
+  assert.strictEqual(leadingStreamState.allowed, true);
+  assert.strictEqual(leadingStreamState.slotGap, -1);
   assert.strictEqual(buildStreamPostSwapState({
     cachedState: streamMetadataState,
     cacheAgeMs: 20,
@@ -348,7 +365,7 @@ async function main() {
   executor.poolStateCache = {
     _ownerVerified: new Set([poolAddress]),
     get: () => swapState,
-    getAge: () => 10,
+    getAge: () => 50_000,
     isDead: () => false,
     refreshOne: async (_pool, options) => {
       forcedRefreshCalls += 1;
@@ -402,10 +419,10 @@ async function main() {
     signalTransactionIndex: 17,
     signalTs: signalNow - 50,
     signalReceivedAt: signalNow - 45,
-    latestStreamSlotAtSignal: 500,
-    slotGapAtSignal: 0,
-    latestStreamSlotAtOrder: 500,
-    getLatestStreamSlot: () => 501,
+    latestStreamSlotAtSignal: 499,
+    slotGapAtSignal: -1,
+    latestStreamSlotAtOrder: 499,
+    getLatestStreamSlot: () => 499,
     sellerTx: 'SellerTx',
     poolQuoteAfterSignal: 100,
     signalPoolBaseAmountUi: 123456,
@@ -435,9 +452,9 @@ async function main() {
   assert.strictEqual(liveResult.signalSlot, 500);
   assert.strictEqual(liveResult.signalTransactionIndex, 17);
   assert.strictEqual(liveResult.rpcContextSlot, null);
-  assert.strictEqual(liveResult.latestStreamSlotAtQuote, 501);
-  assert.strictEqual(liveResult.slotGapAtSignal, 0);
-  assert.strictEqual(liveResult.slotGapAtQuote, 1);
+  assert.strictEqual(liveResult.latestStreamSlotAtQuote, 499);
+  assert.strictEqual(liveResult.slotGapAtSignal, -1);
+  assert.strictEqual(liveResult.slotGapAtQuote, -1);
   assert.strictEqual(liveResult.rpcSlotGapFromSignal, null);
   assert.strictEqual(liveResult.sellerTx, 'SellerTx');
   assert.strictEqual(liveResult.signalPoolBaseAmountUi, 123456);
@@ -452,10 +469,39 @@ async function main() {
   assert.strictEqual(liveResult.baseDecimals, 6);
   assert.strictEqual(liveResult.streamFastPath, 1);
   assert.ok(liveResult.streamSignalAgeMs >= 0);
-  assert.strictEqual(liveResult.streamSlotGap, 1);
+  assert.strictEqual(liveResult.streamSlotGap, -1);
   assert.strictEqual(liveResult.streamStateFallbackReason, null);
   assert.ok(liveResult.quoteLatencyMs >= 0);
   assert.ok(liveResult.signalToQuoteMs >= 0);
+
+  const ttlCache = new PoolStateCache({
+    onlineSdk: {},
+    user: {},
+    getMintList: () => [],
+  });
+  ttlCache.signalHotTtlMs = 10;
+  ttlCache.hotMints.set('ExpiredSignalMint', {
+    poolAddress,
+    addedAt: Date.now() - 20,
+    isPosition: false,
+  });
+  await ttlCache._refreshAll();
+  assert.strictEqual(
+    ttlCache.hotMints.has('ExpiredSignalMint'),
+    false,
+    'signal-only hot pools must expire instead of accumulating forever',
+  );
+  ttlCache.hotMints.set('OpenPositionMint', {
+    poolAddress,
+    addedAt: Date.now() - 20,
+    isPosition: true,
+  });
+  ttlCache.addHot('OpenPositionMint', poolAddress, false);
+  assert.strictEqual(
+    ttlCache.hotMints.get('OpenPositionMint').isPosition,
+    true,
+    'signal prewarming must not downgrade an open position refresh tier',
+  );
 
   console.log('PASS test-buy-execution-guard');
   process.exit(0);

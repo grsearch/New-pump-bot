@@ -79,7 +79,7 @@ const config = {
       10,
     ),
     dumpBackrunFastBuyMaxMetadataAgeMs: parseInt(
-      process.env.DUMP_BACKRUN_FAST_BUY_MAX_METADATA_AGE_MS || '5000',
+      process.env.DUMP_BACKRUN_FAST_BUY_MAX_METADATA_AGE_MS || '60000',
       10,
     ),
     dumpBackrunBlockMintAfterTimeout:

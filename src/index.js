@@ -573,8 +573,12 @@ async function main() {
     if (now - last < PREWARM_DEDUP_MS) return;
     _prewarmDedup.set(signal.poolAddress, now);
 
+    const refreshPromise = !executor.poolStateCache.hotMints.has(signal.mint)
+      ? executor.poolStateCache.addHot(signal.mint, signal.poolAddress, false)
+      : executor.poolStateCache.refreshOne(signal.poolAddress);
+
     // 异步 refresh,不阻塞 SS loop
-    executor.poolStateCache.refreshOne(signal.poolAddress).then(() => {
+    Promise.resolve(refreshPromise).then(() => {
       monitor.inc('main.prewarmHit', 1, 'main');
     }).catch(() => {
       // 静默失败 (cache miss/RPC 暂时不通,后续 5s 轮询也会刷)
@@ -800,11 +804,9 @@ async function main() {
   });
 
   dumpDetector.on('dumpSignal', (signal) => {
-    // v3.17.16: 移除 refreshOne 调用
-    //   handleDumpSignal → buyOrder → executor.buy 都在同一 microtask 链完成,
-    //   refreshOne 的 RPC(30-100ms)永远追不上当次 BUY,对当前信号无意义。
-    //   PoolStateCache 后台滚动刷新(POOL_STATE_REFRESH_MS=5000)已经保证 cache 新鲜。
-    //   如果希望砸盘瞬间池子状态更新,把 POOL_STATE_REFRESH_MS 调到 2000-3000。
+    // SignalEngine adds accepted V9 pools to the rolling hot set before it
+    // emits buyOrder. The current BUY still uses this transaction's exact
+    // post-balances; the background refresh prepares later signals.
     activityFlowTracker.noteDumpSignal(signal);
     if (!activityFlowTracker.enabled && activityFlowTracker.entryMode === 'DUMP_BACKRUN_V9') {
       activityFlowTracker.noteSuppressedDumpSignal(signal);

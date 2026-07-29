@@ -43,6 +43,7 @@ function makeSignal(overrides = {}) {
     ts: Date.now() - 50,
     slot: 500_000,
     transactionIndex: 17,
+    poolAddress: 'DumpBackrunTestPool1111111111111111111111111',
     priceBefore: 1.2e-6,
     priceAfter: 1e-6,
     _sellCount10s: 1,
@@ -56,6 +57,7 @@ function makeEngine({
   timeoutBlockedMints = [],
 } = {}) {
   const logged = [];
+  const hotCalls = [];
   const engine = new SignalEngine({
     tradeLogger: {
       getRecentAcceptedSellerTxs: () => [],
@@ -71,8 +73,11 @@ function makeEngine({
       isActive: () => true,
       getToken: () => ({ migration_time: Date.now() - 60_000 }),
     },
+    poolStateCache: {
+      addHot: (...args) => hotCalls.push(args),
+    },
   });
-  return { engine, logged };
+  return { engine, logged, hotCalls };
 }
 
 async function run() {
@@ -89,7 +94,7 @@ async function run() {
   assert.strictEqual(config.strategy.dumpBackrunStreamFastBuyEnabled, true);
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSignalAgeMs, 300);
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSlotGap, 1);
-  assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs, 5_000);
+  assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs, 60_000);
   assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
   const mainSource = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
@@ -101,13 +106,25 @@ async function run() {
 
   const accepted = makeEngine();
   const buyOrders = [];
-  accepted.engine.on('buyOrder', (order) => buyOrders.push(order));
+  accepted.engine.on('buyOrder', (order) => {
+    assert.strictEqual(
+      accepted.hotCalls.length,
+      1,
+      'the pool must be marked hot before the synchronous BUY listener runs',
+    );
+    buyOrders.push(order);
+  });
   const validSignal = makeSignal();
   await accepted.engine.handleDumpSignal(validSignal);
   assert.strictEqual(buyOrders.length, 1, 'a valid dump must emit BUY immediately');
   assert.match(buyOrders[0].reason, /dump_backrun_v9/);
   assert.strictEqual(buyOrders[0]._dumpBackrunEntry, true);
   assert.strictEqual(buyOrders[0].transactionIndex, 17);
+  assert.deepStrictEqual(
+    accepted.hotCalls,
+    [[validSignal.mint, validSignal.poolAddress, false]],
+    'an accepted V9 signal must enter the rolling pool-state hot set before BUY',
+  );
 
   accepted.engine.markBuyDone(validSignal.mint);
   await accepted.engine.handleDumpSignal(validSignal);
@@ -138,6 +155,11 @@ async function run() {
     weakImpactOrders.length,
     0,
     'a sub-threshold impact must not buy',
+  );
+  assert.strictEqual(
+    weakImpact.hotCalls.length,
+    0,
+    'rejected signals must not consume rolling pool refresh capacity',
   );
   weakImpact.engine.shutdown();
 

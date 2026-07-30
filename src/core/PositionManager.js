@@ -313,6 +313,50 @@ class PositionManager extends EventEmitter {
     this._exit(pos, price, reason);
   }
 
+  handleDumpBackrunRugSignal(rug) {
+    if (config.strategy.exitMode !== 'DUMP_BACKRUN_V9' || !rug?.mint) return false;
+    const pids = this.byMint.get(rug.mint);
+    if (!pids || pids.size === 0) return false;
+
+    const eventPrice = Number(rug.priceAfter);
+    const trackedPrice = Number(this.priceTracker?.getPrice(rug.mint));
+    const price = Number.isFinite(eventPrice) && eventPrice > 0
+      ? eventPrice
+      : trackedPrice;
+    if (!Number.isFinite(price) || price <= 0) {
+      monitor.inc('PositionManager.rugExitMissingPrice', 1, 'PositionManager');
+      return false;
+    }
+
+    const maxPnlPct = config.strategy.dumpBackrunRugExitMaxPnlPct;
+    for (const pid of pids) {
+      const pos = this.positions.get(pid);
+      if (
+        !pos ||
+        pos.exiting ||
+        pos.status === 'stuck' ||
+        (!pos.reconciled && !pos.dryRun) ||
+        !Number.isFinite(pos.entryPrice) ||
+        pos.entryPrice <= 0
+      ) {
+        continue;
+      }
+      const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
+      if (pnlPct <= maxPnlPct) {
+        console.warn(
+          `[PositionManager] RUG_PULL_EXIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
+            `pnl=${pnlPct.toFixed(2)}% threshold=${maxPnlPct}% ` +
+            `sells=${Number(rug.sellCount) || 0} sellSol=${Number(rug.sellSol || 0).toFixed(2)}`,
+        );
+        monitor.inc('PositionManager.rugPullExit', 1, 'PositionManager');
+        this._exitForCondition(pos, price, 'RUG_PULL_EXIT');
+        return true;
+      }
+    }
+    monitor.inc('PositionManager.rugExitSkippedByPnl', 1, 'PositionManager');
+    return false;
+  }
+
   /**
    * 每笔 swap 更新 RSI 后调用。RSI 使用当前 1 分钟实时值；移动止盈一旦
    * 在同币任一仓位上激活，便接管整组仓位，后续不再走 RSI 超买退出。
@@ -1071,6 +1115,30 @@ class PositionManager extends EventEmitter {
       const peakPnlForTimeout = (pos.highWaterMark && pos.entryPrice > 0)
         ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100
         : 0;
+      const noBounceStart = pos.reconciledAt || pos.openedAt;
+      const noBounceAgeMs = noBounceStart ? now - noBounceStart : 0;
+      if (
+        config.strategy.exitMode === 'DUMP_BACKRUN_V9' &&
+        (pos.reconciled || pos.dryRun) &&
+        config.strategy.dumpBackrunNoBounceAgeMs > 0 &&
+        noBounceAgeMs >= config.strategy.dumpBackrunNoBounceAgeMs &&
+        peakPnlForTimeout < config.strategy.dumpBackrunNoBounceMaxMfePct
+      ) {
+        const lastPrice = Number(this.priceTracker.getPrice(pos.mint));
+        const pnlPct = Number.isFinite(lastPrice) && lastPrice > 0 && pos.entryPrice > 0
+          ? ((lastPrice - pos.entryPrice) / pos.entryPrice) * 100
+          : null;
+        if (pnlPct != null && pnlPct <= config.strategy.dumpBackrunNoBounceMaxPnlPct) {
+          console.warn(
+            `[PositionManager] NO_BOUNCE_5S ${pos.symbol || pos.mint.slice(0, 6)} ` +
+              `age=${noBounceAgeMs}ms peak=${peakPnlForTimeout.toFixed(2)}% ` +
+              `pnl=${pnlPct.toFixed(2)}%`,
+          );
+          monitor.inc('PositionManager.dumpBackrunNoBounceExit', 1, 'PositionManager');
+          this._exitForCondition(pos, lastPrice, 'NO_BOUNCE_5S');
+          continue;
+        }
+      }
       const noBounceEnabled = config.strategy.noBounceExitEnabled;
       if (
         noBounceEnabled &&
@@ -2287,6 +2355,7 @@ class PositionManager extends EventEmitter {
         tokenAmount: pos.tokenAmount,
         baseDecimals: tokenInfo?.decimals ?? 6,
         currentPrice: latestPrice,
+        exitReason: pos.exitReason,
       });
     } catch (err) {
       monitor.recordError('PositionManager', err, {

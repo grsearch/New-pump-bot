@@ -289,6 +289,11 @@ async function main() {
 
   const Executor = require('../src/core/Executor');
   const diagnosticExecutor = Object.create(Executor.prototype);
+  assert.strictEqual(diagnosticExecutor._getSellSlippageBps('TRAILING_STOP'), 500);
+  assert.strictEqual(diagnosticExecutor._getSellSlippageBps('TIMEOUT_20S'), 500);
+  assert.strictEqual(diagnosticExecutor._getSellSlippageBps('RUG_PULL_EXIT'), 5000);
+  assert.strictEqual(diagnosticExecutor._getSellSlippageBps('NO_BOUNCE_5S'), 5000);
+  assert.strictEqual(diagnosticExecutor._getSellSlippageBps('FIXED_STOP_LOSS'), 5000);
   diagnosticExecutor.computeUnitLimit = 250000;
   diagnosticExecutor.rpc = {
     getTransaction: async () => ({

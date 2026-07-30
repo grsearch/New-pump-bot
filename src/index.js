@@ -111,6 +111,19 @@ async function main() {
   );
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
+  if (config.strategy.exitMode === 'DUMP_BACKRUN_V9') {
+    console.log(
+      `V9 risk policy: entryAge<=${config.strategy.dumpBackrunMaxEntryAgeMs / 60_000}min, ` +
+        `rugPnl<=${config.strategy.dumpBackrunRugExitMaxPnlPct}%, ` +
+        `noBounce=${config.strategy.dumpBackrunNoBounceAgeMs / 1000}s/` +
+        `MFE<${config.strategy.dumpBackrunNoBounceMaxMfePct}%/` +
+        `PnL<=${config.strategy.dumpBackrunNoBounceMaxPnlPct}%`,
+    );
+    console.log(
+      `Sell slippage: normal=${(config.strategy.sellSlippageBps / 100).toFixed(1)}%, ` +
+        `risk=${(config.strategy.emergencySellSlippageBps / 100).toFixed(1)}%`,
+    );
+  }
   console.log(`Max hold: ${config.strategy.maxHoldMs > 0 ? config.strategy.maxHoldMs / 1000 + 's' : 'disabled'}`);
   console.log(
     `Buy execution: buy_exact_quote_in, fixed SOL, virtual-reserve-aware, ` +
@@ -824,23 +837,11 @@ async function main() {
     });
   });
 
-  // v3.17.15: RUG 信号 — 同 slot 5+ 笔卖出、合计 > 5 SOL → 持仓立即卖出
-  //   v3.17.27: 用户要求关闭 RUG_PULL_EXIT，改为仅记录不卖出
+  // V9 only exits on a rug cluster after the position has already crossed
+  // the configured loss threshold. Profitable clusters remain under the
+  // normal trailing and timeout policy.
   dumpDetector.on('rugSignal', (rug) => {
-    const mint = rug.mint;
-    const pids = positionManager.byMint.get(mint);
-    if (!pids || pids.size === 0) return; // 无持仓，忽略
-    console.log(
-      `[RUG] 🚨 RUG PULL detected on ${rug.symbol || mint.slice(0,6)}: ${rug.sellCount} sells, ${rug.sellSol.toFixed(1)} SOL, ${rug.sellers.length} sellers — RUG_PULL_EXIT disabled, skipping`,
-    );
-    // RUG_PULL_EXIT 已关闭 — 不再强制卖出，让 trailing/TP 等其他机制处理
-    // for (const pid of pids) {
-    //   const pos = positionManager.positions.get(pid);
-    //   if (pos && !pos.exiting) {
-    //     const px = positionManager.priceTracker.getPrice(mint) || pos.entryPrice;
-    //     positionManager._exit(pos, px, 'RUG_PULL_EXIT');
-    //   }
-    // }
+    positionManager.handleDumpBackrunRugSignal(rug);
   });
 
   // ============ buyOrder → BUY → register position ============

@@ -694,6 +694,7 @@ class DumpDetector extends EventEmitter {
       sellers,
       slot: lastSell.slot,
       ts: lastSell.ts,
+      priceAfter: lastSell.priceAfter,
     });
   }
 

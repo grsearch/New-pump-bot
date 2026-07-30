@@ -82,11 +82,17 @@ function run() {
   assert.strictEqual(config.strategy.trailingActivatePct, 10);
   assert.strictEqual(config.strategy.trailingDrawdownPct, 3);
   assert.strictEqual(config.strategy.takeProfitPct, 0);
-  assert.strictEqual(config.strategy.fixedStopLossPct, -30);
+  assert.strictEqual(config.strategy.fixedStopLossPct, -15);
   assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
   assert.strictEqual(config.strategy.maxHoldMs, 20_000);
   assert.strictEqual(config.strategy.maxTokenAgeMs, 7_200_000);
   assert.strictEqual(config.strategy.positionFdvExitUsd, 0);
+  assert.strictEqual(config.strategy.dumpBackrunRugExitMaxPnlPct, -10);
+  assert.strictEqual(config.strategy.dumpBackrunNoBounceAgeMs, 5_000);
+  assert.strictEqual(config.strategy.dumpBackrunNoBounceMaxMfePct, 2);
+  assert.strictEqual(config.strategy.dumpBackrunNoBounceMaxPnlPct, -3);
+  assert.strictEqual(config.strategy.sellSlippageBps, 500);
+  assert.strictEqual(config.strategy.emergencySellSlippageBps, 5_000);
 
   {
     const manager = managerWith();
@@ -109,7 +115,7 @@ function run() {
       _stabilizeSamples: [],
     });
     const manager = managerWith(first);
-    manager._checkExit('p1', 0.7);
+    manager._checkExit('p1', 0.85);
     assert.strictEqual(manager._exitCalls[0].reason, 'FIXED_STOP_LOSS');
   }
 
@@ -124,8 +130,100 @@ function run() {
       _stabilizeSamples: [],
     });
     const manager = managerWith(first);
-    manager._checkExit('p1', 0.71);
-    assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 30% must stay open');
+    manager._checkExit('p1', 0.851);
+    assert.strictEqual(manager._exitCalls.length, 0, 'a loss smaller than 15% must stay open');
+  }
+
+  {
+    const now = Date.now();
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1.01,
+      openedAt: now - 6_000,
+      reconciledAt: now - 5_100,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.96 };
+    manager.tokenRegistry = { getToken: () => null };
+    manager._fillPreVolFallback = () => {};
+    manager._tick();
+    assert.strictEqual(manager._exitCalls[0].reason, 'NO_BOUNCE_5S');
+  }
+
+  {
+    const now = Date.now();
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1.025,
+      openedAt: now - 6_000,
+      reconciledAt: now - 5_100,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.96 };
+    manager.tokenRegistry = { getToken: () => null };
+    manager._fillPreVolFallback = () => {};
+    manager._tick();
+    assert.strictEqual(
+      manager._exitCalls.length,
+      0,
+      'a position that already achieved 2% MFE must not be cut by no-bounce',
+    );
+  }
+
+  {
+    const now = Date.now();
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1.01,
+      openedAt: now - 5_000,
+      reconciledAt: now - 4_900,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.96 };
+    manager.tokenRegistry = { getToken: () => null };
+    manager._fillPreVolFallback = () => {};
+    manager._tick();
+    assert.strictEqual(manager._exitCalls.length, 0, 'no-bounce must wait five seconds after reconcile');
+  }
+
+  {
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1,
+      openedAt: Date.now() - 3_000,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.91 };
+    assert.strictEqual(
+      manager.handleDumpBackrunRugSignal({
+        mint,
+        priceAfter: 0.91,
+        sellCount: 5,
+        sellSol: 10,
+      }),
+      false,
+    );
+    assert.strictEqual(manager._exitCalls.length, 0, 'rug signal above -10% must not exit');
+  }
+
+  {
+    const first = position('p1', mint, {
+      entryPrice: 1,
+      highWaterMark: 1,
+      openedAt: Date.now() - 3_000,
+    });
+    const manager = managerWith(first);
+    manager.priceTracker = { getPrice: () => 0.89 };
+    assert.strictEqual(
+      manager.handleDumpBackrunRugSignal({
+        mint,
+        priceAfter: 0.89,
+        sellCount: 5,
+        sellSol: 10,
+      }),
+      true,
+    );
+    assert.strictEqual(manager._exitCalls[0].reason, 'RUG_PULL_EXIT');
   }
 
   {

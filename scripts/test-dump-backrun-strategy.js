@@ -55,6 +55,7 @@ function makeSignal(overrides = {}) {
 function makeEngine({
   hasOpenPosition = false,
   timeoutBlockedMints = [],
+  migrationAgeMs = 60_000,
 } = {}) {
   const logged = [];
   const hotCalls = [];
@@ -71,7 +72,9 @@ function makeEngine({
     },
     tokenRegistry: {
       isActive: () => true,
-      getToken: () => ({ migration_time: Date.now() - 60_000 }),
+      getToken: () => ({
+        migration_time: migrationAgeMs == null ? null : Date.now() - migrationAgeMs,
+      }),
     },
     poolStateCache: {
       addHot: (...args) => hotCalls.push(args),
@@ -96,6 +99,7 @@ async function run() {
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSlotGap, 1);
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs, 60_000);
   assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
+  assert.strictEqual(config.strategy.dumpBackrunMaxEntryAgeMs, 600_000);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
   const mainSource = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   assert.match(
@@ -171,6 +175,26 @@ async function run() {
   }));
   assert.strictEqual(staleOrders.length, 0, 'a stale dump must not buy');
   stale.engine.shutdown();
+
+  const oldMint = makeEngine({
+    migrationAgeMs: config.strategy.dumpBackrunMaxEntryAgeMs + 1,
+  });
+  const oldMintOrders = [];
+  oldMint.engine.on('buyOrder', (order) => oldMintOrders.push(order));
+  await oldMint.engine.handleDumpSignal(makeSignal());
+  assert.strictEqual(oldMintOrders.length, 0, 'a mint older than ten minutes must not buy');
+  assert.match(
+    oldMint.logged.at(-1)?.rejectReason || oldMint.logged.at(-1)?.notes || '',
+    /entry age/,
+  );
+  oldMint.engine.shutdown();
+
+  const unknownAge = makeEngine({ migrationAgeMs: null });
+  const unknownAgeOrders = [];
+  unknownAge.engine.on('buyOrder', (order) => unknownAgeOrders.push(order));
+  await unknownAge.engine.handleDumpSignal(makeSignal());
+  assert.strictEqual(unknownAgeOrders.length, 0, 'unknown migration age must not bypass V9 age gate');
+  unknownAge.engine.shutdown();
 
   const catastrophic = makeEngine();
   const catastrophicOrders = [];

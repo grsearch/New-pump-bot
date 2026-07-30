@@ -962,6 +962,23 @@ class SignalEngine extends EventEmitter {
     if (this.tokenRegistry) {
       const tokenInfo = this.tokenRegistry.getToken(mint);
       const migrationTime = normalizeUnixMs(tokenInfo?.migration_time);
+      if (config.strategy.dumpBackrunMaxEntryAgeMs > 0) {
+        if (!migrationTime) {
+          monitor.inc('SignalEngine.rejectedUnknownMigrationAge', 1, 'SignalEngine');
+          this._logReject(signal, 'V9 entry age unavailable');
+          return;
+        }
+        const mintAgeMs = Math.max(0, signalReceivedAt - migrationTime);
+        if (mintAgeMs > config.strategy.dumpBackrunMaxEntryAgeMs) {
+          monitor.inc('SignalEngine.rejectedDumpBackrunOldMint', 1, 'SignalEngine');
+          this._logReject(
+            signal,
+            `V9 entry age ${Math.round(mintAgeMs / 1000)}s>` +
+              `${Math.round(config.strategy.dumpBackrunMaxEntryAgeMs / 1000)}s`,
+          );
+          return;
+        }
+      }
       if (
         migrationTime &&
         config.strategy.maxTokenAgeMs > 0 &&

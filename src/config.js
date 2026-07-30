@@ -84,6 +84,25 @@ const config = {
     ),
     dumpBackrunBlockMintAfterTimeout:
       (process.env.DUMP_BACKRUN_BLOCK_MINT_AFTER_TIMEOUT ?? 'true').toLowerCase() === 'true',
+    // Entry-only age gate. The watchlist still retains tokens for the global
+    // two-hour monitoring window.
+    dumpBackrunMaxEntryAgeMs: parseInt(
+      process.env.DUMP_BACKRUN_MAX_ENTRY_AGE_MS || '600000',
+      10,
+    ),
+    dumpBackrunRugExitMaxPnlPct: parseFloat(
+      process.env.DUMP_BACKRUN_RUG_EXIT_MAX_PNL_PCT || '-10',
+    ),
+    dumpBackrunNoBounceAgeMs: parseInt(
+      process.env.DUMP_BACKRUN_NO_BOUNCE_AGE_MS || '5000',
+      10,
+    ),
+    dumpBackrunNoBounceMaxMfePct: parseFloat(
+      process.env.DUMP_BACKRUN_NO_BOUNCE_MAX_MFE_PCT || '2',
+    ),
+    dumpBackrunNoBounceMaxPnlPct: parseFloat(
+      process.env.DUMP_BACKRUN_NO_BOUNCE_MAX_PNL_PCT || '-3',
+    ),
 
     // 仓位
     positionSizeSol: parseFloat(process.env.POSITION_SIZE_SOL || '0.1'),
@@ -139,7 +158,7 @@ const config = {
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: -30,
+    fixedStopLossPct: -15,
     emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
@@ -208,7 +227,11 @@ const config = {
     buyMaxPoolStateAgeMs: parseInt(process.env.BUY_MAX_POOL_STATE_AGE_MS || '500', 10),
     // Kept for exported-config compatibility; no longer used as the price guard.
     buyMaxEstimatedSlippagePct: parseFloat(process.env.BUY_MAX_ESTIMATED_SLIPPAGE_PCT || '5'),
-    sellSlippageBps: parseInt(process.env.SELL_SLIPPAGE_BPS || '2000', 10), // 20%
+    sellSlippageBps: parseInt(process.env.SELL_SLIPPAGE_BPS || '500', 10), // 5%
+    emergencySellSlippageBps: parseInt(
+      process.env.EMERGENCY_SELL_SLIPPAGE_BPS || '5000',
+      10,
+    ), // 50%; only risk exits use this
 
     // 风控（v3.17 默认 maxConcurrent 5）
     cooldownMsPerToken: parseInt(process.env.COOLDOWN_MS_PER_TOKEN || '0', 10),

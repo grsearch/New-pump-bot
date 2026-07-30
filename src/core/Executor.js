@@ -1584,6 +1584,20 @@ class Executor {
   /**
    * 卖出：token → SOL，固定 token 输入。
    */
+  _isEmergencySellReason(exitReason) {
+    return [
+      'RUG_PULL_EXIT',
+      'NO_BOUNCE_5S',
+      'FIXED_STOP_LOSS',
+    ].includes(exitReason);
+  }
+
+  _getSellSlippageBps(exitReason) {
+    return this._isEmergencySellReason(exitReason)
+      ? config.strategy.emergencySellSlippageBps
+      : config.strategy.sellSlippageBps;
+  }
+
   /**
    * 卖出：token → SOL，固定 token 输入。
    */
@@ -1595,6 +1609,8 @@ class Executor {
     const baseDecimals = order.baseDecimals ?? 6;
     const tokenAmount = order.tokenAmount;
     const currentPrice = order.currentPrice;
+    const isEmergencyExit = this._isEmergencySellReason(order.exitReason);
+    const slippageBps = this._getSellSlippageBps(order.exitReason);
 
     if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) {
       monitor.inc('Executor.sellFail', 1, 'Executor');
@@ -1654,7 +1670,12 @@ class Executor {
       // v3.31: 卖出热路径不再串两发 RPC（链上余额 + swapState），卖出从 ~1-2s 降到几十 ms。
       const tS0 = Date.now();
       let swapState = null;
-      if (this.poolStateCache) {
+      if (this.poolStateCache && isEmergencyExit) {
+        swapState = await this.poolStateCache.refreshOne(order.poolAddress, {
+          force: true,
+        });
+        monitor.inc('Executor.emergencySellForcedRefresh', 1, 'Executor');
+      } else if (this.poolStateCache) {
         swapState = this.poolStateCache.get(order.poolAddress);
       }
       if (!swapState) {
@@ -1684,7 +1705,7 @@ class Executor {
       }
 
       const sellAmountBN = new BN(sellAmountRaw);
-      const slippagePct = config.strategy.sellSlippageBps / 100;
+      const slippagePct = slippageBps / 100;
 
       // 2. 构造 sell 指令（base→quote 方向）
       const tB0 = Date.now();
@@ -1719,7 +1740,8 @@ class Executor {
         `[Executor:LIVE] SELL submitted: ${(sig || '').slice(0, 8)}.. ` +
           `(state=${stateLatencyMs}ms build=${buildLatencyMs}ms send=${sendLatencyMs}ms total=${
             Date.now() - t0
-          }ms, fee=${feeInfo.totalLamports}L ${feeInfo.source})`,
+          }ms, reason=${order.exitReason || 'unknown'} slippage=${slippagePct.toFixed(1)}%, ` +
+          `fee=${feeInfo.totalLamports}L ${feeInfo.source})`,
       );
 
       return {
@@ -1734,6 +1756,8 @@ class Executor {
         sendLatencyMs,
         priorityFeeLamports: feeInfo.totalLamports,
         priorityFeeSource: feeInfo.source,
+        sellSlippageBps: slippageBps,
+        emergencyExit: isEmergencyExit,
       };
     } catch (err) {
       monitor.inc('Executor.sellFail', 1, 'Executor');
@@ -1742,9 +1766,17 @@ class Executor {
         mint: order.mint,
         symbol: order.symbol,
         tokenAmount,
+        exitReason: order.exitReason,
+        sellSlippageBps: slippageBps,
       });
       console.error(`[Executor:LIVE] SELL failed: ${err.message}`);
-      return { success: false, error: err.message, latencyMs: Date.now() - t0 };
+      return {
+        success: false,
+        error: err.message,
+        latencyMs: Date.now() - t0,
+        sellSlippageBps: slippageBps,
+        emergencyExit: isEmergencyExit,
+      };
     }
   }
 

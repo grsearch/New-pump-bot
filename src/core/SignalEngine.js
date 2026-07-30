@@ -488,7 +488,11 @@ class SignalEngine extends EventEmitter {
       const tokenInfo = this.tokenRegistry.getToken(mint);
       const migrationTime = normalizeUnixMs(tokenInfo?.migration_time);
       // Unknown migration time is allowed; never substitute mint creation time.
-      if (migrationTime && (Date.now() - migrationTime) > maxAgeH * 3600 * 1000) {
+      if (
+        maxAgeH > 0 &&
+        migrationTime &&
+        (Date.now() - migrationTime) > maxAgeH * 3600 * 1000
+      ) {
         monitor.inc('SignalEngine.rejectedOldMint', 1, 'SignalEngine');
         this._logReject(signal, `mint age > ${maxAgeH}h`);
         return;

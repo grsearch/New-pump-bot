@@ -78,7 +78,7 @@ async function run() {
   assert.strictEqual(config.activityFlow.reboundMaxDropPct, 65);
   assert.strictEqual(config.activityFlow.reboundConfirmMaxGapMs, 10_000);
   assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
-  assert.strictEqual(config.strategy.maxMintAgeMinutes, 120);
+  assert.strictEqual(config.strategy.maxMintAgeMinutes, 0);
 
   const passingMint = nextMint();
   const passing = tracker();

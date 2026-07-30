@@ -99,7 +99,9 @@ async function main() {
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
-      `migrationAge<=${config.strategy.maxMintAgeMinutes}min ` +
+      `migrationAge=${config.strategy.maxTokenAgeMs > 0
+        ? `<=${config.strategy.maxMintAgeMinutes}min`
+        : 'unlimited'} ` +
       `(check every ${watchdogCheckIntervalMs / 60_000}min)`,
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
@@ -113,7 +115,9 @@ async function main() {
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   if (config.strategy.exitMode === 'DUMP_BACKRUN_V9') {
     console.log(
-      `V9 risk policy: entryAge<=${config.strategy.dumpBackrunMaxEntryAgeMs / 60_000}min, ` +
+      `V9 risk policy: entryAge=${config.strategy.dumpBackrunMaxEntryAgeMs > 0
+        ? `<=${config.strategy.dumpBackrunMaxEntryAgeMs / 60_000}min`
+        : 'unlimited'}, ` +
         `rugPnl<=${config.strategy.dumpBackrunRugExitMaxPnlPct}%, ` +
         `noBounce=${config.strategy.dumpBackrunNoBounceAgeMs / 1000}s/` +
         `MFE<${config.strategy.dumpBackrunNoBounceMaxMfePct}%/` +
@@ -132,6 +136,10 @@ async function main() {
   console.log('Add-on: disabled');
   console.log(`Executor: Pump AMM SDK direct (no Jupiter)`);
   console.log(`Pump graduation discovery: ${config.pumpDiscovery.enabled ? 'enabled' : 'disabled'}`);
+  console.log(
+    `ShredStream token auto-add: ${config.pumpDiscovery.shredstreamAutoAddEnabled ? 'enabled' : 'disabled'}`,
+  );
+  console.log('Token source policy: webhook/manual only');
   console.log('================================================');
 
   const errors = validateConfig();
@@ -477,8 +485,10 @@ async function main() {
   }, 3600_000);
 
   console.log(
-    `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeMinutes}min ` +
-    '(open positions are retained until exit)',
+    config.strategy.maxTokenAgeMs > 0
+      ? `[main] token AGE filter enabled: remove after ${config.strategy.maxMintAgeMinutes}min ` +
+        '(open positions are retained until exit)'
+      : '[main] token AGE filter disabled: monitored tokens do not expire by AGE',
   );
 
   // ============ 定期补缺 pool 信息（每 60 秒扫描一次） ============
@@ -616,6 +626,7 @@ async function main() {
   const _newMintDedup = new Map(); // mint → lastAddTs
   const NEW_MINT_DEDUP_MS = 60000; // 同一 mint 60s 内不重复 add
   tickStream.on('newMintDiscovered', (info) => {
+    if (!config.pumpDiscovery.shredstreamAutoAddEnabled) return;
     if (!info.mint) return;
     // 只自动添加大额砸单（和小额卖单不值得监控）
     if (info.minQuoteOutSol < SS_NEW_MINT_MIN_SELL_SOL) return;
@@ -1157,7 +1168,7 @@ async function main() {
   const initialMints = tokenRegistry.listActive().map((t) => t.mint);
   console.log(`[main] starting LaserStream with ${initialMints.length} initial tokens`);
   await tickStream.start(initialMints);
-  pumpDiscovery.start();
+  if (config.pumpDiscovery.enabled) pumpDiscovery.start();
 
   // ============ 优雅退出 ============
   const shutdown = async (signal) => {

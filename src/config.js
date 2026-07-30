@@ -16,8 +16,8 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
-// Keep graduated tokens available for short-lived rebound opportunities.
-const maxMintAgeMinutes = 120;
+// Webhook-selected tokens do not expire by migration AGE. Zero disables the AGE gate.
+const maxMintAgeMinutes = 0;
 const maxMintAgeHours = maxMintAgeMinutes / 60;
 
 const config = {
@@ -84,12 +84,8 @@ const config = {
     ),
     dumpBackrunBlockMintAfterTimeout:
       (process.env.DUMP_BACKRUN_BLOCK_MINT_AFTER_TIMEOUT ?? 'true').toLowerCase() === 'true',
-    // Entry-only age gate. The watchlist still retains tokens for the global
-    // two-hour monitoring window.
-    dumpBackrunMaxEntryAgeMs: parseInt(
-      process.env.DUMP_BACKRUN_MAX_ENTRY_AGE_MS || '600000',
-      10,
-    ),
+    // Webhook-selected tokens may enter regardless of migration AGE.
+    dumpBackrunMaxEntryAgeMs: 0,
     dumpBackrunRugExitMaxPnlPct: parseFloat(
       process.env.DUMP_BACKRUN_RUG_EXIT_MAX_PNL_PCT || '-10',
     ),
@@ -572,9 +568,11 @@ const config = {
     strategyLabFdvBandsUsd: process.env.STRATEGY_LAB_FDV_BANDS_USD || '50000,100000,250000,500000,1000000',
   },
 
-  // Passing this gate only adds a mint to monitoring; it does not buy the token.
+  // Token selection is webhook-only. Keep these hard-disabled so a stale
+  // production .env cannot silently resume automatic discovery.
   pumpDiscovery: {
-    enabled: (process.env.PUMP_DISCOVERY_ENABLED ?? 'true').toLowerCase() === 'true',
+    enabled: false,
+    shredstreamAutoAddEnabled: false,
     wsUrl: process.env.PUMP_DISCOVERY_WS_URL || null,
     pollIntervalMs: parseInt(process.env.PUMP_DISCOVERY_POLL_INTERVAL_MS || '5000', 10),
     pollLimit: parseInt(process.env.PUMP_DISCOVERY_POLL_LIMIT || '100', 10),

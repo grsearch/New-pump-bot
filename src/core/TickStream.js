@@ -612,7 +612,6 @@ class TickStream extends EventEmitter {
     initialMints.forEach((m) => this.watchedMints.add(m));
     if (this.watchedMints.size === 0) {
       console.log('[TickStream] no tokens to watch yet, idle');
-      return;
     }
     await Promise.all(this.regions.map((r) => r.start(this.watchedMints)));
     // v3.17.29: 启动独立 SlotSubscriber
@@ -1428,6 +1427,7 @@ class TickStream extends EventEmitter {
 
         const tokInfo = baseVaultToMint.get(poolBaseAta);
         if (!tokInfo) {
+          if (!config.pumpDiscovery.shredstreamAutoAddEnabled) continue;
           // v3.34: 未知 mint — 从 sell instruction 的 account[3] 提取 base_mint
           // emit newMintDiscovered 事件让 index.js 自动添加到 tokenRegistry
           const baseMintIdx = accIdxs[3];

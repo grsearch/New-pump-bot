@@ -180,8 +180,8 @@ assert.strictEqual(
   );
   assert.strictEqual(
     watchdog.maxTokenAgeMs,
-    600_000,
-    'watchdog must expire tokens 10 minutes after migration',
+    0,
+    'watchdog migration AGE expiry must be disabled',
   );
   watchdog.minFdVUsd = 15_000;
   watchdog.minLiquidityUsd = 3_000;
@@ -257,7 +257,7 @@ assert.strictEqual(
   oldAgeWatchdog.maxWatchDurationMs = 0;
 
   await oldAgeWatchdog._check();
-  assert.strictEqual(oldAgeRemoved, true, 'migration AGE above 10 minutes must remove the token');
+  assert.strictEqual(oldAgeRemoved, false, 'migration AGE must not remove the token');
 
   let openAgeRemoved = false;
   const openAgeWatchdog = new TokenWatchdog({
@@ -279,7 +279,7 @@ assert.strictEqual(
   await openAgeWatchdog._check();
   assert.strictEqual(openAgeRemoved, false, 'an old token with an open position must stay monitored');
 
-  console.log('Token market refresh and AGE expiry tests passed');
+  console.log('Token market refresh and unlimited AGE tests passed');
   process.exit(0);
 })().catch((err) => {
   console.error(err);

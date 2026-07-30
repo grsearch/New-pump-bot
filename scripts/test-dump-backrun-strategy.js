@@ -12,6 +12,8 @@ process.env.MIN_PRICE_IMPACT_PCT = '40';
 process.env.MIN_TRIGGER_SELL_COUNT = '9';
 process.env.MAX_PRICE_IMPACT_PCT = '45';
 process.env.MIN_POOL_QUOTE_SOL = '90';
+process.env.DUMP_BACKRUN_MAX_ENTRY_AGE_MS = '600000';
+process.env.PUMP_DISCOVERY_ENABLED = 'true';
 
 const originalLoad = Module._load;
 Module._load = function loadWithDotenvStub(request, parent, isMain) {
@@ -99,13 +101,44 @@ async function run() {
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxSlotGap, 1);
   assert.strictEqual(config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs, 60_000);
   assert.strictEqual(config.strategy.dumpBackrunBlockMintAfterTimeout, true);
-  assert.strictEqual(config.strategy.dumpBackrunMaxEntryAgeMs, 600_000);
+  assert.strictEqual(config.strategy.dumpBackrunMaxEntryAgeMs, 0);
+  assert.strictEqual(config.strategy.maxTokenAgeMs, 0);
+  assert.strictEqual(config.pumpDiscovery.enabled, false);
+  assert.strictEqual(config.pumpDiscovery.shredstreamAutoAddEnabled, false);
   assert.strictEqual(config.strategy.buyMaxPriceDeviationPct, 13);
   const mainSource = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   assert.match(
     mainSource,
     /_dumpBackrunEntry:\s*order\._dumpBackrunEntry\s*===\s*true/,
     'the main BUY bridge must preserve the V9 fast-path marker',
+  );
+  assert.match(
+    mainSource,
+    /if\s*\(!config\.pumpDiscovery\.shredstreamAutoAddEnabled\)\s*return/,
+    'ShredStream discovery events must not auto-add tokens',
+  );
+  const tickStreamSource = fs.readFileSync(
+    path.join(__dirname, '../src/core/TickStream.js'),
+    'utf8',
+  );
+  assert.match(
+    tickStreamSource,
+    /if\s*\(!config\.pumpDiscovery\.shredstreamAutoAddEnabled\)\s*continue/,
+    'ShredStream must skip unknown-mint discovery work',
+  );
+  assert.match(
+    tickStreamSource,
+    /if\s*\(this\.watchedMints\.size\s*===\s*0\)\s*\{\s*console\.log\([^)]*idle[^)]*\);\s*\}\s*await Promise\.all/,
+    'an empty startup list must still initialize streams for the first webhook token',
+  );
+  const signalEngineSource = fs.readFileSync(
+    path.join(__dirname, '../src/core/SignalEngine.js'),
+    'utf8',
+  );
+  assert.match(
+    signalEngineSource,
+    /maxAgeH\s*>\s*0\s*&&\s*migrationTime/,
+    'the generic BUY age guard must remain disabled when max AGE is zero',
   );
 
   const accepted = makeEngine();
@@ -177,23 +210,19 @@ async function run() {
   stale.engine.shutdown();
 
   const oldMint = makeEngine({
-    migrationAgeMs: config.strategy.dumpBackrunMaxEntryAgeMs + 1,
+    migrationAgeMs: 4 * 60 * 60_000,
   });
   const oldMintOrders = [];
   oldMint.engine.on('buyOrder', (order) => oldMintOrders.push(order));
   await oldMint.engine.handleDumpSignal(makeSignal());
-  assert.strictEqual(oldMintOrders.length, 0, 'a mint older than ten minutes must not buy');
-  assert.match(
-    oldMint.logged.at(-1)?.rejectReason || oldMint.logged.at(-1)?.notes || '',
-    /entry age/,
-  );
+  assert.strictEqual(oldMintOrders.length, 1, 'a four-hour-old webhook mint may buy');
   oldMint.engine.shutdown();
 
   const unknownAge = makeEngine({ migrationAgeMs: null });
   const unknownAgeOrders = [];
   unknownAge.engine.on('buyOrder', (order) => unknownAgeOrders.push(order));
   await unknownAge.engine.handleDumpSignal(makeSignal());
-  assert.strictEqual(unknownAgeOrders.length, 0, 'unknown migration age must not bypass V9 age gate');
+  assert.strictEqual(unknownAgeOrders.length, 1, 'unknown migration age must not block a webhook mint');
   unknownAge.engine.shutdown();
 
   const catastrophic = makeEngine();

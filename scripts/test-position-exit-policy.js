@@ -13,7 +13,7 @@ process.env.TRAILING_ACTIVATE_PCT = '50';
 process.env.TRAILING_DRAWDOWN_PCT = '10';
 process.env.MAX_HOLD_MS = '0';
 process.env.POSITION_FDV_EXIT_USD = '20000';
-process.env.MAX_MINT_AGE_MINUTES = '10';
+process.env.MAX_MINT_AGE_MINUTES = '120';
 process.env.REBUY_COOLDOWN_MS = '300000';
 
 const assert = require('assert');
@@ -85,7 +85,7 @@ function run() {
   assert.strictEqual(config.strategy.fixedStopLossPct, -15);
   assert.strictEqual(config.strategy.emergencyStopLossPct, 0);
   assert.strictEqual(config.strategy.maxHoldMs, 20_000);
-  assert.strictEqual(config.strategy.maxTokenAgeMs, 7_200_000);
+  assert.strictEqual(config.strategy.maxTokenAgeMs, 0);
   assert.strictEqual(config.strategy.positionFdvExitUsd, 0);
   assert.strictEqual(config.strategy.dumpBackrunRugExitMaxPnlPct, -10);
   assert.strictEqual(config.strategy.dumpBackrunNoBounceAgeMs, 5_000);
@@ -288,8 +288,8 @@ function run() {
     };
     manager._fillPreVolFallback = () => {};
     manager._tick();
-    assert.strictEqual(manager._exitCalls[0].reason, 'TOKEN_AGE_LIMIT');
-    assert.strictEqual(first.removeAfterExit, true);
+    assert.strictEqual(manager._exitCalls.length, 0, 'migration AGE must not force an exit');
+    assert.strictEqual(first.removeAfterExit, undefined);
   }
 
   {

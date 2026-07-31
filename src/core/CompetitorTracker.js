@@ -55,6 +55,7 @@ class CompetitorTracker extends EventEmitter {
     dumpDetector = null, poolStateCache = null, fetchTokenInfo = null,
     enrichEntry = true, followSell = false,
     followSellMinWinRate = 60, followSellMinClosed = 10,
+    forensics = null, onAddressesChanged = null,
   }) {
     super();
     if (!db) throw new Error('CompetitorTracker requires a shared DB instance');
@@ -68,6 +69,8 @@ class CompetitorTracker extends EventEmitter {
     this.followSell = followSell;
     this.followSellMinWinRate = followSellMinWinRate;
     this.followSellMinClosed = followSellMinClosed;
+    this.forensics = forensics;
+    this.onAddressesChanged = onAddressesChanged;
 
     // 追踪地址集合（Set 便于 O(1) 命中判断）
     this.addresses = new Set();
@@ -80,6 +83,12 @@ class CompetitorTracker extends EventEmitter {
     this._initSchema();
     this._prepareStatements();
 
+    for (const row of this.stmts.listActiveAddresses.all()) {
+      if (row?.address) {
+        this.addresses.add(row.address);
+        this.forensics?.addWallet(row.address);
+      }
+    }
     for (const a of addresses) this.addAddress(a);
 
     this._restoreOpenLots();
@@ -236,6 +245,8 @@ class CompetitorTracker extends EventEmitter {
     if (!address || typeof address !== 'string') return false;
     this.stmts.upsertAddress.run({ address, label, addedAt: Date.now() });
     this.addresses.add(address);
+    this.forensics?.addWallet(address);
+    this._notifyAddressesChanged();
     console.log(`[CompetitorTracker] tracking wallet ${address.slice(0, 8)}..${label ? ` (${label})` : ''}`);
     monitor.set('CompetitorTracker.trackedWallets', this.addresses.size, 'CompetitorTracker');
     return true;
@@ -244,11 +255,42 @@ class CompetitorTracker extends EventEmitter {
   removeAddress(address) {
     this.stmts.deactivateAddress.run(address);
     this.addresses.delete(address);
+    this.forensics?.removeWallet(address);
+    this._notifyAddressesChanged();
     monitor.set('CompetitorTracker.trackedWallets', this.addresses.size, 'CompetitorTracker');
   }
 
   listAddresses() {
     return this.stmts.listActiveAddresses.all();
+  }
+
+  _notifyAddressesChanged() {
+    if (!this.onAddressesChanged) return;
+    try {
+      this.onAddressesChanged([...this.addresses]);
+    } catch (err) {
+      monitor.recordError('CompetitorTracker', err, { phase: 'addressesChanged' });
+    }
+  }
+
+  handleTransaction(txMessage, streamMeta) {
+    this.forensics?.handleTransaction(txMessage, streamMeta);
+  }
+
+  startForensics() {
+    this.forensics?.start();
+  }
+
+  stopForensics() {
+    this.forensics?.stop();
+  }
+
+  getForensicsCoverage() {
+    return this.forensics?.getCoverage() || [];
+  }
+
+  getRecentForensicTrades(wallet, limit = 100) {
+    return this.forensics?.getRecentForensicTrades(wallet, limit) || [];
   }
 
   // ============================================================

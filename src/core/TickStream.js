@@ -114,7 +114,11 @@ class SignatureDedup {
  * 内部管理重连、订阅、生命周期。tx 来了上抛给 TickStream 由 dedup 统一过滤。
  */
 class RegionStream {
-  constructor({ endpoint, token, label, onTx, onConnected, onSlot, filterMode = 'pumpAmm' }) {
+  constructor({
+    endpoint, token, label, onTx, onConnected, onSlot,
+    filterMode = 'pumpAmm', staticAccountIncludes = [],
+    subscriptionGroup = 'live', rebuildDelayMs = 500,
+  }) {
     this.endpoint = endpoint;
     this.token = token;
     this.label = label;
@@ -125,6 +129,9 @@ class RegionStream {
     //   'pumpAmm'  — accountInclude=mints, accountRequired=PUMP_AMM (default, current behavior)
     //   'jupiter'  — accountInclude=JUP_programs, accountRequired=[] (Jupiter route trades)
     this.filterMode = filterMode;
+    this.subscriptionGroup = subscriptionGroup;
+    this.rebuildDelayMs = Math.max(0, Number(rebuildDelayMs) || 0);
+    this.staticAccountIncludes = Array.from(new Set(staticAccountIncludes.filter(Boolean)));
 
     this.client = null;
     this.stream = null;
@@ -137,11 +144,22 @@ class RegionStream {
     this._lastReceivedSlot = 0;
   }
 
+  _setSubscriptionAccounts(mints) {
+    this._currentMints = this.filterMode === 'wallet'
+      ? this.staticAccountIncludes.slice()
+      : Array.from(mints);
+  }
+
+  setStaticAccountIncludes(addresses) {
+    this.staticAccountIncludes = Array.from(new Set((addresses || []).filter(Boolean)));
+    if (this.filterMode === 'wallet') this._currentMints = this.staticAccountIncludes.slice();
+  }
+
   async start(mints) {
     this.shouldRun = true;
-    this._currentMints = Array.from(mints);
+    this._setSubscriptionAccounts(mints);
     // v3.17.24: Jupiter filter mode 不需要 mints（用 JUP_program_ids）
-    if (this._currentMints.length === 0 && this.filterMode !== 'jupiter') {
+    if (this._currentMints.length === 0 && this.filterMode === 'pumpAmm') {
       console.log(`[TickStream:${this.label}] no mints to watch, idle`);
       return;
     }
@@ -154,9 +172,12 @@ class RegionStream {
   }
 
   async rebuild(mints) {
-    this._currentMints = Array.from(mints);
+    this._setSubscriptionAccounts(mints);
+    const hadConnection = Boolean(this.stream || this.client);
     await this._closeStream();
-    await new Promise((r) => setTimeout(r, 500));
+    if (hadConnection && this.rebuildDelayMs > 0) {
+      await new Promise((r) => setTimeout(r, this.rebuildDelayMs));
+    }
     // v3.17.24: Jupiter filter mode 允许 mints 为空
     if (this.shouldRun && (this._currentMints.length > 0 || this.filterMode === 'jupiter')) {
       await this._connect();
@@ -193,7 +214,7 @@ class RegionStream {
 
   async _connect() {
     // v3.17.24: Jupiter filter mode 不需要 mints
-    if (this._currentMints.length === 0 && this.filterMode !== 'jupiter') return;
+    if (this._currentMints.length === 0 && this.filterMode === 'pumpAmm') return;
     try {
       this.client = new Client(
         this.endpoint,
@@ -227,7 +248,8 @@ class RegionStream {
       monitor.inc(`TickStream.${this.label}.connectsTotal`, 1, 'TickStream');
       monitor.beat('TickStream', `${this.label}:connected:${this._currentMints.length}_mints`);
       console.log(
-        `[TickStream:${this.label}] connected${this.filterMode === 'jupiter' ? ' (Jupiter mode)' : ''}, watching ${this._currentMints.length} mints`,
+        `[TickStream:${this.label}] connected (${this.filterMode} mode), ` +
+          `watching ${this._currentMints.length} account(s)`,
       );
       if (this.onConnected) this.onConnected(this.label);
     } catch (err) {
@@ -240,7 +262,7 @@ class RegionStream {
   async _sendSubscribeRequest() {
     const mints = this._currentMints;
     // v3.17.24: Jupiter filter mode 不依赖 mints（用 JUP_program_ids），允许 mints 为空
-    if (mints.length === 0 && this.filterMode !== 'jupiter') return;
+    if (mints.length === 0 && this.filterMode === 'pumpAmm') return;
 
     // v3.17.24: 支持 filterMode='jupiter' 订阅 Jupiter 路由交易
     //   Jupiter program 总在 staticAccountKeys（不在 ALT），LS 能匹配
@@ -248,11 +270,19 @@ class RegionStream {
     //   本地用 preTokenBalances 过滤是否涉及监控 mint
     //   数据量：Jupiter ~20 tx/s × 3 region = 60 tx/s，完全可控
     let filterPlain;
+    let v2Filter = null;
     if (this.filterMode === 'jupiter') {
       filterPlain = {
         vote: false,
         failed: false,
         accountInclude: JUPITER_PROGRAM_IDS,
+        accountExclude: [],
+        accountRequired: [],
+      };
+    } else if (this.filterMode === 'wallet') {
+      filterPlain = {
+        vote: false,
+        accountInclude: mints,
         accountExclude: [],
         accountRequired: [],
       };
@@ -266,7 +296,7 @@ class RegionStream {
         accountExclude: [],
         accountRequired: [PUMP_AMM_PROGRAM_ID],
       };
-      const v2Filter = {
+      v2Filter = {
         vote: false,
         failed: false,
         accountInclude: mints,
@@ -279,7 +309,11 @@ class RegionStream {
       : filterPlain;
 
     // v3.17.24: Jupiter 订阅用独立的 filter key
-    const filterKey = this.filterMode === 'jupiter' ? 'jupiterTrades' : 'pumpAmmTrades';
+    const filterKey = this.filterMode === 'jupiter'
+      ? 'jupiterTrades'
+      : this.filterMode === 'wallet'
+        ? 'competitorWalletTrades'
+        : 'pumpAmmTrades';
     const requestPlain = {
       transactions: { [filterKey]: filter },
       slots: {
@@ -301,7 +335,7 @@ class RegionStream {
     };
 
     // v3.17.38: 如果是 pumpAmm 模式，额外加 v2 AMM filter
-    if (this.filterMode !== 'jupiter' && typeof v2Filter !== 'undefined') {
+    if (this.filterMode === 'pumpAmm' && v2Filter) {
       const v2FilterObj = SubscribeRequestFilterTransactions
         ? SubscribeRequestFilterTransactions.create(v2Filter)
         : v2Filter;
@@ -408,7 +442,7 @@ class RegionStream {
   _scheduleReconnect() {
     // v3.17.21: 防抖 — error+end 可能短时间双触发,只排一个重连
     if (this._reconnectScheduled) return;
-    if (!this.shouldRun || (this._currentMints.length === 0 && this.filterMode !== 'jupiter')) return;
+    if (!this.shouldRun || (this._currentMints.length === 0 && this.filterMode === 'pumpAmm')) return;
     this._reconnectScheduled = true;
     monitor.inc(`TickStream.${this.label}.reconnects`, 1, 'TickStream');
     const delay = Math.min(30_000, 1000 * Math.pow(2, this.reconnectAttempts));
@@ -450,9 +484,19 @@ function extractSignature(txMessage) {
 }
 
 class TickStream extends EventEmitter {
-  constructor() {
+  constructor({ competitorWallets = [] } = {}) {
     super();
     this.watchedMints = new Set();
+    this.competitorMints = new Map();
+    this.competitorWallets = new Set((competitorWallets || []).filter(Boolean));
+    this.competitorMintTtlMs = Math.max(
+      60_000,
+      parseInt(process.env.COMPETITOR_SHADOW_MINT_TTL_MS || String(6 * 3600_000), 10),
+    );
+    this.competitorMintMax = Math.max(
+      10,
+      parseInt(process.env.COMPETITOR_SHADOW_MINT_MAX || '200', 10),
+    );
     this.shouldRun = false;
     // v3.17.7: 最新观察到的 slot（任何 region 都更新，dedup 去重不影响）
     //   用于 SignalEngine 判断"砸盘信号 vs 当前最新 slot"差距，过滤陈旧信号
@@ -471,9 +515,9 @@ class TickStream extends EventEmitter {
     this.regions = [];
     this.dedup = new SignatureDedup();
     this._sigFirstRegion = new Map(); // v3.17.12: sig → { region, ts }
-    this._rebuildTimer = null;
-    this._rebuildInProgress = false;
-    this._rebuildQueued = false;
+    this._rebuildTimers = new Map();
+    this._rebuildInProgress = new Set();
+    this._rebuildQueued = new Set();
 
     // v3.17.25: Reader-Worker 分离 — reader 回调只入队，worker 异步消费
     //   目的：让 gRPC reader 永不阻塞，避免突破 Helius 450-slot 阈值被切流
@@ -516,6 +560,47 @@ class TickStream extends EventEmitter {
       );
     });
 
+    // Dedicated account subscriptions capture every successful transaction made
+    // by a tracked competitor, even when the token is outside the trading watchlist.
+    this.walletRegions = [];
+    if (this.competitorWallets.size > 0) {
+      laserEndpoints.forEach((ep, idx) => {
+        const label = this._labelForEndpoint(ep, idx, 'COMP');
+        const region = new RegionStream({
+          endpoint: ep,
+          token: config.helius.laserstreamToken,
+          label,
+          filterMode: 'wallet',
+          subscriptionGroup: 'wallet',
+          rebuildDelayMs: 100,
+          staticAccountIncludes: [...this.competitorWallets],
+          onTx: (txMessage, sourceRegion) => this._enqueue(txMessage, sourceRegion),
+          onConnected: (sourceRegion) => this.emit('regionConnected', sourceRegion),
+        });
+        this.walletRegions.push(region);
+        this.regions.push(region);
+      });
+    }
+
+    // Competitor market tracking is isolated from live strategy subscriptions.
+    // This keeps competitor research from interrupting the trading data path.
+    this.shadowRegions = [];
+    if (this.competitorWallets.size > 0 && laserEndpoints.length > 0) {
+      const ep = laserEndpoints[0];
+      const region = new RegionStream({
+        endpoint: ep,
+        token: config.helius.laserstreamToken,
+        label: this._labelForEndpoint(ep, 0, 'COMP-MKT'),
+        filterMode: 'pumpAmm',
+        subscriptionGroup: 'shadow',
+        rebuildDelayMs: 25,
+        onTx: (txMessage, sourceRegion) => this._enqueue(txMessage, sourceRegion),
+        onConnected: (sourceRegion) => this.emit('regionConnected', sourceRegion),
+      });
+      this.shadowRegions.push(region);
+      this.regions.push(region);
+    }
+
     // ---- AllenHark gRPC regions ----
     // AllenHark 也用 Yellowstone Geyser 协议，同 @triton-one/yellowstone-grpc 客户端
     // 作为额外数据源，IP 白名单制（无需 token 或用单独 token）
@@ -548,6 +633,7 @@ class TickStream extends EventEmitter {
             token: config.helius.laserstreamToken,
             label,
             filterMode: 'jupiter',
+            subscriptionGroup: 'jupiter',
             onTx: (txMessage, region) => this._enqueueJupiter(txMessage, region),
             onConnected: (region) => this.emit('regionConnected', region),
           }),
@@ -613,7 +699,9 @@ class TickStream extends EventEmitter {
     if (this.watchedMints.size === 0) {
       console.log('[TickStream] no tokens to watch yet, idle');
     }
-    await Promise.all(this.regions.map((r) => r.start(this.watchedMints)));
+    await Promise.all(this.regions.map((region) => (
+      region.start(this._accountsForRegion(region))
+    )));
     // v3.17.29: 启动独立 SlotSubscriber
     this._startSlotSubscriber();
     // v3.17.12: Start ShredStream
@@ -624,6 +712,9 @@ class TickStream extends EventEmitter {
     this._ssLeadStatsTimer = setInterval(() => {
       this._cleanupSigFirstRegion();
       this._printSsLeadStats();
+    }, 60_000);
+    this._competitorMintCleanupTimer = setInterval(() => {
+      if (this._pruneCompetitorMints()) this._scheduleRebuild('shadow', 25);
     }, 60_000);
 
     // v3.17.41: LS 延迟自动重连
@@ -671,43 +762,111 @@ class TickStream extends EventEmitter {
       clearInterval(this._ssLeadStatsTimer);
       this._ssLeadStatsTimer = null;
     }
+    if (this._competitorMintCleanupTimer) {
+      clearInterval(this._competitorMintCleanupTimer);
+      this._competitorMintCleanupTimer = null;
+    }
     if (this._laggyReconnectTimer) {
       clearInterval(this._laggyReconnectTimer);
       this._laggyReconnectTimer = null;
     }
+    for (const timer of this._rebuildTimers.values()) clearTimeout(timer);
+    this._rebuildTimers.clear();
     await Promise.all(this.regions.map((r) => r.stop()));
   }
 
   async updateSubscription(mints) {
     this.watchedMints = new Set(mints);
-    if (this._rebuildTimer) clearTimeout(this._rebuildTimer);
-    this._rebuildTimer = setTimeout(() => {
-      this._rebuildTimer = null;
-      this._performRebuild().catch((err) => {
-        monitor.recordError('TickStream', err, { phase: 'rebuild' });
-        console.error(`[TickStream] rebuild failed: ${err.message}`);
-      });
-    }, 2000);
+    this._scheduleRebuild('live', 2000);
   }
 
-  async _performRebuild() {
-    if (this._rebuildInProgress) {
-      this._rebuildQueued = true;
+  _accountsForRegion(region) {
+    if (region.subscriptionGroup === 'shadow') return new Set(this.competitorMints.keys());
+    if (region.subscriptionGroup === 'live') return new Set(this.watchedMints);
+    return new Set();
+  }
+
+  _scheduleRebuild(group = 'live', delayMs = 2000) {
+    const existing = this._rebuildTimers.get(group);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this._rebuildTimers.delete(group);
+      this._performRebuild(group).catch((err) => {
+        monitor.recordError('TickStream', err, { phase: 'rebuild', group });
+        console.error(`[TickStream] ${group} rebuild failed: ${err.message}`);
+      });
+    }, Math.max(0, Number(delayMs) || 0));
+    this._rebuildTimers.set(group, timer);
+  }
+
+  addCompetitorMint(mint, ttlMs = this.competitorMintTtlMs) {
+    if (!mint) return false;
+    const now = Date.now();
+    const wasKnown = this.competitorMints.has(mint);
+    this.competitorMints.set(mint, now + Math.max(60_000, Number(ttlMs) || this.competitorMintTtlMs));
+    this._pruneCompetitorMints();
+    if (!wasKnown) {
+      monitor.set('TickStream.competitorShadowMints', this.competitorMints.size, 'TickStream');
+      if (this.shouldRun) this._scheduleRebuild('shadow', 25);
+    }
+    return !wasKnown;
+  }
+
+  updateCompetitorWallets(addresses) {
+    this.competitorWallets = new Set((addresses || []).filter(Boolean));
+    for (const region of this.walletRegions || []) {
+      region.setStaticAccountIncludes([...this.competitorWallets]);
+    }
+    monitor.set('TickStream.competitorWallets', this.competitorWallets.size, 'TickStream');
+    if (this.shouldRun) this._scheduleRebuild('wallet', 25);
+  }
+
+  _pruneCompetitorMints(now = Date.now()) {
+    let changed = false;
+    for (const [mint, expiresAt] of this.competitorMints) {
+      if (expiresAt <= now) {
+        this.competitorMints.delete(mint);
+        changed = true;
+      }
+    }
+    while (this.competitorMints.size > this.competitorMintMax) {
+      const oldest = [...this.competitorMints.entries()]
+        .sort((a, b) => a[1] - b[1])[0];
+      if (!oldest) break;
+      this.competitorMints.delete(oldest[0]);
+      changed = true;
+    }
+    if (changed) {
+      monitor.set('TickStream.competitorShadowMints', this.competitorMints.size, 'TickStream');
+    }
+    return changed;
+  }
+
+  async _performRebuild(group = 'live') {
+    if (this._rebuildInProgress.has(group)) {
+      this._rebuildQueued.add(group);
       return;
     }
-    this._rebuildInProgress = true;
+    this._rebuildInProgress.add(group);
     try {
       do {
-        this._rebuildQueued = false;
-        const targetMints = new Set(this.watchedMints);
-        console.log(
-          `[TickStream] subscription change → rebuilding all ${this.regions.length} region(s) ` +
-            `(${targetMints.size} mints)`,
+        this._rebuildQueued.delete(group);
+        const targetRegions = this.regions.filter(
+          (region) => region.subscriptionGroup === group,
         );
-        await Promise.all(this.regions.map((r) => r.rebuild(targetMints)));
-      } while (this._rebuildQueued);
+        const targetAccounts = group === 'shadow'
+          ? new Set(this.competitorMints.keys())
+          : group === 'live'
+            ? new Set(this.watchedMints)
+            : new Set();
+        console.log(
+          `[TickStream] subscription change → rebuilding ${targetRegions.length} region(s) ` +
+            `(${targetAccounts.size} accounts, group=${group})`,
+        );
+        await Promise.all(targetRegions.map((region) => region.rebuild(targetAccounts)));
+      } while (this._rebuildQueued.has(group));
     } finally {
-      this._rebuildInProgress = false;
+      this._rebuildInProgress.delete(group);
     }
   }
 
@@ -732,7 +891,7 @@ class TickStream extends EventEmitter {
     // 检查是否有监控 mint
     let hasWatchedMint = false;
     for (const b of allBalances) {
-      if (this.watchedMints.has(b.mint)) {
+      if (this.watchedMints.has(b.mint) || this.competitorMints.has(b.mint)) {
         hasWatchedMint = true;
         break;
       }

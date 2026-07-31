@@ -18,6 +18,8 @@ const { getMonitor } = require('./monitor/HealthMonitor');
 const AlertChecker = require('./monitor/AlertChecker');
 const TokenWatchdog = require('./core/TokenWatchdog');
 const CompetitorTracker = require('./core/CompetitorTracker');
+const CompetitorForensics = require('./core/CompetitorForensics');
+const { resolveCompetitorWallets } = require('./utils/competitorWallets');
 const ActivityFlowTracker = require('./core/OrderFlowTracker');
 const PumpGraduationDiscovery = require('./core/PumpGraduationDiscovery');
 const FeatureRecorder = require('./core/FeatureRecorder');
@@ -198,7 +200,8 @@ async function main() {
     postExitTracker,
   });
   // v3.17.7: tickStream 必须先于 signalEngine 创建（signalEngine 需要它的 latestSlot getter）
-  const tickStream = new TickStream();
+  const competitorWallets = resolveCompetitorWallets(process.env.COMPETITOR_WALLETS);
+  const tickStream = new TickStream({ competitorWallets });
   // Keep latest slot available for buy metadata and downstream execution.
   positionManager.tickStream = tickStream;
   // v3.17.12: DumpDetector 查询 sig 的首次来源（SS vs LS）
@@ -251,18 +254,46 @@ async function main() {
   //   v3.17.32: 移到 DailyReport 之前，以便注入 competitorTracker
   //   追踪指定钱包在我们监控代币上的买卖，配对成 round-trip 统计盈亏/胜率/持仓时长。
   //   数据复用 DumpDetector 的 swapParsed 事件，零额外 RPC、不影响 BUY 延迟。
-  //   地址可在 .env COMPETITOR_WALLETS（逗号分隔）配置；默认内置用户给的两个。
-  const competitorWallets = (process.env.COMPETITOR_WALLETS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const defaultCompetitors = [
-    'BSHdFzWq6BfXpTx49LcCuvF4FVZakEZTibkKgjBcJqLD',
-    '3fZftz6m8d37X5pBhnF4rHhgrG5hW8rsCKgdhtuPBf6u',
-  ];
+  //   地址可在 .env COMPETITOR_WALLETS（逗号分隔）配置，并与内置地址合并。
+  // Always merge built-ins with .env so an older production list cannot hide required wallets.
+  const competitorForensics = new CompetitorForensics({
+    db: tokenRegistry.db,
+    wallets: competitorWallets,
+    onMintDiscovered: (mint) => tickStream.addCompetitorMint(mint),
+    fetchTokenContext: (
+      (process.env.COMPETITOR_FORENSICS_MARKET_ENRICH ?? 'true').toLowerCase() === 'true'
+    ) ? async (mint) => {
+      const {
+        fetchTokenFullInfo,
+        fetchTokenCreationTime,
+      } = require('./utils/tokenMeta');
+      const [fullResult, creationResult] = await Promise.allSettled([
+        fetchTokenFullInfo(mint),
+        fetchTokenCreationTime(mint),
+      ]);
+      if (fullResult.status === 'rejected' && creationResult.status === 'rejected') {
+        throw new Error(
+          `token context unavailable: ${fullResult.reason?.message || fullResult.reason}; ` +
+          `${creationResult.reason?.message || creationResult.reason}`,
+        );
+      }
+      return {
+        ...(fullResult.status === 'fulfilled' ? fullResult.value : {}),
+        ...(creationResult.status === 'fulfilled' ? creationResult.value : {}),
+        fullInfoError: fullResult.status === 'rejected'
+          ? fullResult.reason?.message || String(fullResult.reason)
+          : null,
+        creationTimeError: creationResult.status === 'rejected'
+          ? creationResult.reason?.message || String(creationResult.reason)
+          : null,
+      };
+    } : null,
+    slotToWallClockMs: (slot) => tickStream.slotToWallClockMs(slot),
+    labelIntervalMs: parseInt(process.env.COMPETITOR_LABEL_INTERVAL_MS || '10000', 10),
+  });
   const competitorTracker = new CompetitorTracker({
     db: tokenRegistry.db,
-    addresses: competitorWallets.length > 0 ? competitorWallets : defaultCompetitors,
+    addresses: competitorWallets,
     dumpDetector,                              // 零成本进场特征（触发砸单上下文）
     poolStateCache: executor.poolStateCache || null, // 买入瞬间池子 SOL 流动性
     fetchTokenInfo: async (mint) => {          // 代币侧特征（FDV/流动性/24h量），异步不阻塞
@@ -277,6 +308,8 @@ async function main() {
     followSell: (process.env.COMPETITOR_FOLLOW_SELL ?? 'false').toLowerCase() === 'true',
     followSellMinWinRate: parseFloat(process.env.COMPETITOR_FOLLOW_SELL_MIN_WINRATE || '60'),
     followSellMinClosed: parseInt(process.env.COMPETITOR_FOLLOW_SELL_MIN_CLOSED || '10', 10),
+    forensics: competitorForensics,
+    onAddressesChanged: (addresses) => tickStream.updateCompetitorWallets(addresses),
   });
   const activityFlowTracker = new ActivityFlowTracker({ tokenRegistry });
   const featureRecorder = new FeatureRecorder({ tradeLogger, tokenRegistry });
@@ -531,6 +564,13 @@ async function main() {
 
   tickStream.on('transaction', (tx, streamMeta) => {
     dumpDetector.handleTransaction(tx, streamMeta);
+    setImmediate(() => {
+      try {
+        competitorTracker.handleTransaction(tx, streamMeta);
+      } catch (err) {
+        monitor.recordError('CompetitorForensics', err, { phase: 'transactionListener' });
+      }
+    });
   });
 
   // ============ v3.17.23: VaultBalanceWatcher ============
@@ -1167,6 +1207,7 @@ async function main() {
   // ============ 启动数据流 ============
   const initialMints = tokenRegistry.listActive().map((t) => t.mint);
   console.log(`[main] starting LaserStream with ${initialMints.length} initial tokens`);
+  competitorTracker.startForensics();
   await tickStream.start(initialMints);
   if (config.pumpDiscovery.enabled) pumpDiscovery.start();
 
@@ -1175,6 +1216,7 @@ async function main() {
     console.log(`\n[main] ${signal} received, shutting down gracefully...`);
     try {
       pumpDiscovery.stop();
+      competitorTracker.stopForensics();
       await tickStream.stop();
       postExitTracker.shutdown();
       positionManager.stop();

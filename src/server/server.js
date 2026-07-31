@@ -391,6 +391,7 @@ class Server {
         ok: true,
         competitors: this.competitorTracker.getAllStats(),
         entryStats: this.competitorTracker.getAllEntryStats(),
+        forensicCoverage: this.competitorTracker.getForensicsCoverage(),
       });
     });
 
@@ -407,6 +408,10 @@ class Server {
         wallet: req.params.wallet,
         stats: this.competitorTracker.getWalletStats(req.params.wallet),
         trades: this.competitorTracker.getRecentTrades(req.params.wallet, limit),
+        forensicTrades: this.competitorTracker.getRecentForensicTrades(
+          req.params.wallet,
+          limit,
+        ),
       });
     });
 

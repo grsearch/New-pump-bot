@@ -80,6 +80,8 @@ async function main() {
         `drop=${config.activityFlow.oldCoinMinDropPct}-${config.activityFlow.oldCoinMaxDropPct}%/` +
         `${config.activityFlow.oldCoinWindowMs}ms, ` +
         `recovery=${config.activityFlow.oldCoinMinRecoveryPct}-${config.activityFlow.oldCoinMaxRecoveryPct}%, ` +
+        `net10<=${config.activityFlow.oldCoinMaxNetGain10sPct}%, ` +
+        `runup${config.activityFlow.oldCoinRunupLookbackMs / 1000}s<=${config.activityFlow.oldCoinMaxPrePeakRunupPct}%, ` +
         `signal<=${config.activityFlow.maxSignalAgeMs}ms)`,
     );
   } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {

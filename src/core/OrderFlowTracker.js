@@ -177,6 +177,14 @@ class OrderFlowTracker extends EventEmitter {
       opts.oldCoinMinRecoveryPct ?? flowConfig.oldCoinMinRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MIN_RECOVERY_PCT', 2);
     this.oldCoinMaxRecoveryPct =
       opts.oldCoinMaxRecoveryPct ?? flowConfig.oldCoinMaxRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MAX_RECOVERY_PCT', 5);
+    this.oldCoinRunupLookbackMs =
+      opts.oldCoinRunupLookbackMs ?? flowConfig.oldCoinRunupLookbackMs ?? numEnv('OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS', 30_000);
+    this.oldCoinMinPrePeakContextMs =
+      opts.oldCoinMinPrePeakContextMs ?? flowConfig.oldCoinMinPrePeakContextMs ?? numEnv('OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS', 5_000);
+    this.oldCoinMaxNetGain10sPct =
+      opts.oldCoinMaxNetGain10sPct ?? flowConfig.oldCoinMaxNetGain10sPct ?? numEnv('OLD_COIN_PULLBACK_MAX_NET_GAIN_10S_PCT', 5);
+    this.oldCoinMaxPrePeakRunupPct =
+      opts.oldCoinMaxPrePeakRunupPct ?? flowConfig.oldCoinMaxPrePeakRunupPct ?? numEnv('OLD_COIN_PULLBACK_MAX_PRE_PEAK_RUNUP_PCT', 15);
     this.oldCoinMinTrades10s =
       opts.oldCoinMinTrades10s ?? flowConfig.oldCoinMinTrades10s ?? numEnv('OLD_COIN_PULLBACK_MIN_TRADES_10S', 2);
     this.oldCoinMaxLpDrop10sPct =
@@ -368,6 +376,7 @@ class OrderFlowTracker extends EventEmitter {
       90_000,
       this.reboundWindowMs,
       this.oldCoinWindowMs,
+      this.oldCoinRunupLookbackMs,
       this.window5Ms,
       this.window15Ms,
       this.window30Ms,
@@ -480,6 +489,7 @@ class OrderFlowTracker extends EventEmitter {
       impactReady: 0,
       poolReady: 0,
       freshReady: 0,
+      antiChaseReady: 0,
       armReady: 0,
       armed: 0,
       waiting: 0,
@@ -558,6 +568,14 @@ class OrderFlowTracker extends EventEmitter {
         const recoveryPct = lowPrice > 0 && Number.isFinite(lowPrice)
           ? ((latest.price - lowPrice) / lowPrice) * 100
           : 0;
+        const antiChase = this._oldCoinAntiChaseMetrics(
+          state,
+          now,
+          events,
+          peakIndex,
+          peakPrice,
+          latest.price,
+        );
         const drivingSell = lowIndex > peakIndex
           ? [...events.slice(peakIndex + 1, lowIndex + 1)].reverse().find((item) => (
             item.side === 'SELL' && item.signer && item.signature &&
@@ -595,6 +613,7 @@ class OrderFlowTracker extends EventEmitter {
             largestLaterSell <= drivingSell.solVolume &&
             sumVolume(laterSells) <= drivingSell.solVolume,
           recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= this.oldCoinMaxRecoveryPct,
+          antiChase: antiChase.ready,
           differentBuyer: confirmingBuys.length > 0,
           poolStable: lpDropPct <= this.oldCoinMaxLpDrop10sPct,
         };
@@ -608,6 +627,9 @@ class OrderFlowTracker extends EventEmitter {
           confirmingBuyerCount: uniqueCount(confirmingBuys, 'signer'),
           laterSellSol: round(sumVolume(laterSells), 4),
           lpDropPct: round(lpDropPct, 3),
+          windowNetGainPct: round(antiChase.windowNetGainPct, 3),
+          prePeakRunupPct: round(antiChase.prePeakRunupPct, 3),
+          prePeakContextMs: round(antiChase.contextCoverageMs, 0),
           priority: dropPct >= this.oldCoinPriorityDropPct,
         };
         age3 = { tokenAgeMs, fdvUsd: fdv, liquidityUsd: liquidity };
@@ -785,6 +807,7 @@ class OrderFlowTracker extends EventEmitter {
       if (conditions.poolLiquidity) summary.poolReady++;
       if (conditions.liquidity && conditions.poolStable) summary.poolReady++;
       if (conditions.signalFresh) summary.freshReady++;
+      if (conditions.antiChase) summary.antiChaseReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
       if (stage === 'waiting') summary.waiting++;
@@ -910,6 +933,10 @@ class OrderFlowTracker extends EventEmitter {
         oldCoinMaxDropPct: this.oldCoinMaxDropPct,
         oldCoinMinRecoveryPct: this.oldCoinMinRecoveryPct,
         oldCoinMaxRecoveryPct: this.oldCoinMaxRecoveryPct,
+        oldCoinRunupLookbackMs: this.oldCoinRunupLookbackMs,
+        oldCoinMinPrePeakContextMs: this.oldCoinMinPrePeakContextMs,
+        oldCoinMaxNetGain10sPct: this.oldCoinMaxNetGain10sPct,
+        oldCoinMaxPrePeakRunupPct: this.oldCoinMaxPrePeakRunupPct,
         oldCoinMinTrades10s: this.oldCoinMinTrades10s,
         oldCoinMaxLpDrop10sPct: this.oldCoinMaxLpDrop10sPct,
         oldCoinMinAgeHours: config.strategy.minMintAgeHours,
@@ -1247,6 +1274,14 @@ class OrderFlowTracker extends EventEmitter {
 
     const dropPct = ((peakPrice - lowPrice) / peakPrice) * 100;
     const recoveryPct = ((ev.price - lowPrice) / lowPrice) * 100;
+    const antiChase = this._oldCoinAntiChaseMetrics(
+      state,
+      ev.ts,
+      events,
+      peakIndex,
+      peakPrice,
+      ev.price,
+    );
     state.oldCoinLastDropPct = dropPct;
     state.oldCoinLastRecoveryPct = recoveryPct;
 
@@ -1256,6 +1291,18 @@ class OrderFlowTracker extends EventEmitter {
     }
     if (dropPct < this.oldCoinMinDropPct) return;
     if (recoveryPct < this.oldCoinMinRecoveryPct || recoveryPct > this.oldCoinMaxRecoveryPct) return;
+    if (!antiChase.contextReady) {
+      state.oldCoinDecision = 'insufficient_pre_peak_context';
+      return;
+    }
+    if (antiChase.windowNetGainPct > this.oldCoinMaxNetGain10sPct) {
+      state.oldCoinDecision = `window_gain>${this.oldCoinMaxNetGain10sPct}%`;
+      return;
+    }
+    if (antiChase.prePeakRunupPct > this.oldCoinMaxPrePeakRunupPct) {
+      state.oldCoinDecision = `pre_peak_runup>${this.oldCoinMaxPrePeakRunupPct}%`;
+      return;
+    }
 
     const lowEvent = events[lowIndex];
     const drivingSell = [...events.slice(peakIndex + 1, lowIndex + 1)]
@@ -1324,11 +1371,43 @@ class OrderFlowTracker extends EventEmitter {
         confirmingBuyerCount: uniqueCount(confirmingBuys, 'signer'),
         laterSellSol,
         lpDropPct,
+        windowNetGainPct: antiChase.windowNetGainPct,
+        prePeakRunupPct: antiChase.prePeakRunupPct,
+        prePeakContextMs: antiChase.contextCoverageMs,
       },
     });
     state.oldCoinDecision = 'signaled';
     state.lastV5SignalTs = ev.ts;
     this.cooldowns.set(ev.mint, wallNow + this.oldCoinSignalCooldownMs);
+  }
+
+  _oldCoinAntiChaseMetrics(state, now, events, peakIndex, peakPrice, currentPrice) {
+    const windowStartPrice = Number(events[0]?.price);
+    const windowNetGainPct = windowStartPrice > 0 && currentPrice > 0
+      ? ((currentPrice - windowStartPrice) / windowStartPrice) * 100
+      : Infinity;
+    const peakEvent = events[peakIndex];
+    const contextEvents = this._windowEvents(state, now, this.oldCoinRunupLookbackMs)
+      .filter((event) => Number(event.price) > 0);
+    const contextCutoff = Number(peakEvent?.ts) - this.oldCoinMinPrePeakContextMs;
+    const baselineEvent = contextEvents.find((event) => event.ts <= contextCutoff);
+    const baselinePrice = Number(baselineEvent?.price);
+    const contextCoverageMs = baselineEvent && peakEvent
+      ? peakEvent.ts - baselineEvent.ts
+      : 0;
+    const prePeakRunupPct = baselinePrice > 0 && peakPrice > 0
+      ? ((peakPrice - baselinePrice) / baselinePrice) * 100
+      : Infinity;
+    const contextReady = contextCoverageMs >= this.oldCoinMinPrePeakContextMs;
+    return {
+      contextReady,
+      contextCoverageMs,
+      windowNetGainPct,
+      prePeakRunupPct,
+      ready: contextReady &&
+        windowNetGainPct <= this.oldCoinMaxNetGain10sPct &&
+        prePeakRunupPct <= this.oldCoinMaxPrePeakRunupPct,
+    };
   }
 
   _tryOneSecondReboundV8(state, ev, wallNow) {
@@ -2097,6 +2176,9 @@ class OrderFlowTracker extends EventEmitter {
       confirmingBuyerCount: pattern.confirmingBuyerCount,
       laterSellSol: round(pattern.laterSellSol, 4),
       lpDropPct: round(pattern.lpDropPct, 3),
+      windowNetGainPct: round(pattern.windowNetGainPct, 3),
+      prePeakRunupPct: round(pattern.prePeakRunupPct, 3),
+      prePeakContextMs: round(pattern.prePeakContextMs, 0),
     };
   }
 

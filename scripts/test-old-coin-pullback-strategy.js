@@ -55,6 +55,10 @@ function tracker(overrides = {}) {
     oldCoinMaxDropPct: 20,
     oldCoinMinRecoveryPct: 2,
     oldCoinMaxRecoveryPct: 5,
+    oldCoinRunupLookbackMs: 30_000,
+    oldCoinMinPrePeakContextMs: 5_000,
+    oldCoinMaxNetGain10sPct: 5,
+    oldCoinMaxPrePeakRunupPct: 15,
     oldCoinMinTrades10s: 2,
     oldCoinMaxLpDrop10sPct: 5,
     oldCoinSignalCooldownMs: 10_000,
@@ -70,6 +74,7 @@ function signals(subject) {
 }
 
 function replay(subject, mint, dropPrice, recoveryPrice, options = {}) {
+  subject.handleSwap(event(mint, -10_000, { price: options.contextPrice || 1, wallet: 'context-buyer' }));
   subject.handleSwap(event(mint, 0, { price: 1, wallet: 'pre-buyer' }));
   subject.handleSwap(event(mint, 100, {
     side: 'SELL',
@@ -108,6 +113,8 @@ const panel = passing.getStrategyCandidates(10, BASE + 300);
 assert.strictEqual(panel.mode, 'OLD_COIN_PULLBACK_V10');
 assert.strictEqual(panel.thresholds.oldCoinMinDropPct, 5);
 assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 5);
+assert.strictEqual(panel.thresholds.oldCoinMaxNetGain10sPct, 5);
+assert.strictEqual(panel.thresholds.oldCoinMaxPrePeakRunupPct, 15);
 assert.strictEqual(panel.candidates[0].stage, 'signaled');
 assert.strictEqual(panel.candidates[0].trigger.priority, true);
 assert.strictEqual(panel.candidates[0].trigger.dropPct, 18);
@@ -116,6 +123,32 @@ assert.strictEqual(panel.candidates[0].trigger.confirmingBuyerCount, 1);
 assert.strictEqual(panel.candidates[0].fdvUsd, 125_000);
 assert.strictEqual(panel.candidates[0].liquidityUsd, 25_000);
 assert.strictEqual(Math.round(panel.candidates[0].tokenAgeMs / 3_600_000), 72);
+
+const topChase = tracker({ oldCoinMaxNetGain10sPct: 100 });
+const topChaseSignals = signals(topChase);
+replay(topChase, 'old-top-chase', 1.18, 1.21, { contextPrice: 0.8 });
+assert.strictEqual(
+  topChaseSignals.length,
+  0,
+  'a small pullback at the top of a >15% 30-second run-up must be rejected',
+);
+
+const sameWindowPump = tracker({ oldCoinMaxPrePeakRunupPct: 100 });
+const sameWindowSignals = signals(sameWindowPump);
+sameWindowPump.handleSwap(event('old-window-pump', -10_000, { price: 1, wallet: 'context-buyer' }));
+sameWindowPump.handleSwap(event('old-window-pump', 0, { price: 1, wallet: 'pre-buyer' }));
+sameWindowPump.handleSwap(event('old-window-pump', 100, { price: 1.35, wallet: 'pump-buyer' }));
+sameWindowPump.handleSwap(event('old-window-pump', 200, {
+  side: 'SELL', wallet: 'driving-seller', priceBefore: 1.35, price: 1.2, solVolume: 10,
+}));
+sameWindowPump.handleSwap(event('old-window-pump', 300, {
+  side: 'BUY', wallet: 'confirming-buyer', price: 1.23, solVolume: 2,
+}));
+assert.strictEqual(
+  sameWindowSignals.length,
+  0,
+  'a pullback whose current price is still >5% above the 10-second start must be rejected',
+);
 
 const waterfall = tracker();
 const waterfallSignals = signals(waterfall);

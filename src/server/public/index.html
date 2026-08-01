@@ -858,7 +858,7 @@ async function refreshSignals() {
   if (r.mode === 'OLD_COIN_PULLBACK_V10') {
     $('strategySignalsHeader').innerHTML =
       '<th>更新</th><th>Symbol</th><th>CA</th><th>10秒回调</th>' +
-      '<th>低点反弹</th><th>10秒成交</th><th>驱动卖单</th><th>确认买家</th>' +
+      '<th>低点反弹</th><th>追涨过滤</th><th>10秒成交</th><th>驱动卖单</th><th>确认买家</th>' +
       '<th>卖压下降</th><th>池深变化</th><th>AGE</th><th>FDV</th><th>LP</th><th>阶段</th>';
     meta.innerHTML = [
       `<span>模式 <b>${escapeHtml(r.mode)}</b></span>`,
@@ -868,11 +868,12 @@ async function refreshSignals() {
       `<span>回调达标 <b>${summary.dropReady || 0}</b></span>`,
       `<span>卖出驱动 <b>${summary.sellReady || 0}</b></span>`,
       `<span>反弹达标 <b>${summary.recoveryReady || 0}</b></span>`,
+      `<span>非追涨 <b>${summary.antiChaseReady || 0}</b></span>`,
       `<span>买家确认 <b>${summary.buyersReady || 0}</b></span>`,
       `<span>信号 <b>${summary.signaled || 0}</b></span>`,
     ].join('');
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="14" class="empty">暂无老币回调候选</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="15" class="empty">暂无老币回调候选</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(candidate => {
@@ -898,6 +899,11 @@ async function refreshSignals() {
           <td>${_strategyCondition(
             `${_strategyNumber(trigger.recoveryPct)}% / ${_strategyNumber(thresholds.oldCoinMinRecoveryPct)}%-${_strategyNumber(thresholds.oldCoinMaxRecoveryPct)}%`,
             conditions.recovery,
+          )}</td>
+          <td>${_strategyCondition(
+            `10s ${_strategyNumber(trigger.windowNetGainPct)}% / 30s ${_strategyNumber(trigger.prePeakRunupPct)}%`,
+            conditions.antiChase,
+            `要求10秒净涨<=${_strategyNumber(thresholds.oldCoinMaxNetGain10sPct)}%，30秒冲高<=${_strategyNumber(thresholds.oldCoinMaxPrePeakRunupPct)}%`,
           )}</td>
           <td>${_strategyCondition(`${tenSeconds.tradeCount || 0} / >=${thresholds.oldCoinMinTrades10s || 0}`, conditions.trades10s)}</td>
           <td>${_strategyCondition(`${_strategyNumber(trigger.drivingSellSol, 3)} SOL`, conditions.sellDriven)}</td>

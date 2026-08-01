@@ -308,10 +308,24 @@ const config = {
     oldCoinMaxDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_DROP_PCT || '20'),
     oldCoinMinRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_RECOVERY_PCT || '2'),
     oldCoinMaxRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_RECOVERY_PCT || '5'),
-    oldCoinRunupLookbackMs: parseInt(process.env.OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS || '30000', 10),
-    oldCoinMinPrePeakContextMs: parseInt(process.env.OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS || '5000', 10),
+    oldCoinRunupLookbackMs: Math.max(
+      60_000,
+      parseInt(process.env.OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS || '60000', 10),
+    ),
+    oldCoinMinPrePeakContextMs: Math.max(
+      30_000,
+      parseInt(process.env.OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS || '30000', 10),
+    ),
     oldCoinMaxNetGain10sPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_NET_GAIN_10S_PCT || '5'),
     oldCoinMaxPrePeakRunupPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_PRE_PEAK_RUNUP_PCT || '15'),
+    oldCoinMinDrivingSellSol: Math.max(
+      5,
+      parseFloat(process.env.OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL || '5'),
+    ),
+    oldCoinMinConfirmingBuyers: Math.max(
+      2,
+      parseInt(process.env.OLD_COIN_PULLBACK_MIN_CONFIRMING_BUYERS || '2', 10),
+    ),
     oldCoinMinTrades10s: parseInt(process.env.OLD_COIN_PULLBACK_MIN_TRADES_10S || '2', 10),
     oldCoinMaxLpDrop10sPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_LP_DROP_10S_PCT || '5'),
     oldCoinSignalCooldownMs: parseInt(process.env.OLD_COIN_PULLBACK_SIGNAL_COOLDOWN_MS || '10000', 10),

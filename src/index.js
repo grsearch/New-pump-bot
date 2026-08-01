@@ -82,6 +82,9 @@ async function main() {
         `recovery=${config.activityFlow.oldCoinMinRecoveryPct}-${config.activityFlow.oldCoinMaxRecoveryPct}%, ` +
         `net10<=${config.activityFlow.oldCoinMaxNetGain10sPct}%, ` +
         `runup${config.activityFlow.oldCoinRunupLookbackMs / 1000}s<=${config.activityFlow.oldCoinMaxPrePeakRunupPct}%, ` +
+        `context>=${config.activityFlow.oldCoinMinPrePeakContextMs / 1000}s, ` +
+        `sell>=${config.activityFlow.oldCoinMinDrivingSellSol}SOL, ` +
+        `buyers>=${config.activityFlow.oldCoinMinConfirmingBuyers}, ` +
         `signal<=${config.activityFlow.maxSignalAgeMs}ms)`,
     );
   } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {

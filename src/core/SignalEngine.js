@@ -1306,7 +1306,9 @@ class SignalEngine extends EventEmitter {
     const reason =
       `old_coin_pullback_v10: drop=${pullback.dropPct.toFixed(2)}% ` +
       `recovery=${pullback.recoveryPct.toFixed(2)}% buyers=${pullback.confirmingBuyerCount} ` +
-      `sell=${pullback.drivingSellSol.toFixed(2)}SOL tier=${pullback.priority ? 'priority' : 'standard'} ` +
+      `sell=${pullback.drivingSellSol.toFixed(2)}SOL net10=${pullback.windowNetGainPct.toFixed(2)}% ` +
+      `runup=${pullback.prePeakRunupPct.toFixed(2)}% context=${Math.round(pullback.prePeakContextMs)}ms ` +
+      `tier=${pullback.priority ? 'priority' : 'standard'} ` +
       `age=${(tokenAgeMs / 3_600_000).toFixed(1)}h fdv=$${Math.round(fdv)} lp=$${Math.round(liquidity)}`;
 
     monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');

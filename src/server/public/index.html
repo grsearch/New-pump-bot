@@ -903,11 +903,18 @@ async function refreshSignals() {
           <td>${_strategyCondition(
             `10s ${_strategyNumber(trigger.windowNetGainPct)}% / 30s ${_strategyNumber(trigger.prePeakRunupPct)}%`,
             conditions.antiChase,
-            `要求10秒净涨<=${_strategyNumber(thresholds.oldCoinMaxNetGain10sPct)}%，30秒冲高<=${_strategyNumber(thresholds.oldCoinMaxPrePeakRunupPct)}%`,
+            `要求高点前至少${_strategyNumber(thresholds.oldCoinMinPrePeakContextMs / 1000, 0)}秒上下文，10秒净涨<=${_strategyNumber(thresholds.oldCoinMaxNetGain10sPct)}%，${_strategyNumber(thresholds.oldCoinRunupLookbackMs / 1000, 0)}秒冲高<=${_strategyNumber(thresholds.oldCoinMaxPrePeakRunupPct)}%`,
           )}</td>
           <td>${_strategyCondition(`${tenSeconds.tradeCount || 0} / >=${thresholds.oldCoinMinTrades10s || 0}`, conditions.trades10s)}</td>
-          <td>${_strategyCondition(`${_strategyNumber(trigger.drivingSellSol, 3)} SOL`, conditions.sellDriven)}</td>
-          <td>${_strategyCondition(`${trigger.confirmingBuyerCount || 0} / >=1`, conditions.differentBuyer, '必须与驱动卖家不同钱包')}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.drivingSellSol, 3)} / >=${_strategyNumber(thresholds.oldCoinMinDrivingSellSol, 1)} SOL`,
+            conditions.sellDriven,
+          )}</td>
+          <td>${_strategyCondition(
+            `${trigger.confirmingBuyerCount || 0} / >=${thresholds.oldCoinMinConfirmingBuyers || 0}`,
+            conditions.differentBuyer,
+            '必须是与驱动卖家不同的独立钱包',
+          )}</td>
           <td>${_strategyCondition(
             `${_strategyNumber(trigger.laterSellSol, 3)} / ${_strategyNumber(trigger.drivingSellSol, 3)} SOL`,
             conditions.sellerPressureEasing,

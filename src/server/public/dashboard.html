@@ -896,8 +896,9 @@ async function refreshSignals() {
             `优先区 >=${_strategyNumber(thresholds.oldCoinPriorityDropPct)}%`,
           )}</td>
           <td>${_strategyCondition(
-            `${_strategyNumber(trigger.recoveryPct)}% / ${_strategyNumber(thresholds.oldCoinMinRecoveryPct)}%-${_strategyNumber(thresholds.oldCoinMaxRecoveryPct)}%`,
+            `${_strategyNumber(trigger.recoveryPct)}% / ${_strategyNumber(thresholds.oldCoinMinRecoveryPct)}%-${_strategyNumber(trigger.effectiveMaxRecoveryPct ?? thresholds.oldCoinMaxRecoveryPct)}%`,
             conditions.recovery,
+            `优先条件：跌幅>=${_strategyNumber(thresholds.oldCoinPriorityDropPct)}%，累计卖出>=${_strategyNumber(thresholds.oldCoinPriorityMinCumulativeSellSol, 1)} SOL，买家>=${thresholds.oldCoinPriorityMinConfirmingBuyers || 0}，反弹<=${_strategyNumber(thresholds.oldCoinPriorityMaxRecoveryPct)}%`,
           )}</td>
           <td>${_strategyCondition(
             `10s ${_strategyNumber(trigger.windowNetGainPct)}% / 30s ${_strategyNumber(trigger.prePeakRunupPct)}%`,
@@ -906,8 +907,9 @@ async function refreshSignals() {
           )}</td>
           <td>${_strategyCondition(`${tenSeconds.tradeCount || 0} / >=${thresholds.oldCoinMinTrades10s || 0}`, conditions.trades10s)}</td>
           <td>${_strategyCondition(
-            `${_strategyNumber(trigger.drivingSellSol, 3)} / >=${_strategyNumber(thresholds.oldCoinMinDrivingSellSol, 1)} SOL`,
+            `单笔 ${_strategyNumber(trigger.drivingSellSol, 3)} SOL；累计 ${_strategyNumber(trigger.cumulativeSellSol, 3)} SOL/${trigger.drivingSellerCount || 0}卖家`,
             conditions.sellDriven,
+            `单笔>=${_strategyNumber(thresholds.oldCoinMinDrivingSellSol, 1)} SOL，或累计>=${_strategyNumber(thresholds.oldCoinMinCumulativeSellSol, 1)} SOL/${thresholds.oldCoinMinCumulativeSellers || 0}卖家`,
           )}</td>
           <td>${_strategyCondition(
             `${trigger.confirmingBuyerCount || 0} / >=${thresholds.oldCoinMinConfirmingBuyers || 0}`,
@@ -915,7 +917,7 @@ async function refreshSignals() {
             '必须是与驱动卖家不同的独立钱包',
           )}</td>
           <td>${_strategyCondition(
-            `${_strategyNumber(trigger.laterSellSol, 3)} / ${_strategyNumber(trigger.drivingSellSol, 3)} SOL`,
+            `${_strategyNumber(trigger.laterSellSol, 3)} / ${_strategyNumber(trigger.cumulativeSellSol, 3)} SOL`,
             conditions.sellerPressureEasing,
           )}</td>
           <td>${_strategyCondition(

@@ -64,7 +64,12 @@ function tracker(overrides = {}) {
     oldCoinMaxNetGain10sPct: 5,
     oldCoinMaxPrePeakRunupPct: 15,
     oldCoinMinDrivingSellSol: 5,
+    oldCoinMinCumulativeSellSol: 5,
+    oldCoinMinCumulativeSellers: 2,
     oldCoinMinConfirmingBuyers: 2,
+    oldCoinPriorityMinCumulativeSellSol: 10,
+    oldCoinPriorityMinConfirmingBuyers: 3,
+    oldCoinPriorityMaxRecoveryPct: 10,
     oldCoinMinTrades10s: 2,
     oldCoinMaxLpDrop10sPct: 5,
     oldCoinSignalCooldownMs: 10_000,
@@ -114,14 +119,19 @@ assert.strictEqual(config.strategy.maxHoldMs, 60 * 60_000);
 assert.strictEqual(config.activityFlow.oldCoinRunupLookbackMs, 60_000);
 assert.strictEqual(config.activityFlow.oldCoinMinPrePeakContextMs, 30_000);
 assert.strictEqual(config.activityFlow.oldCoinMinDrivingSellSol, 5);
+assert.strictEqual(config.activityFlow.oldCoinMinCumulativeSellSol, 5);
+assert.strictEqual(config.activityFlow.oldCoinMinCumulativeSellers, 2);
 assert.strictEqual(config.activityFlow.oldCoinMinConfirmingBuyers, 2);
+assert.strictEqual(config.activityFlow.oldCoinPriorityMinCumulativeSellSol, 10);
+assert.strictEqual(config.activityFlow.oldCoinPriorityMinConfirmingBuyers, 3);
+assert.strictEqual(config.activityFlow.oldCoinPriorityMaxRecoveryPct, 10);
 
 const passing = tracker();
 const passingSignals = signals(passing);
 replay(passing, 'old-pass', 0.82, 0.84);
 assert.strictEqual(passingSignals.length, 1, 'an 18% sell drop with a 2-5% recovery must signal');
 assert.strictEqual(passingSignals[0]._oldCoinPullbackEntry, true);
-assert.strictEqual(passingSignals[0]._flow.entryOldCoin.priority, true);
+assert.strictEqual(passingSignals[0]._flow.entryOldCoin.priority, false);
 assert.strictEqual(passingSignals[0]._flow.entryOldCoin.confirmingBuyerCount, 2);
 const panel = passing.getStrategyCandidates(10, BASE + 300);
 assert.strictEqual(panel.mode, 'OLD_COIN_PULLBACK_V10');
@@ -130,15 +140,124 @@ assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 5);
 assert.strictEqual(panel.thresholds.oldCoinMaxNetGain10sPct, 5);
 assert.strictEqual(panel.thresholds.oldCoinMaxPrePeakRunupPct, 15);
 assert.strictEqual(panel.thresholds.oldCoinMinDrivingSellSol, 5);
+assert.strictEqual(panel.thresholds.oldCoinMinCumulativeSellSol, 5);
+assert.strictEqual(panel.thresholds.oldCoinMinCumulativeSellers, 2);
 assert.strictEqual(panel.thresholds.oldCoinMinConfirmingBuyers, 2);
+assert.strictEqual(panel.thresholds.oldCoinPriorityMinCumulativeSellSol, 10);
+assert.strictEqual(panel.thresholds.oldCoinPriorityMinConfirmingBuyers, 3);
+assert.strictEqual(panel.thresholds.oldCoinPriorityMaxRecoveryPct, 10);
 assert.strictEqual(panel.candidates[0].stage, 'signaled');
-assert.strictEqual(panel.candidates[0].trigger.priority, true);
+assert.strictEqual(panel.candidates[0].trigger.priority, false);
 assert.strictEqual(panel.candidates[0].trigger.dropPct, 18);
 assert.strictEqual(panel.candidates[0].s10.tradeCount, 4);
 assert.strictEqual(panel.candidates[0].trigger.confirmingBuyerCount, 2);
 assert.strictEqual(panel.candidates[0].fdvUsd, 125_000);
 assert.strictEqual(panel.candidates[0].liquidityUsd, 25_000);
 assert.strictEqual(Math.round(panel.candidates[0].tokenAgeMs / 3_600_000), 72);
+
+const intraSwapDrop = tracker();
+const intraSwapSignals = signals(intraSwapDrop);
+intraSwapDrop.handleSwap(event('old-intra-swap', -40_000, { price: 1, wallet: 'context-buyer' }));
+intraSwapDrop.handleSwap(event('old-intra-swap', 0, {
+  side: 'SELL', wallet: 'single-seller', priceBefore: 1, price: 0.9, solVolume: 6,
+}));
+intraSwapDrop.handleSwap(event('old-intra-swap', 500, {
+  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.9, price: 0.91,
+}));
+intraSwapDrop.handleSwap(event('old-intra-swap', 800, {
+  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.91, price: 0.923,
+}));
+assert.strictEqual(
+  intraSwapSignals.length,
+  1,
+  'the priceBefore-to-price drop inside the driving sell must be visible without a pre-buy event',
+);
+assert.strictEqual(intraSwapSignals[0]._flow.entryOldCoin.dropPct, 10);
+assert.strictEqual(intraSwapSignals[0]._flow.entryOldCoin.sellQualification, 'single');
+
+const cumulativeSell = tracker();
+const cumulativeSignals = signals(cumulativeSell);
+cumulativeSell.handleSwap(event('old-cumulative', -40_000, { price: 1, wallet: 'context-buyer' }));
+cumulativeSell.handleSwap(event('old-cumulative', 0, {
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.95, solVolume: 2.8,
+}));
+cumulativeSell.handleSwap(event('old-cumulative', 100, {
+  side: 'SELL', wallet: 'seller-b', priceBefore: 0.95, price: 0.9, solVolume: 2.7,
+}));
+cumulativeSell.handleSwap(event('old-cumulative', 300, {
+  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.9, price: 0.91,
+}));
+cumulativeSell.handleSwap(event('old-cumulative', 500, {
+  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.91, price: 0.927,
+}));
+assert.strictEqual(cumulativeSignals.length, 1, 'two independent sellers totaling 5 SOL must qualify');
+assert.strictEqual(cumulativeSignals[0]._flow.entryOldCoin.sellQualification, 'cumulative');
+assert.strictEqual(cumulativeSignals[0]._flow.entryOldCoin.drivingSellerCount, 2);
+assert.strictEqual(cumulativeSignals[0]._flow.entryOldCoin.cumulativeSellSol, 5.5);
+
+const oneCumulativeSeller = tracker();
+const oneCumulativeSellerSignals = signals(oneCumulativeSeller);
+oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', -40_000, { price: 1 }));
+oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 0, {
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.95, solVolume: 2.8,
+}));
+oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 100, {
+  side: 'SELL', wallet: 'seller-a', priceBefore: 0.95, price: 0.9, solVolume: 2.7,
+}));
+oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 300, {
+  side: 'BUY', wallet: 'confirming-buyer-1', price: 0.91,
+}));
+oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 500, {
+  side: 'BUY', wallet: 'confirming-buyer-2', price: 0.927,
+}));
+assert.strictEqual(
+  oneCumulativeSellerSignals.length,
+  0,
+  'sub-5 SOL sells from one wallet must not pass the cumulative route',
+);
+
+const priorityRecovery = tracker();
+const prioritySignals = signals(priorityRecovery);
+priorityRecovery.handleSwap(event('old-priority', -40_000, { price: 1, wallet: 'context-buyer' }));
+priorityRecovery.handleSwap(event('old-priority', 0, {
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.9, solVolume: 6,
+}));
+priorityRecovery.handleSwap(event('old-priority', 100, {
+  side: 'SELL', wallet: 'seller-b', priceBefore: 0.9, price: 0.82, solVolume: 5,
+}));
+priorityRecovery.handleSwap(event('old-priority', 300, {
+  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.82, price: 0.86,
+}));
+priorityRecovery.handleSwap(event('old-priority', 500, {
+  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.86, price: 0.875,
+}));
+priorityRecovery.handleSwap(event('old-priority', 700, {
+  side: 'BUY', wallet: 'confirming-buyer-3', priceBefore: 0.875, price: 0.8856,
+}));
+assert.strictEqual(prioritySignals.length, 1, 'strong deep pullbacks may recover up to 10%');
+assert.strictEqual(prioritySignals[0]._flow.entryOldCoin.priority, true);
+assert.strictEqual(prioritySignals[0]._flow.entryOldCoin.effectiveMaxRecoveryPct, 10);
+
+const standardRecoveryCap = tracker();
+const standardRecoverySignals = signals(standardRecoveryCap);
+standardRecoveryCap.handleSwap(event('old-standard-cap', -40_000, { price: 1 }));
+standardRecoveryCap.handleSwap(event('old-standard-cap', 0, {
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.82, solVolume: 9,
+}));
+standardRecoveryCap.handleSwap(event('old-standard-cap', 300, {
+  side: 'BUY', wallet: 'confirming-buyer-1', price: 0.86,
+}));
+standardRecoveryCap.handleSwap(event('old-standard-cap', 500, {
+  side: 'BUY', wallet: 'confirming-buyer-2', price: 0.875,
+}));
+standardRecoveryCap.handleSwap(event('old-standard-cap', 700, {
+  side: 'BUY', wallet: 'confirming-buyer-3', price: 0.8856,
+}));
+assert.strictEqual(
+  standardRecoverySignals.length,
+  0,
+  'a deep pullback below 10 cumulative SOL must retain the standard 5% recovery cap',
+);
 
 const topChase = tracker({ oldCoinMaxNetGain10sPct: 100 });
 const topChaseSignals = signals(topChase);

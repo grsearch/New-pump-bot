@@ -187,8 +187,18 @@ class OrderFlowTracker extends EventEmitter {
       opts.oldCoinMaxPrePeakRunupPct ?? flowConfig.oldCoinMaxPrePeakRunupPct ?? numEnv('OLD_COIN_PULLBACK_MAX_PRE_PEAK_RUNUP_PCT', 15);
     this.oldCoinMinDrivingSellSol =
       opts.oldCoinMinDrivingSellSol ?? flowConfig.oldCoinMinDrivingSellSol ?? numEnv('OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL', 5);
+    this.oldCoinMinCumulativeSellSol =
+      opts.oldCoinMinCumulativeSellSol ?? flowConfig.oldCoinMinCumulativeSellSol ?? numEnv('OLD_COIN_PULLBACK_MIN_CUMULATIVE_SELL_SOL', 5);
+    this.oldCoinMinCumulativeSellers =
+      opts.oldCoinMinCumulativeSellers ?? flowConfig.oldCoinMinCumulativeSellers ?? numEnv('OLD_COIN_PULLBACK_MIN_CUMULATIVE_SELLERS', 2);
     this.oldCoinMinConfirmingBuyers =
       opts.oldCoinMinConfirmingBuyers ?? flowConfig.oldCoinMinConfirmingBuyers ?? numEnv('OLD_COIN_PULLBACK_MIN_CONFIRMING_BUYERS', 2);
+    this.oldCoinPriorityMinCumulativeSellSol =
+      opts.oldCoinPriorityMinCumulativeSellSol ?? flowConfig.oldCoinPriorityMinCumulativeSellSol ?? numEnv('OLD_COIN_PULLBACK_PRIORITY_MIN_CUMULATIVE_SELL_SOL', 10);
+    this.oldCoinPriorityMinConfirmingBuyers =
+      opts.oldCoinPriorityMinConfirmingBuyers ?? flowConfig.oldCoinPriorityMinConfirmingBuyers ?? numEnv('OLD_COIN_PULLBACK_PRIORITY_MIN_CONFIRMING_BUYERS', 3);
+    this.oldCoinPriorityMaxRecoveryPct =
+      opts.oldCoinPriorityMaxRecoveryPct ?? flowConfig.oldCoinPriorityMaxRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_PRIORITY_MAX_RECOVERY_PCT', 10);
     this.oldCoinMinTrades10s =
       opts.oldCoinMinTrades10s ?? flowConfig.oldCoinMinTrades10s ?? numEnv('OLD_COIN_PULLBACK_MIN_TRADES_10S', 2);
     this.oldCoinMaxLpDrop10sPct =
@@ -549,52 +559,30 @@ class OrderFlowTracker extends EventEmitter {
         };
       } else if (this.entryMode === 'OLD_COIN_PULLBACK_V10') {
         const events = this._windowEvents(state, now, this.oldCoinWindowMs);
-        let peakIndex = -1;
-        let lowIndex = -1;
-        let peakPrice = 0;
-        let lowPrice = Infinity;
-        for (let index = 0; index < events.length; index += 1) {
-          const price = events[index].price;
-          if (price > peakPrice) {
-            peakPrice = price;
-            peakIndex = index;
-            lowPrice = Infinity;
-            lowIndex = -1;
-          }
-          if (peakIndex >= 0 && index > peakIndex && price < lowPrice) {
-            lowPrice = price;
-            lowIndex = index;
-          }
-        }
-        const dropPct = peakIndex >= 0 && lowIndex > peakIndex && peakPrice > lowPrice
-          ? ((peakPrice - lowPrice) / peakPrice) * 100
+        const geometry = this._oldCoinPullbackGeometry(events);
+        const dropPct = geometry
+          ? ((geometry.peakPrice - geometry.lowPrice) / geometry.peakPrice) * 100
           : 0;
-        const recoveryPct = lowPrice > 0 && Number.isFinite(lowPrice)
-          ? ((latest.price - lowPrice) / lowPrice) * 100
+        const recoveryPct = geometry?.lowPrice > 0
+          ? ((latest.price - geometry.lowPrice) / geometry.lowPrice) * 100
           : 0;
         const antiChase = this._oldCoinAntiChaseMetrics(
           state,
           now,
           events,
-          peakIndex,
-          peakPrice,
+          geometry?.peakIndex ?? -1,
+          geometry?.peakPrice ?? 0,
           latest.price,
         );
-        const drivingSell = lowIndex > peakIndex
-          ? [...events.slice(peakIndex + 1, lowIndex + 1)].reverse().find((item) => (
-            item.side === 'SELL' && item.signer && item.signature &&
-            (item.priceChangePct < 0 || (item.priceBefore > 0 && item.price < item.priceBefore))
-          ))
-          : null;
-        const afterLow = lowIndex >= 0 ? events.slice(lowIndex + 1) : [];
-        const confirmingBuys = afterLow.filter((item) => (
-          item.side === 'BUY' && item.signer && item.signer !== drivingSell?.signer
-        ));
-        const laterSells = afterLow.filter((item) => item.side === 'SELL');
-        const largestLaterSell = laterSells.reduce(
-          (largest, item) => Math.max(largest, item.solVolume),
-          0,
-        );
+        const sellMetrics = geometry ? this._oldCoinSellMetrics(geometry) : null;
+        const confirmingBuyerCount = sellMetrics?.confirmingBuyerCount || 0;
+        const priorityRecovery = Boolean(sellMetrics?.sellQualified) &&
+          dropPct >= this.oldCoinPriorityDropPct &&
+          sellMetrics.cumulativeSellSol >= this.oldCoinPriorityMinCumulativeSellSol &&
+          confirmingBuyerCount >= this.oldCoinPriorityMinConfirmingBuyers;
+        const effectiveMaxRecoveryPct = priorityRecovery
+          ? this.oldCoinPriorityMaxRecoveryPct
+          : this.oldCoinMaxRecoveryPct;
         const poolSamples = events
           .map((item) => item.poolQuoteAfter)
           .filter((value) => Number.isFinite(value) && value > 0);
@@ -612,13 +600,11 @@ class OrderFlowTracker extends EventEmitter {
           liquidity: Number.isFinite(liquidity) && liquidity >= config.strategy.minLiquidityUsd,
           trades10s: events.length >= this.oldCoinMinTrades10s,
           dropRange: dropPct >= this.oldCoinMinDropPct && dropPct <= this.oldCoinMaxDropPct,
-          sellDriven: Boolean(drivingSell) && drivingSell.solVolume >= this.oldCoinMinDrivingSellSol,
-          sellerPressureEasing: Boolean(drivingSell) &&
-            largestLaterSell <= drivingSell.solVolume &&
-            sumVolume(laterSells) <= drivingSell.solVolume,
-          recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= this.oldCoinMaxRecoveryPct,
+          sellDriven: Boolean(sellMetrics?.sellQualified),
+          sellerPressureEasing: Boolean(sellMetrics?.sellerPressureEasing),
+          recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= effectiveMaxRecoveryPct,
           antiChase: antiChase.ready,
-          differentBuyer: uniqueCount(confirmingBuys, 'signer') >= this.oldCoinMinConfirmingBuyers,
+          differentBuyer: confirmingBuyerCount >= this.oldCoinMinConfirmingBuyers,
           poolStable: lpDropPct <= this.oldCoinMaxLpDrop10sPct,
         };
         armReady = conditions.age && conditions.fdv && conditions.liquidity &&
@@ -627,14 +613,18 @@ class OrderFlowTracker extends EventEmitter {
         trigger = {
           dropPct: round(dropPct, 3),
           recoveryPct: round(recoveryPct, 3),
-          drivingSellSol: round(drivingSell?.solVolume || 0, 4),
-          confirmingBuyerCount: uniqueCount(confirmingBuys, 'signer'),
-          laterSellSol: round(sumVolume(laterSells), 4),
+          effectiveMaxRecoveryPct: round(effectiveMaxRecoveryPct, 3),
+          drivingSellSol: round(sellMetrics?.largestDrivingSell?.solVolume || 0, 4),
+          cumulativeSellSol: round(sellMetrics?.cumulativeSellSol || 0, 4),
+          drivingSellerCount: sellMetrics?.drivingSellerCount || 0,
+          sellQualification: sellMetrics?.sellQualification || null,
+          confirmingBuyerCount,
+          laterSellSol: round(sellMetrics?.laterSellSol || 0, 4),
           lpDropPct: round(lpDropPct, 3),
           windowNetGainPct: round(antiChase.windowNetGainPct, 3),
           prePeakRunupPct: round(antiChase.prePeakRunupPct, 3),
           prePeakContextMs: round(antiChase.contextCoverageMs, 0),
-          priority: dropPct >= this.oldCoinPriorityDropPct,
+          priority: priorityRecovery,
         };
         age3 = { tokenAgeMs, fdvUsd: fdv, liquidityUsd: liquidity };
       } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
@@ -942,7 +932,12 @@ class OrderFlowTracker extends EventEmitter {
         oldCoinMaxNetGain10sPct: this.oldCoinMaxNetGain10sPct,
         oldCoinMaxPrePeakRunupPct: this.oldCoinMaxPrePeakRunupPct,
         oldCoinMinDrivingSellSol: this.oldCoinMinDrivingSellSol,
+        oldCoinMinCumulativeSellSol: this.oldCoinMinCumulativeSellSol,
+        oldCoinMinCumulativeSellers: this.oldCoinMinCumulativeSellers,
         oldCoinMinConfirmingBuyers: this.oldCoinMinConfirmingBuyers,
+        oldCoinPriorityMinCumulativeSellSol: this.oldCoinPriorityMinCumulativeSellSol,
+        oldCoinPriorityMinConfirmingBuyers: this.oldCoinPriorityMinConfirmingBuyers,
+        oldCoinPriorityMaxRecoveryPct: this.oldCoinPriorityMaxRecoveryPct,
         oldCoinMinTrades10s: this.oldCoinMinTrades10s,
         oldCoinMaxLpDrop10sPct: this.oldCoinMaxLpDrop10sPct,
         oldCoinMinAgeHours: config.strategy.minMintAgeHours,
@@ -1253,31 +1248,107 @@ class OrderFlowTracker extends EventEmitter {
     );
   }
 
+  _oldCoinPullbackGeometry(events) {
+    const points = [];
+    for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+      const event = events[eventIndex];
+      const priceBefore = Number(event.priceBefore);
+      const priceAfter = Number(event.price);
+      if (Number.isFinite(priceBefore) && priceBefore > 0) {
+        points.push({ eventIndex, phase: 'before', price: priceBefore });
+      }
+      if (Number.isFinite(priceAfter) && priceAfter > 0) {
+        points.push({ eventIndex, phase: 'after', price: priceAfter });
+      }
+    }
+
+    let peakPoint = null;
+    let lowPoint = null;
+    for (const point of points) {
+      if (!peakPoint || point.price > peakPoint.price) {
+        peakPoint = point;
+        lowPoint = null;
+        continue;
+      }
+      if (point.price < peakPoint.price && (!lowPoint || point.price < lowPoint.price)) {
+        lowPoint = point;
+      }
+    }
+    if (!peakPoint || !lowPoint || !(peakPoint.price > lowPoint.price)) return null;
+
+    const downLegStartIndex = peakPoint.phase === 'after'
+      ? peakPoint.eventIndex + 1
+      : peakPoint.eventIndex;
+    const afterLowStartIndex = lowPoint.phase === 'before'
+      ? lowPoint.eventIndex
+      : lowPoint.eventIndex + 1;
+    if (downLegStartIndex > lowPoint.eventIndex) return null;
+
+    return {
+      peakIndex: peakPoint.eventIndex,
+      lowIndex: lowPoint.eventIndex,
+      peakPrice: peakPoint.price,
+      lowPrice: lowPoint.price,
+      lowEvent: events[lowPoint.eventIndex],
+      downLegEvents: events.slice(downLegStartIndex, lowPoint.eventIndex + 1),
+      afterLow: events.slice(afterLowStartIndex),
+    };
+  }
+
+  _oldCoinSellMetrics(geometry) {
+    const downLegSells = geometry.downLegEvents.filter((event) => (
+      event.side === 'SELL' &&
+      event.signer &&
+      event.signature &&
+      (event.priceChangePct < 0 || (event.priceBefore > 0 && event.price < event.priceBefore))
+    ));
+    const largestDrivingSell = downLegSells.reduce((largest, event) => (
+      !largest || event.solVolume > largest.solVolume ? event : largest
+    ), null);
+    const cumulativeSellSol = sumVolume(downLegSells);
+    const drivingSellerCount = uniqueCount(downLegSells, 'signer');
+    const singleSellQualified = Boolean(largestDrivingSell) &&
+      largestDrivingSell.solVolume >= this.oldCoinMinDrivingSellSol;
+    const cumulativeSellQualified =
+      cumulativeSellSol >= this.oldCoinMinCumulativeSellSol &&
+      drivingSellerCount >= this.oldCoinMinCumulativeSellers;
+    const drivingSellers = new Set(downLegSells.map((event) => event.signer).filter(Boolean));
+    const confirmingBuys = geometry.afterLow.filter((event) => (
+      event.side === 'BUY' && event.signer && !drivingSellers.has(event.signer)
+    ));
+    const confirmingBuyerCount = uniqueCount(confirmingBuys, 'signer');
+    const laterSells = geometry.afterLow.filter((event) => event.side === 'SELL');
+    const largestLaterSell = laterSells.reduce(
+      (largest, event) => Math.max(largest, event.solVolume),
+      0,
+    );
+    const laterSellSol = sumVolume(laterSells);
+
+    return {
+      largestDrivingSell,
+      cumulativeSellSol,
+      drivingSellerCount,
+      singleSellQualified,
+      cumulativeSellQualified,
+      sellQualified: singleSellQualified || cumulativeSellQualified,
+      sellQualification: singleSellQualified ? 'single' : cumulativeSellQualified ? 'cumulative' : null,
+      confirmingBuyerCount,
+      laterSellSol,
+      sellerPressureEasing: Boolean(largestDrivingSell) &&
+        largestLaterSell <= largestDrivingSell.solVolume &&
+        laterSellSol <= cumulativeSellSol,
+    };
+  }
+
   _tryOldCoinPullbackV10(state, ev, wallNow) {
     if (ev.side !== 'BUY') return;
 
     const events = this._windowEvents(state, ev.ts, this.oldCoinWindowMs);
     if (events.length < this.oldCoinMinTrades10s) return;
 
-    let peakIndex = -1;
-    let lowIndex = -1;
-    let peakPrice = 0;
-    let lowPrice = Infinity;
-    for (let index = 0; index < events.length; index += 1) {
-      const price = events[index].price;
-      if (price > peakPrice) {
-        peakPrice = price;
-        peakIndex = index;
-        lowPrice = Infinity;
-        lowIndex = -1;
-      }
-      if (peakIndex >= 0 && index > peakIndex && price < lowPrice) {
-        lowPrice = price;
-        lowIndex = index;
-      }
-    }
-    if (peakIndex < 0 || lowIndex <= peakIndex || !(lowPrice > 0) || !(peakPrice > lowPrice)) return;
-
+    const geometry = this._oldCoinPullbackGeometry(events);
+    if (!geometry) return;
+    const { peakIndex, peakPrice, lowPrice, lowEvent } = geometry;
     const dropPct = ((peakPrice - lowPrice) / peakPrice) * 100;
     const recoveryPct = ((ev.price - lowPrice) / lowPrice) * 100;
     const antiChase = this._oldCoinAntiChaseMetrics(
@@ -1296,7 +1367,6 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
     if (dropPct < this.oldCoinMinDropPct) return;
-    if (recoveryPct < this.oldCoinMinRecoveryPct || recoveryPct > this.oldCoinMaxRecoveryPct) return;
     if (!antiChase.contextReady) {
       state.oldCoinDecision = 'insufficient_pre_peak_context';
       return;
@@ -1310,38 +1380,38 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
 
-    const lowEvent = events[lowIndex];
-    const drivingSell = [...events.slice(peakIndex + 1, lowIndex + 1)]
-      .reverse()
-      .find((event) => (
-        event.side === 'SELL' &&
-        event.signer &&
-        event.signature &&
-        (event.priceChangePct < 0 || (event.priceBefore > 0 && event.price < event.priceBefore))
-      ));
+    const sellMetrics = this._oldCoinSellMetrics(geometry);
+    const drivingSell = sellMetrics.largestDrivingSell;
     if (!drivingSell) {
       state.oldCoinDecision = 'drop_not_confirmed_by_sell';
       return;
     }
-    if (drivingSell.solVolume < this.oldCoinMinDrivingSellSol) {
-      state.oldCoinDecision = `driving_sell<${this.oldCoinMinDrivingSellSol}SOL`;
+    if (!sellMetrics.sellQualified) {
+      state.oldCoinDecision =
+        `sell_pressure<single${this.oldCoinMinDrivingSellSol}SOL_or_` +
+        `cumulative${this.oldCoinMinCumulativeSellSol}SOL/${this.oldCoinMinCumulativeSellers}sellers`;
       return;
     }
-
-    const afterLow = events.slice(lowIndex + 1);
-    const confirmingBuys = afterLow.filter((event) => (
-      event.side === 'BUY' && event.signer && event.signer !== drivingSell.signer
-    ));
-    const confirmingBuyerCount = uniqueCount(confirmingBuys, 'signer');
+    const confirmingBuyerCount = sellMetrics.confirmingBuyerCount;
     if (confirmingBuyerCount < this.oldCoinMinConfirmingBuyers) {
       state.oldCoinDecision = `confirming_buyers<${this.oldCoinMinConfirmingBuyers}`;
       return;
     }
 
-    const laterSells = afterLow.filter((event) => event.side === 'SELL');
-    const largestLaterSell = laterSells.reduce((max, event) => Math.max(max, event.solVolume), 0);
-    const laterSellSol = sumVolume(laterSells);
-    if (largestLaterSell > drivingSell.solVolume || laterSellSol > drivingSell.solVolume) {
+    const priorityRecovery =
+      dropPct >= this.oldCoinPriorityDropPct &&
+      sellMetrics.cumulativeSellSol >= this.oldCoinPriorityMinCumulativeSellSol &&
+      confirmingBuyerCount >= this.oldCoinPriorityMinConfirmingBuyers;
+    const effectiveMaxRecoveryPct = priorityRecovery
+      ? this.oldCoinPriorityMaxRecoveryPct
+      : this.oldCoinMaxRecoveryPct;
+    if (recoveryPct < this.oldCoinMinRecoveryPct || recoveryPct > effectiveMaxRecoveryPct) {
+      state.oldCoinDecision =
+        `recovery_outside_${this.oldCoinMinRecoveryPct}-${effectiveMaxRecoveryPct}%`;
+      return;
+    }
+
+    if (!sellMetrics.sellerPressureEasing) {
       state.oldCoinDecision = 'seller_pressure_not_easing';
       return;
     }
@@ -1379,11 +1449,15 @@ class OrderFlowTracker extends EventEmitter {
         lowTs: lowEvent.ts,
         dropPct,
         recoveryPct,
-        priority: dropPct >= this.oldCoinPriorityDropPct,
+        effectiveMaxRecoveryPct,
+        priority: priorityRecovery,
         drivingSellSol: drivingSell.solVolume,
         drivingSeller: drivingSell.signer,
+        cumulativeSellSol: sellMetrics.cumulativeSellSol,
+        drivingSellerCount: sellMetrics.drivingSellerCount,
+        sellQualification: sellMetrics.sellQualification,
         confirmingBuyerCount,
-        laterSellSol,
+        laterSellSol: sellMetrics.laterSellSol,
         lpDropPct,
         windowNetGainPct: antiChase.windowNetGainPct,
         prePeakRunupPct: antiChase.prePeakRunupPct,
@@ -1396,7 +1470,11 @@ class OrderFlowTracker extends EventEmitter {
   }
 
   _oldCoinAntiChaseMetrics(state, now, events, peakIndex, peakPrice, currentPrice) {
-    const windowStartPrice = Number(events[0]?.price);
+    const firstEvent = events[0];
+    const firstPriceBefore = Number(firstEvent?.priceBefore);
+    const windowStartPrice = firstPriceBefore > 0
+      ? firstPriceBefore
+      : Number(firstEvent?.price);
     const windowNetGainPct = windowStartPrice > 0 && currentPrice > 0
       ? ((currentPrice - windowStartPrice) / windowStartPrice) * 100
       : Infinity;
@@ -1999,7 +2077,9 @@ class OrderFlowTracker extends EventEmitter {
         `runup=${flow.entryOldCoin.prePeakRunupPct.toFixed(2)}%/` +
         `${Math.round(flow.entryOldCoin.prePeakContextMs)}ms ` +
         `buyers=${flow.entryOldCoin.confirmingBuyerCount} ` +
-        `sell=${flow.entryOldCoin.drivingSellSol.toFixed(2)}SOL ` +
+        `sell=${flow.entryOldCoin.drivingSellSol.toFixed(2)}SOL/` +
+        `${flow.entryOldCoin.cumulativeSellSol.toFixed(2)}SOL/` +
+        `${flow.entryOldCoin.drivingSellerCount}sellers/${flow.entryOldCoin.sellQualification} ` +
         `tier=${flow.entryOldCoin.priority ? 'priority' : 'standard'}`,
       );
     } else if (flow.entryRebound) {
@@ -2187,9 +2267,13 @@ class OrderFlowTracker extends EventEmitter {
       lowTs: pattern.lowTs,
       dropPct: round(pattern.dropPct, 3),
       recoveryPct: round(pattern.recoveryPct, 3),
+      effectiveMaxRecoveryPct: round(pattern.effectiveMaxRecoveryPct, 3),
       priority: !!pattern.priority,
       drivingSellSol: round(pattern.drivingSellSol, 4),
       drivingSeller: pattern.drivingSeller || null,
+      cumulativeSellSol: round(pattern.cumulativeSellSol, 4),
+      drivingSellerCount: pattern.drivingSellerCount,
+      sellQualification: pattern.sellQualification || null,
       confirmingBuyerCount: pattern.confirmingBuyerCount,
       laterSellSol: round(pattern.laterSellSol, 4),
       lpDropPct: round(pattern.lpDropPct, 3),

@@ -183,6 +183,11 @@ assert.strictEqual(
     0,
     'watchdog migration AGE expiry must be disabled',
   );
+  assert.strictEqual(
+    watchdog.minTokenAgeMs,
+    48 * 60 * 60_000,
+    'old-coin watchlist must require at least 48 hours of AGE',
+  );
   watchdog.minFdVUsd = 15_000;
   watchdog.minLiquidityUsd = 3_000;
   watchdog.minVolume24hUsd = 0;
@@ -196,7 +201,7 @@ assert.strictEqual(
 
   const staleToken = {
     ...token,
-    migration_time: now - 5 * 60_000,
+    migration_time: now - 72 * 60 * 60_000,
     fdv: 2_000,
     liquidity: 1_000,
     market_updated_at: now - 10 * 60_000,
@@ -257,7 +262,7 @@ assert.strictEqual(
   oldAgeWatchdog.maxWatchDurationMs = 0;
 
   await oldAgeWatchdog._check();
-  assert.strictEqual(oldAgeRemoved, false, 'migration AGE must not remove the token');
+  assert.strictEqual(oldAgeRemoved, true, 'a token younger than 48 hours must be removed');
 
   let openAgeRemoved = false;
   const openAgeWatchdog = new TokenWatchdog({

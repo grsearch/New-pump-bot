@@ -16,7 +16,8 @@ function numberEnv(name, fallback) {
 const solPriceUsdForConfig = numberEnv('SOL_PRICE_USD', 72);
 const activityFlow1mMinVolumeUsdDefault = numberEnv('ACTIVITY_FLOW_1M_MIN_VOLUME_USD', 3000);
 const activityFlow1mMinVolumeSolDefault = activityFlow1mMinVolumeUsdDefault / Math.max(solPriceUsdForConfig, 0.001);
-// Webhook-selected tokens do not expire by migration AGE. Zero disables the AGE gate.
+// Old-coin strategy: tokens must already be at least 48h old and never expire by AGE.
+const minMintAgeHours = numberEnv('OLD_COIN_MIN_AGE_HOURS', 48);
 const maxMintAgeMinutes = 0;
 const maxMintAgeHours = maxMintAgeMinutes / 60;
 
@@ -26,7 +27,7 @@ const config = {
 
   // ============ Strategy ============
   strategy: {
-    exitMode: 'DUMP_BACKRUN_V9',
+    exitMode: 'OLD_COIN_PULLBACK_V10',
     // 触发条件（DumpDetector）
     // V9.1 entry defaults come from the latest live-data audit.
     // Dedicated names prevent stale thresholds from older deployments from
@@ -101,7 +102,7 @@ const config = {
     ),
 
     // 仓位
-    positionSizeSol: parseFloat(process.env.POSITION_SIZE_SOL || '0.1'),
+    positionSizeSol: parseFloat(process.env.POSITION_SIZE_SOL || '0.2'),
 
     // Exit model for current activity-flow strategy:
     //   1) TAKE_PROFIT_PCT: fixed TP, sells immediately when reached.
@@ -120,8 +121,10 @@ const config = {
     //   trailingMinHwmAgeMs: HWM 必须稳定至少此毫秒数（防单 tick 污染）
     //   设 trailingActivatePct=0 或 trailingDrawdownPct=0 可禁用移动止盈
     trailingActivatePct: 10,
-    trailingDrawdownPct: 3,
+    trailingDrawdownPct: 5,
     trailingMinHwmAgeMs: 500,
+    trailingExitConfirmCount: 2,
+    trailingExitConfirmMinGapMs: 250,
 
     // RSI 超买退出：使用当前未收盘的 1 分钟 RSI，便于在 swap 到达时立即响应。
     // 一旦同币任一仓位已经激活移动止盈，RSI 退出让位于移动止盈。
@@ -154,7 +157,7 @@ const config = {
 
     // 紧急止损（防止灾难性下跌）
     // 设置为 0 可禁用紧急止损（恢复"硬扛"行为）
-    fixedStopLossPct: -15,
+    fixedStopLossPct: 0,
     emergencyStopLossPct: 0,
 
     // v3.17.42: 智能止损 — 分波动率止损阈值
@@ -173,7 +176,17 @@ const config = {
     //   v3.17.20: 设 0 禁用 TIMEOUT 卖出，持仓靠 TP/Trailing/Emergency 退出
     //   v3.17.32: 恢复为 4h 强制退出(数据回测: 4h+ 只有 30% 胜率, 平均亏 -13%)
     // Activity strategies hard timeout: close every remaining position after 180 seconds.
-    maxHoldMs: 20_000,
+    maxHoldMs: 60 * 60_000,
+
+    // Old-coin staged exits. These diagnose a bad entry before the 60-minute fallback.
+    oldCoinFastExitMs: 3_000,
+    oldCoinFastExitPnlPct: -5,
+    oldCoinNoBounceExitMs: 15_000,
+    oldCoinNoBounceMaxMfePct: 2,
+    oldCoinWeakBounceExitMs: 60_000,
+    oldCoinWeakBounceMaxMfePct: 5,
+    oldCoinLpExitWindowMs: 5_000,
+    oldCoinLpExitDropPct: 10,
 
     // Activity strategies exit quiet positions before the hard 180s timeout.
     noBounceExitEnabled: false,
@@ -219,7 +232,7 @@ const config = {
     // BUY now uses buy_exact_quote_in. BUY_SLIPPAGE_BPS remains telemetry-only;
     // the fixed quote input and minimum base output enforce the price cap.
     buySlippageBps: parseInt(process.env.BUY_SLIPPAGE_BPS || '5000', 10),
-    buyMaxPriceDeviationPct: parseFloat(process.env.BUY_MAX_PRICE_DEVIATION_PCT || '13'),
+    buyMaxPriceDeviationPct: parseFloat(process.env.OLD_COIN_BUY_MAX_PRICE_DEVIATION_PCT || '5'),
     buyMaxPoolStateAgeMs: parseInt(process.env.BUY_MAX_POOL_STATE_AGE_MS || '500', 10),
     // Kept for exported-config compatibility; no longer used as the price guard.
     buyMaxEstimatedSlippagePct: parseFloat(process.env.BUY_MAX_ESTIMATED_SLIPPAGE_PCT || '5'),
@@ -231,7 +244,10 @@ const config = {
 
     // 风控（v3.17 默认 maxConcurrent 5）
     cooldownMsPerToken: parseInt(process.env.COOLDOWN_MS_PER_TOKEN || '0', 10),
-    rebuyCooldownMs: 60_000,
+    rebuyCooldownMs: 10 * 60_000,
+    oldCoinTrailingCooldownMs: 10 * 60_000,
+    oldCoinTimeoutCooldownMs: 60 * 60_000,
+    oldCoinMaxSuccessfulBuys24h: 3,
     maxConcurrentPositions: parseInt(process.env.MAX_CONCURRENT_POSITIONS || '10', 10),
 
     // v3.17.6: 同砸单去重时间窗（毫秒）
@@ -269,7 +285,9 @@ const config = {
     // v3.17.13: 代币监控超时（毫秒），0 = 禁用
     //   v3.17.20: 用户明确不要"监控超时退出"（不要 6 小时到期退出），保持 0
     maxWatchDurationMs: parseInt(process.env.MAX_WATCH_DURATION_MS || '0', 10),
-    // AGE is measured from the confirmed Pump migration time. Unknown AGE is retained.
+    // AGE uses migration time when known and token creation time as fallback.
+    minMintAgeHours,
+    minTokenAgeMs: minMintAgeHours * 60 * 60 * 1000,
     maxMintAgeHours,
     maxMintAgeMinutes,
     maxTokenAgeMs: maxMintAgeHours * 60 * 60 * 1000,
@@ -277,20 +295,29 @@ const config = {
     pumpTokenSupply: parseFloat(process.env.PUMP_TOKEN_SUPPLY || '1000000000'),
     solPriceUsd: solPriceUsdForConfig,
     // v3.17.20: FDV lower bound in USD; refreshed once per minute by TokenWatchdog.
-    minFdVUsd: parseFloat(process.env.MIN_FDV_USD || '15000'),
+    minFdVUsd: parseFloat(process.env.OLD_COIN_MIN_FDV_USD || '15000'),
     // Birdeye liquidity in USD. Shared by discovery admission and watchdog removal.
-    minLiquidityUsd: parseFloat(process.env.MIN_LIQUIDITY_USD || '3000'),
+    minLiquidityUsd: parseFloat(process.env.OLD_COIN_MIN_LIQUIDITY_USD || '10000'),
     // v3.17.20: FDV 上限（USD），设 0 禁用（不因 FDV 过大移除监控）
-    maxFdVUsd: parseFloat(process.env.MAX_FDV_USD || '1000000'),
+    maxFdVUsd: parseFloat(process.env.OLD_COIN_MAX_FDV_USD || '500000'),
   },
 
   // ============ Activity-flow entry ============
   activityFlow: {
-    // Strategy V9: keep flow telemetry enabled while native trusted dump
-    // signals use the dedicated low-latency backrun path.
+    // Old-coin pullback entry replaces native dump signals.
     enabled: !activityFlowForceDisabled,
-    replaceDumpSignal: false,
-    entryMode: 'DUMP_BACKRUN_V9',
+    replaceDumpSignal: true,
+    entryMode: 'OLD_COIN_PULLBACK_V10',
+    oldCoinWindowMs: parseInt(process.env.OLD_COIN_PULLBACK_WINDOW_MS || '10000', 10),
+    oldCoinMinDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_DROP_PCT || '5'),
+    oldCoinPriorityDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_PRIORITY_DROP_PCT || '15'),
+    oldCoinMaxDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_DROP_PCT || '20'),
+    oldCoinMinRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_RECOVERY_PCT || '2'),
+    oldCoinMaxRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_RECOVERY_PCT || '5'),
+    oldCoinMinTrades10s: parseInt(process.env.OLD_COIN_PULLBACK_MIN_TRADES_10S || '2', 10),
+    oldCoinMaxLpDrop10sPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_LP_DROP_10S_PCT || '5'),
+    oldCoinSignalCooldownMs: parseInt(process.env.OLD_COIN_PULLBACK_SIGNAL_COOLDOWN_MS || '10000', 10),
+    maxSignalAgeMs: parseInt(process.env.OLD_COIN_PULLBACK_MAX_SIGNAL_AGE_MS || '2000', 10),
     reboundWindowMs: 1_000,
     reboundMinDropPct: 20,
     reboundMaxDropPct: 65,

@@ -776,8 +776,19 @@ class TickStream extends EventEmitter {
   }
 
   async updateSubscription(mints) {
-    this.watchedMints = new Set(mints);
-    this._scheduleRebuild('live', 2000);
+    const next = new Set((mints || []).filter(Boolean));
+    const liveChanged = next.size !== this.watchedMints.size ||
+      [...next].some((mint) => !this.watchedMints.has(mint));
+    let shadowChanged = false;
+    for (const mint of next) {
+      if (this.competitorMints.delete(mint)) shadowChanged = true;
+    }
+    this.watchedMints = next;
+    if (liveChanged) this._scheduleRebuild('live', 2000);
+    if (shadowChanged) {
+      monitor.set('TickStream.competitorShadowMints', this.competitorMints.size, 'TickStream');
+      this._scheduleRebuild('shadow', 25);
+    }
   }
 
   _accountsForRegion(region) {
@@ -801,6 +812,7 @@ class TickStream extends EventEmitter {
 
   addCompetitorMint(mint, ttlMs = this.competitorMintTtlMs) {
     if (!mint) return false;
+    if (this.watchedMints.has(mint)) return false;
     const now = Date.now();
     const wasKnown = this.competitorMints.has(mint);
     this.competitorMints.set(mint, now + Math.max(60_000, Number(ttlMs) || this.competitorMintTtlMs));

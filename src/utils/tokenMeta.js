@@ -4,6 +4,21 @@ const axios = require('axios');
 const { config } = require('../config');
 
 const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
+const fullInfoCache = new Map();
+const creationTimeCache = new Map();
+const dexMarketCache = new Map();
+
+function cachedRequest(cache, key, ttlMs, loader) {
+  const now = Date.now();
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+  const promise = Promise.resolve().then(loader);
+  cache.set(key, { expiresAt: now + ttlMs, promise });
+  promise.catch(() => {
+    if (cache.get(key)?.promise === promise) cache.delete(key);
+  });
+  return promise;
+}
 
 /**
  * 通过 Helius DAS API 获取代币基本信息（symbol, decimals, name）。
@@ -129,7 +144,7 @@ function normalizeDexScreenerPair(pair, mint = pair?.baseToken?.address) {
  * DEX Screener supports up to 30 comma-separated token addresses per request.
  * Return one preferred Solana pair per mint, favoring the registry pool when known.
  */
-async function fetchTokenMarketsFromDexScreener(tokens) {
+async function _fetchTokenMarketsFromDexScreenerUncached(tokens) {
   const entries = (Array.isArray(tokens) ? tokens : [])
     .map((token) => (
       typeof token === 'string'
@@ -157,6 +172,24 @@ async function fetchTokenMarketsFromDexScreener(tokens) {
     if (market) markets.set(entry.mint, market);
   }
   return markets;
+}
+
+async function fetchTokenMarketsFromDexScreener(tokens) {
+  const entries = (Array.isArray(tokens) ? tokens : [])
+    .map((token) => (
+      typeof token === 'string'
+        ? { mint: token, poolAddress: null }
+        : { mint: token?.mint, poolAddress: token?.poolAddress || token?.pool_address || null }
+    ))
+    .filter((token) => token.mint);
+  const key = entries
+    .map((token) => `${token.mint}:${token.poolAddress || ''}`)
+    .sort()
+    .join(',');
+  if (!key) return new Map();
+  return cachedRequest(dexMarketCache, key, 30_000, () => (
+    _fetchTokenMarketsFromDexScreenerUncached(entries)
+  ));
 }
 
 /**
@@ -198,7 +231,7 @@ async function fetchTokenSecurityFromBirdeye(mint) {
  * 优先用 Birdeye token_security，失败时回退到 Helius Enhanced Transactions API。
  * 返回 { creationTime: unix_seconds, creationSlot: number } 或 null。
  */
-async function fetchTokenCreationTime(mint) {
+async function _fetchTokenCreationTimeUncached(mint) {
   // 1. Try Birdeye first (most reliable, has exact creation time)
   const birdeyeResult = await _fetchCreationFromBirdeye(mint);
   if (birdeyeResult?.creationTime) return birdeyeResult;
@@ -208,6 +241,12 @@ async function fetchTokenCreationTime(mint) {
   if (heliusResult?.creationTime) return heliusResult;
 
   return null;
+}
+
+async function fetchTokenCreationTime(mint) {
+  return cachedRequest(creationTimeCache, mint, 24 * 60 * 60_000, () => (
+    _fetchTokenCreationTimeUncached(mint)
+  ));
 }
 
 /**
@@ -284,7 +323,7 @@ async function fetchTokenMarketOnly(mint) {
 /**
  * 综合调用：返回完整代币信息。Birdeye 失败时不阻塞，返回部分信息。
  */
-async function fetchTokenFullInfo(mint) {
+async function _fetchTokenFullInfoUncached(mint) {
   const asset = await fetchTokenAssetFromHelius(mint);
   let market = {};
   let birdeyeError = null;
@@ -295,6 +334,10 @@ async function fetchTokenFullInfo(mint) {
     birdeyeError = err;
   }
   return { ...asset, ...market, fetchedAt: Date.now(), _birdeyeError: birdeyeError };
+}
+
+async function fetchTokenFullInfo(mint) {
+  return cachedRequest(fullInfoCache, mint, 10 * 60_000, () => _fetchTokenFullInfoUncached(mint));
 }
 
 module.exports = {

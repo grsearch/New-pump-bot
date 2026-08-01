@@ -1071,7 +1071,12 @@ class CompetitorForensics {
       label_updated_at: null,
     }, true);
     const tradeId = Number(result.lastInsertRowid);
-    this._rememberWalletMint(wallet, balance.mint, parts.ts, true);
+    this._rememberWalletMint(wallet, balance.mint, parts.ts, side === 'BUY', {
+      side,
+      signature: parts.signature,
+      solAmount,
+      tokenQty,
+    });
     this._requestTokenContext(balance.mint, parts.ts, tradeId);
     monitor.inc(`CompetitorForensics.${side.toLowerCase()}Trades`, 1, 'CompetitorForensics');
     return tradeId;
@@ -1173,16 +1178,22 @@ class CompetitorForensics {
     };
   }
 
-  _rememberWalletMint(wallet, mint, ts, notify) {
+  _rememberWalletMint(wallet, mint, ts, notify, event = {}) {
     if (!this.walletMints.has(mint)) this.walletMints.set(mint, new Map());
     const wallets = this.walletMints.get(mint);
     const firstSeen = wallets.get(wallet);
     wallets.set(wallet, firstSeen || ts);
-    const isNew = !this.shadowMints.has(mint);
     this.shadowMints.set(mint, Date.now());
-    if (notify && isNew && this.onMintDiscovered) {
+    if (notify && this.onMintDiscovered) {
       try {
-        this.onMintDiscovered(mint);
+        Promise.resolve(this.onMintDiscovered(mint, {
+          ...event,
+          wallet,
+          mint,
+          ts,
+        })).catch((err) => {
+          monitor.recordError('CompetitorForensics', err, { phase: 'onMintDiscovered', mint });
+        });
       } catch (err) {
         monitor.recordError('CompetitorForensics', err, { phase: 'onMintDiscovered', mint });
       }

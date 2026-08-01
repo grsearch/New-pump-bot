@@ -42,6 +42,7 @@ const DEDICATED_EXIT_MODES = new Set([
   'AGE3_TRAILING_V7',
   'ONE_SECOND_REBOUND_V8',
   'DUMP_BACKRUN_V9',
+  'OLD_COIN_PULLBACK_V10',
 ]);
 
 function usesDedicatedExitPolicy() {
@@ -149,7 +150,8 @@ class PositionManager extends EventEmitter {
 
   handleSwapForExit(swap) {
     const s = config.strategy;
-    if (!s.flowReversalExitEnabled || !swap || !swap.mint) return;
+    const oldCoinExit = s.exitMode === 'OLD_COIN_PULLBACK_V10';
+    if ((!s.flowReversalExitEnabled && !oldCoinExit) || !swap || !swap.mint) return;
 
     const pids = this.byMint.get(swap.mint);
     if (!pids || pids.size === 0) return;
@@ -169,6 +171,7 @@ class PositionManager extends EventEmitter {
       ts: Number.isFinite(swap.ts) ? swap.ts : Date.now(),
       slot: swap.slot || 0,
       signature: swap.signature || null,
+      poolQuoteSol: Number(swap.effectiveQuoteReserveSol) || Number(swap.poolQuoteAfter) || null,
     };
 
     let events = this._flowExitEvents.get(swap.mint);
@@ -182,7 +185,12 @@ class PositionManager extends EventEmitter {
     for (const pid of pids) {
       const pos = this.positions.get(pid);
       if (pos && !pos.exiting && pos.status !== 'stuck') {
-        this._maybeFlowReversalExit(pos, price, ev.ts);
+        if (s.flowReversalExitEnabled) this._maybeFlowReversalExit(pos, price, ev.ts);
+        if (oldCoinExit) {
+          const netFlow = this._recentNetFlow(pos.mint, ev.ts, Math.min(60_000, Math.max(1, ev.ts - (pos.openedAt || ev.ts))));
+          pos._maxObservedNetFlow = Math.max(pos._maxObservedNetFlow ?? -Infinity, netFlow);
+          this._maybeOldCoinLpExit(pos, price, ev.ts);
+        }
       }
     }
   }
@@ -208,6 +216,85 @@ class PositionManager extends EventEmitter {
       else if (event.side === 'SELL') netFlow -= event.solVolume;
     }
     return netFlow;
+  }
+
+  _maybeOldCoinLpExit(pos, price, now) {
+    const windowMs = config.strategy.oldCoinLpExitWindowMs;
+    const thresholdPct = config.strategy.oldCoinLpExitDropPct;
+    if (!(windowMs > 0) || !(thresholdPct > 0)) return;
+    const samples = (this._flowExitEvents.get(pos.mint) || [])
+      .filter((event) => event.ts >= now - windowMs && event.ts <= now && event.poolQuoteSol > 0);
+    if (samples.length < 2) return;
+    const peakPoolSol = Math.max(...samples.map((event) => event.poolQuoteSol));
+    const currentPoolSol = samples[samples.length - 1].poolQuoteSol;
+    const dropPct = ((peakPoolSol - currentPoolSol) / peakPoolSol) * 100;
+    if (dropPct < thresholdPct) return;
+
+    pos.removeAfterExit = true;
+    console.warn(
+      `[PositionManager] LP_DROP_5S ${pos.symbol || pos.mint.slice(0, 6)} ` +
+      `pool=${peakPoolSol.toFixed(2)}->${currentPoolSol.toFixed(2)}SOL ` +
+      `drop=${dropPct.toFixed(2)}%`,
+    );
+    monitor.inc('PositionManager.oldCoinLpExit', 1, 'PositionManager');
+    this._exitForCondition(pos, price, 'LP_DROP_5S');
+  }
+
+  _maybeOldCoinStagedExit(pos, now) {
+    if (config.strategy.exitMode !== 'OLD_COIN_PULLBACK_V10') return false;
+    if (!pos || pos.exiting || pos.status === 'stuck') return false;
+    if (!pos.reconciled && !pos.dryRun) return false;
+
+    const openedAt = pos.reconciledAt || pos.openedAt || now;
+    const age = now - openedAt;
+    const price = Number(this.priceTracker.getPrice(pos.mint));
+    if (!Number.isFinite(price) || price <= 0 || !(pos.entryPrice > 0)) return false;
+    const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
+    const peakPnlPct = ((Math.max(pos.highWaterMark || pos.entryPrice, pos.entryPrice) - pos.entryPrice) / pos.entryPrice) * 100;
+    const netWindowMs = Math.max(1, Math.min(60_000, age));
+    const netFlow = this._recentNetFlow(pos.mint, now, netWindowMs);
+
+    if (
+      age >= config.strategy.oldCoinFastExitMs &&
+      age < config.strategy.oldCoinNoBounceExitMs &&
+      pnlPct <= config.strategy.oldCoinFastExitPnlPct &&
+      (pos._lastNewLowAt || 0) >= openedAt &&
+      now - pos._lastNewLowAt <= 2_000 &&
+      netFlow < 0
+    ) {
+      console.warn(
+        `[PositionManager] WRONG_ENTRY_3S ${pos.symbol || pos.mint.slice(0, 6)} ` +
+        `pnl=${pnlPct.toFixed(2)}% net=${netFlow.toFixed(2)}SOL newLow=true`,
+      );
+      this._exitForCondition(pos, price, 'WRONG_ENTRY_3S');
+      return true;
+    }
+
+    if (!pos._oldCoin15sChecked && age >= config.strategy.oldCoinNoBounceExitMs) {
+      pos._oldCoin15sChecked = true;
+      const neverTurnedPositive = !Number.isFinite(pos._maxObservedNetFlow) || pos._maxObservedNetFlow <= 0;
+      if (peakPnlPct < config.strategy.oldCoinNoBounceMaxMfePct && neverTurnedPositive) {
+        console.warn(
+          `[PositionManager] NO_BOUNCE_15S ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `peak=${peakPnlPct.toFixed(2)}% maxNet=${Number.isFinite(pos._maxObservedNetFlow) ? pos._maxObservedNetFlow.toFixed(2) : 'n/a'}SOL`,
+        );
+        this._exitForCondition(pos, price, 'NO_BOUNCE_15S');
+        return true;
+      }
+    }
+
+    if (!pos._oldCoin60sChecked && age >= config.strategy.oldCoinWeakBounceExitMs) {
+      pos._oldCoin60sChecked = true;
+      if (peakPnlPct < config.strategy.oldCoinWeakBounceMaxMfePct) {
+        console.warn(
+          `[PositionManager] WEAK_BOUNCE_60S ${pos.symbol || pos.mint.slice(0, 6)} ` +
+          `peak=${peakPnlPct.toFixed(2)}%<${config.strategy.oldCoinWeakBounceMaxMfePct}%`,
+        );
+        this._exitForCondition(pos, price, 'WEAK_BOUNCE_60S');
+        return true;
+      }
+    }
+    return false;
   }
 
   _maybeFlowReversalExit(pos, price, now) {
@@ -1160,6 +1247,7 @@ class PositionManager extends EventEmitter {
           continue;
         }
       }
+      if (this._maybeOldCoinStagedExit(pos, now)) continue;
       const timeoutMs = config.strategy.maxHoldMs;
       if (timeoutMs > 0 && age >= timeoutMs) {
         const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
@@ -1635,6 +1723,10 @@ class PositionManager extends EventEmitter {
 
     // v3.17.42: 记录最新tick价格，供前端API使用(priceTracker可能没追踪该mint)
     pos._lastTickPrice = price;
+    if (!Number.isFinite(pos._lowestObservedPrice) || price < pos._lowestObservedPrice) {
+      pos._lowestObservedPrice = price;
+      pos._lastNewLowAt = Number(context?.marketTs) || Date.now();
+    }
     const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
 
     const fdvFloorUsd = config.strategy.positionFdvExitUsd || 0;
@@ -2121,7 +2213,28 @@ class PositionManager extends EventEmitter {
       const drawdownPct = ((armedHwm - price) / armedHwm) * 100;
       const dynamicDrawdown = this.getTrailingDrawdownPct(peakPnlPct, preVol5m, pos.mint);
       const hwmAge = Date.now() - armedHwmTs;
-      if (drawdownPct >= dynamicDrawdown && hwmAge >= trailingMinHwmAgeMs) {
+      const trailingMatched = drawdownPct >= dynamicDrawdown && hwmAge >= trailingMinHwmAgeMs;
+      const requiredCount = config.strategy.exitMode === 'OLD_COIN_PULLBACK_V10'
+        ? Math.max(1, config.strategy.trailingExitConfirmCount || 1)
+        : 1;
+      if (trailingMatched && requiredCount > 1) {
+        const marketTs = Number(context?.marketTs) || Date.now();
+        if (marketTs !== pos._trailingExitLastMarketTs) {
+          if (!pos._trailingExitConfirmCount) pos._trailingExitConfirmFirstTs = Date.now();
+          pos._trailingExitConfirmCount = (pos._trailingExitConfirmCount || 0) + 1;
+          pos._trailingExitLastMarketTs = marketTs;
+        }
+      } else if (!trailingMatched) {
+        pos._trailingExitConfirmCount = 0;
+        pos._trailingExitConfirmFirstTs = null;
+        pos._trailingExitLastMarketTs = null;
+      }
+      const confirmAge = Date.now() - (pos._trailingExitConfirmFirstTs || Date.now());
+      const trailingConfirmed = requiredCount <= 1 || (
+        pos._trailingExitConfirmCount >= requiredCount &&
+        confirmAge >= (config.strategy.trailingExitConfirmMinGapMs || 0)
+      );
+      if (trailingMatched && trailingConfirmed) {
         console.log(
           `[PositionManager] 📉 TRAILING_STOP ${pos.symbol || pos.mint.slice(0, 6)} ` +
             `peakPnl=${peakPnlPct.toFixed(2)}% → currentPnl=${pnlPct.toFixed(2)}% ` +
@@ -2242,7 +2355,16 @@ class PositionManager extends EventEmitter {
       const isSmartStop = reason === 'SMART_STOP';
       const isTimeout = reason.startsWith('TIMEOUT');
       let rebuyCooldownMs;
-      if (isSmartStop) {
+      if (config.strategy.exitMode === 'OLD_COIN_PULLBACK_V10') {
+        if (reason === 'LP_DROP_5S') {
+          rebuyCooldownMs = 0;
+          pos.removeAfterExit = true;
+        } else if (isTimeout) {
+          rebuyCooldownMs = config.strategy.oldCoinTimeoutCooldownMs;
+        } else {
+          rebuyCooldownMs = config.strategy.oldCoinTrailingCooldownMs;
+        }
+      } else if (isSmartStop) {
         rebuyCooldownMs = parseInt(process.env.SMART_STOP_REBUY_COOLDOWN_MS || '86400000', 10); // 24h
       } else if (
         isTimeout &&

@@ -24,6 +24,7 @@ const Database = require('better-sqlite3');
 const { PublicKey } = require('@solana/web3.js');
 const { config } = require('../config');
 const { fetchTokenFullInfo, fetchTokenCreationTime } = require('../utils/tokenMeta');
+const { normalizeUnixMs } = require('../utils/migrationTime');
 
 class TokenRegistry {
   constructor(dbPath = config.storage.dbPath) {
@@ -42,6 +43,7 @@ class TokenRegistry {
 
     // Hot in-memory cache: mint → row
     this.cache = new Map();
+    this._addInFlight = new Map();
     this._reloadCache();
   }
 
@@ -242,8 +244,39 @@ class TokenRegistry {
   async addToken(mint, opts = {}) {
     TokenRegistry.validateMint(mint);
 
+    const existing = this.stmts.get.get(mint);
+    if (existing && Number(existing.is_active) === 1) return existing;
+    const pending = this._addInFlight.get(mint);
+    if (pending) return pending;
+
+    const task = this._addTokenInternal(mint, opts).finally(() => {
+      if (this._addInFlight.get(mint) === task) this._addInFlight.delete(mint);
+    });
+    this._addInFlight.set(mint, task);
+    return task;
+  }
+
+  async _addTokenInternal(mint, opts = {}) {
+    const existing = this.stmts.get.get(mint);
+
     // Try to enrich with full meta; tolerate failures so user can still add a token
     let meta = opts.meta || null;
+    if (!meta && existing?.meta_json) {
+      try { meta = JSON.parse(existing.meta_json); } catch (_) {}
+    }
+    if (!meta && existing) {
+      meta = {
+        symbol: existing.symbol,
+        name: existing.name,
+        decimals: existing.decimals,
+        fdv: existing.fdv,
+        marketCap: existing.market_cap,
+        liquidity: existing.liquidity,
+        price: existing.price,
+        marketSource: existing.market_source,
+        fetchedAt: existing.market_updated_at,
+      };
+    }
     if (!meta) {
       try {
         meta = await fetchTokenFullInfo(mint);
@@ -262,9 +295,9 @@ class TokenRegistry {
       market_cap: meta?.marketCap ?? null,
       liquidity: meta?.liquidity ?? null,
       price: meta?.price ?? null,
-      pool_address: opts.poolAddress || null,
-      pool_base_vault: opts.poolBaseVault || null,
-      pool_quote_vault: opts.poolQuoteVault || null,
+      pool_address: opts.poolAddress || existing?.pool_address || null,
+      pool_base_vault: opts.poolBaseVault || existing?.pool_base_vault || null,
+      pool_quote_vault: opts.poolQuoteVault || existing?.pool_quote_vault || null,
       source: opts.source || 'manual',
       added_at: now,
       updated_at: now,
@@ -276,11 +309,11 @@ class TokenRegistry {
       ) ? Number(meta.fetchedAt) || now : null,
       market_source: meta?.marketSource || null,
       meta_json: meta ? JSON.stringify({ ...meta, _birdeyeError: undefined }) : null,
-      creation_time: Number.isFinite(Number(opts.creationTime)) ? Number(opts.creationTime) : null,
-      migration_time: Number.isFinite(Number(opts.migrationTime)) ? Number(opts.migrationTime) : null,
-      migration_time_source: opts.migrationTimeSource || null,
-      migration_slot: Number.isFinite(Number(opts.migrationSlot)) ? Number(opts.migrationSlot) : null,
-      migration_signature: opts.migrationSignature || null,
+      creation_time: Number.isFinite(Number(opts.creationTime)) ? Number(opts.creationTime) : existing?.creation_time || null,
+      migration_time: Number.isFinite(Number(opts.migrationTime)) ? Number(opts.migrationTime) : existing?.migration_time || null,
+      migration_time_source: opts.migrationTimeSource || existing?.migration_time_source || null,
+      migration_slot: Number.isFinite(Number(opts.migrationSlot)) ? Number(opts.migrationSlot) : existing?.migration_slot || null,
+      migration_signature: opts.migrationSignature || existing?.migration_signature || null,
     };
 
     // v3.19: 获取代币创建时间（Birdeye token_security）
@@ -295,8 +328,25 @@ class TokenRegistry {
       }
     }
 
+    const ageAnchor = normalizeUnixMs(row.migration_time) || normalizeUnixMs(row.creation_time);
+    const minAgeMs = config.strategy.minTokenAgeMs || 0;
+    if (minAgeMs > 0) {
+      if (!ageAnchor) {
+        const err = new Error(`token AGE unknown; requires >=${config.strategy.minMintAgeHours}h`);
+        err.code = 'TOKEN_AGE_UNKNOWN';
+        throw err;
+      }
+      const tokenAgeMs = Date.now() - ageAnchor;
+      if (tokenAgeMs < minAgeMs) {
+        const err = new Error(
+          `token AGE ${(tokenAgeMs / 3_600_000).toFixed(1)}h < ${config.strategy.minMintAgeHours}h`,
+        );
+        err.code = 'TOKEN_TOO_YOUNG';
+        throw err;
+      }
+    }
+
     // Preserve existing pool info on re-add
-    const existing = this.stmts.get.get(mint);
     if (existing) {
       row.pool_address = row.pool_address || existing.pool_address || null;
       row.pool_base_vault = row.pool_base_vault || existing.pool_base_vault || null;

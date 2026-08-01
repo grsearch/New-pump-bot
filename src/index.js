@@ -23,6 +23,7 @@ const { resolveCompetitorWallets } = require('./utils/competitorWallets');
 const ActivityFlowTracker = require('./core/OrderFlowTracker');
 const PumpGraduationDiscovery = require('./core/PumpGraduationDiscovery');
 const FeatureRecorder = require('./core/FeatureRecorder');
+const { fetchTokenMarketsFromDexScreener } = require('./utils/tokenMeta');
 
 const monitor = getMonitor();
 const INVALID_VAULT_ADDRESSES = new Set([
@@ -70,6 +71,17 @@ async function main() {
         `${config.strategy.dumpBackrunBlockMintAfterTimeout ? 'first-timeout-blocks-mint' : 'timeout-reentry-enabled'}, ` +
         `no rebound confirmation)`,
     );
+  } else if (config.activityFlow.entryMode === 'OLD_COIN_PULLBACK_V10') {
+    console.log(
+      `Entry: ${config.activityFlow.entryMode} ` +
+        `(AGE>=${config.strategy.minMintAgeHours}h, ` +
+        `FDV=$${Math.round(config.strategy.minFdVUsd)}-$${Math.round(config.strategy.maxFdVUsd)}, ` +
+        `LP>=$${Math.round(config.strategy.minLiquidityUsd)}, ` +
+        `drop=${config.activityFlow.oldCoinMinDropPct}-${config.activityFlow.oldCoinMaxDropPct}%/` +
+        `${config.activityFlow.oldCoinWindowMs}ms, ` +
+        `recovery=${config.activityFlow.oldCoinMinRecoveryPct}-${config.activityFlow.oldCoinMaxRecoveryPct}%, ` +
+        `signal<=${config.activityFlow.maxSignalAgeMs}ms)`,
+    );
   } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
     console.log(
       `Entry: ${config.activityFlow.entryMode} ` +
@@ -101,9 +113,7 @@ async function main() {
   console.log(`Rebuy cooldown: ${config.strategy.rebuyCooldownMs > 0 ? config.strategy.rebuyCooldownMs / 60_000 + 'min after close' : 'disabled'}`);
   console.log(
     `Watchdog: FDV=${watchdogFdvRange}, liquidity>=$${config.strategy.minLiquidityUsd}, ` +
-      `migrationAge=${config.strategy.maxTokenAgeMs > 0
-        ? `<=${config.strategy.maxMintAgeMinutes}min`
-        : 'unlimited'} ` +
+      `tokenAge=>=${config.strategy.minMintAgeHours}h/no maximum ` +
       `(check every ${watchdogCheckIntervalMs / 60_000}min)`,
   );
   console.log(`Fixed stop loss: ${config.strategy.fixedStopLossPct < 0 ? config.strategy.fixedStopLossPct + '%' : 'disabled'}`);
@@ -115,6 +125,14 @@ async function main() {
   );
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
+  if (config.strategy.exitMode === 'OLD_COIN_PULLBACK_V10') {
+    console.log(
+      `Old-coin exits: 3s=${config.strategy.oldCoinFastExitPnlPct}%+new-low+negative-flow, ` +
+      `15s MFE<${config.strategy.oldCoinNoBounceMaxMfePct}%+no-positive-flow, ` +
+      `60s MFE<${config.strategy.oldCoinWeakBounceMaxMfePct}%, ` +
+      `LP ${config.strategy.oldCoinLpExitWindowMs / 1000}s drop>=${config.strategy.oldCoinLpExitDropPct}%`,
+    );
+  }
   if (config.strategy.exitMode === 'DUMP_BACKRUN_V9') {
     console.log(
       `V9 risk policy: entryAge=${config.strategy.dumpBackrunMaxEntryAgeMs > 0
@@ -206,6 +224,64 @@ async function main() {
   positionManager.tickStream = tickStream;
   // v3.17.12: DumpDetector 查询 sig 的首次来源（SS vs LS）
   dumpDetector._tickStream = tickStream;
+
+  const competitorWatchlistAdds = new Map();
+  const addCompetitorBuyToWatchlist = async (mint, event = {}) => {
+    const existing = tokenRegistry.getToken(mint);
+    if (existing && Number(existing.is_active) === 1) return existing;
+    tickStream.addCompetitorMint(mint);
+    const pending = competitorWatchlistAdds.get(mint);
+    if (pending) return pending;
+
+    const task = (async () => {
+      const markets = await fetchTokenMarketsFromDexScreener([{ mint }]);
+      const market = markets.get(mint);
+      if (!market) {
+        const err = new Error('DEX Screener returned no Solana market');
+        err.code = 'COMPETITOR_MARKET_MISSING';
+        throw err;
+      }
+      const pairCreatedAt = Number(market.pairCreatedAt) || null;
+      const token = await tokenRegistry.addToken(mint, {
+        source: 'competitor_buy',
+        symbol: market.symbol || null,
+        meta: { ...market, decimals: 6 },
+        poolAddress: market.pairAddress || null,
+        creationTime: pairCreatedAt,
+        migrationTime: pairCreatedAt,
+        migrationTimeSource: pairCreatedAt ? 'dexscreener_pairCreatedAt' : null,
+        fetchCreationTime: !pairCreatedAt,
+      });
+      await tickStream.updateSubscription(tokenRegistry.listActive().map((row) => row.mint));
+      if (!token?.pool_base_vault || !token?.pool_quote_vault) {
+        fillPoolForToken(tokenRegistry, mint).catch((err) => {
+          console.warn(`[competitor-watchlist] pool fill failed ${mint.slice(0, 8)}: ${err.message}`);
+        });
+      }
+      console.log(
+        `[competitor-watchlist] ADD ${token?.symbol || mint.slice(0, 8)} ` +
+        `wallet=${event.wallet || 'unknown'} age>=${config.strategy.minMintAgeHours}h`,
+      );
+      monitor.inc('CompetitorForensics.watchlistAdded', 1, 'CompetitorForensics');
+      return token;
+    })().catch((err) => {
+      const expected = ['TOKEN_TOO_YOUNG', 'TOKEN_AGE_UNKNOWN'].includes(err.code);
+      const log = expected ? console.log : console.warn;
+      log(`[competitor-watchlist] SKIP ${mint.slice(0, 8)}: ${err.message}`);
+      monitor.inc(
+        expected
+          ? 'CompetitorForensics.watchlistAgeRejected'
+          : 'CompetitorForensics.watchlistAddFailed',
+        1,
+        'CompetitorForensics',
+      );
+      return null;
+    }).finally(() => {
+      if (competitorWatchlistAdds.get(mint) === task) competitorWatchlistAdds.delete(mint);
+    });
+    competitorWatchlistAdds.set(mint, task);
+    return task;
+  };
   // v3.17.17: SS pre-warm 需要 tokenRegistry 做 base_vault → mint 反查
   tickStream.setTokenRegistry(tokenRegistry);
 
@@ -259,33 +335,19 @@ async function main() {
   const competitorForensics = new CompetitorForensics({
     db: tokenRegistry.db,
     wallets: competitorWallets,
-    onMintDiscovered: (mint) => tickStream.addCompetitorMint(mint),
+    onMintDiscovered: addCompetitorBuyToWatchlist,
     fetchTokenContext: (
       (process.env.COMPETITOR_FORENSICS_MARKET_ENRICH ?? 'true').toLowerCase() === 'true'
     ) ? async (mint) => {
-      const {
-        fetchTokenFullInfo,
-        fetchTokenCreationTime,
-      } = require('./utils/tokenMeta');
-      const [fullResult, creationResult] = await Promise.allSettled([
-        fetchTokenFullInfo(mint),
-        fetchTokenCreationTime(mint),
-      ]);
-      if (fullResult.status === 'rejected' && creationResult.status === 'rejected') {
-        throw new Error(
-          `token context unavailable: ${fullResult.reason?.message || fullResult.reason}; ` +
-          `${creationResult.reason?.message || creationResult.reason}`,
-        );
-      }
+      const markets = await fetchTokenMarketsFromDexScreener([{ mint }]);
+      const market = markets.get(mint);
+      if (!market) throw new Error('DEX Screener returned no competitor token context');
       return {
-        ...(fullResult.status === 'fulfilled' ? fullResult.value : {}),
-        ...(creationResult.status === 'fulfilled' ? creationResult.value : {}),
-        fullInfoError: fullResult.status === 'rejected'
-          ? fullResult.reason?.message || String(fullResult.reason)
+        ...market,
+        creationTime: market.pairCreatedAt
+          ? Math.floor(Number(market.pairCreatedAt) / 1000)
           : null,
-        creationTimeError: creationResult.status === 'rejected'
-          ? creationResult.reason?.message || String(creationResult.reason)
-          : null,
+        creationTimeSource: market.pairCreatedAt ? 'dexscreener_pairCreatedAt' : null,
       };
     } : null,
     slotToWallClockMs: (slot) => tickStream.slotToWallClockMs(slot),
@@ -298,9 +360,14 @@ async function main() {
     poolStateCache: executor.poolStateCache || null, // 买入瞬间池子 SOL 流动性
     fetchTokenInfo: async (mint) => {          // 代币侧特征（FDV/流动性/24h量），异步不阻塞
       try {
-        const { fetchTokenFullInfo } = require('./utils/tokenMeta');
-        const info = await fetchTokenFullInfo(mint);
-        return { fdv: info.fdv, liquidity: info.liquidity, holders: info.holders ?? null, volume24h: info.volume24h };
+        const markets = await fetchTokenMarketsFromDexScreener([{ mint }]);
+        const market = markets.get(mint);
+        return market ? {
+          fdv: market.fdv,
+          liquidity: market.liquidity,
+          holders: null,
+          volume24h: market.volume24h,
+        } : null;
       } catch (_) { return null; }
     },
     enrichEntry: (process.env.COMPETITOR_ENRICH ?? 'true').toLowerCase() === 'true',

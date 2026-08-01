@@ -401,7 +401,7 @@ async function main() {
     const exact = extractBuyExactQuoteInAmounts(instructions);
     assert.ok(exact, 'buy_exact_quote_in instruction missing');
     assert.strictEqual(exact.spendableQuoteIn, 200000000n);
-    assert.strictEqual(exact.minBaseAmountOut, 176992n);
+    assert.strictEqual(exact.minBaseAmountOut, 190477n);
     assert.strictEqual(exact.trackVolume, true);
     return {
       serialized: Buffer.alloc(65),
@@ -446,10 +446,10 @@ async function main() {
   assert.strictEqual(quoteCalls, 1);
   assert.strictEqual(liveResult.stateSource, 'stream-post-swap');
   assert.strictEqual(liveResult.buyMode, 'buy_exact_quote_in');
-  assert.ok(liveResult.effectiveSlippagePct > 8 && liveResult.effectiveSlippagePct < 9);
-  assert.ok(liveResult.maxPrice === 1.13);
+  assert.ok(liveResult.effectiveSlippagePct > 1 && liveResult.effectiveSlippagePct < 2);
+  assert.ok(liveResult.maxPrice === 1.05);
   assert.strictEqual(liveResult.maxQuoteSol, 0.2);
-  assert.strictEqual(liveResult.minBaseAmountOutRaw, '176992');
+  assert.strictEqual(liveResult.minBaseAmountOutRaw, '190477');
   assert.strictEqual(liveResult.virtualQuoteReservesRaw, '5000000000');
   assert.strictEqual(liveResult.effectiveQuoteReserveRaw, '105000000000');
   assert.strictEqual(liveResult.poolBaseAmountRaw, '1000000000000');

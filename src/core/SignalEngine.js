@@ -245,6 +245,10 @@ class SignalEngine extends EventEmitter {
       return this._handleReboundEntrySignal(signal, _signalReceivedAt);
     }
 
+    if (signal._oldCoinPullbackEntry) {
+      return this._handleOldCoinPullbackSignal(signal, _signalReceivedAt);
+    }
+
     if (signal._age3Entry) {
       return this._handleAge3EntrySignal(signal, _signalReceivedAt);
     }
@@ -1210,6 +1214,131 @@ class SignalEngine extends EventEmitter {
     const inSignalEngineMs = Date.now() - signalReceivedAt;
     monitor.set('SignalEngine.lastInEngineMs', inSignalEngineMs, 'SignalEngine');
     monitor.set('SignalEngine.lastReboundSlot', slot || 0, 'SignalEngine');
+  }
+
+  _handleOldCoinPullbackSignal(signal, signalReceivedAt) {
+    const { mint, symbol, signature, ts, slot } = signal;
+    if (!mint) return;
+
+    if (signature && this.ourSignatures.has(signature)) {
+      monitor.inc('SignalEngine.rejectedSelfTrigger', 1, 'SignalEngine');
+      this._logReject(signal, 'self-triggered');
+      return;
+    }
+
+    const signalAgeMs = ts ? Date.now() - ts : 0;
+    const maxSignalAgeMs = config.activityFlow.maxSignalAgeMs || 2_000;
+    if (maxSignalAgeMs > 0 && signalAgeMs > maxSignalAgeMs) {
+      monitor.inc('SignalEngine.rejectedPushLag', 1, 'SignalEngine');
+      this._logReject(signal, `old-coin signal stale: ${signalAgeMs}ms>${maxSignalAgeMs}ms`);
+      return;
+    }
+
+    const token = this.tokenRegistry?.getToken(mint);
+    if (!token || Number(token.is_active) !== 1) {
+      this._logReject(signal, 'mint is not active in watchlist');
+      return;
+    }
+    const ageAnchor = normalizeUnixMs(token.migration_time) || normalizeUnixMs(token.creation_time);
+    const tokenAgeMs = ageAnchor ? Date.now() - ageAnchor : null;
+    if (tokenAgeMs == null || tokenAgeMs < config.strategy.minTokenAgeMs) {
+      monitor.inc('SignalEngine.rejectedYoungMint', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        tokenAgeMs == null
+          ? 'token AGE unknown'
+          : `token AGE ${(tokenAgeMs / 3_600_000).toFixed(1)}h<${config.strategy.minMintAgeHours}h`,
+      );
+      return;
+    }
+
+    const fdv = Number(token.fdv);
+    const liquidity = Number(token.liquidity);
+    if (!Number.isFinite(fdv) || fdv < config.strategy.minFdVUsd || fdv > config.strategy.maxFdVUsd) {
+      this._logReject(signal, `FDV ${Number.isFinite(fdv) ? `$${Math.round(fdv)}` : 'unknown'} outside strategy range`);
+      return;
+    }
+    if (!Number.isFinite(liquidity) || liquidity < config.strategy.minLiquidityUsd) {
+      this._logReject(signal, `liquidity ${Number.isFinite(liquidity) ? `$${Math.round(liquidity)}` : 'unknown'}<` +
+        `$${config.strategy.minLiquidityUsd}`);
+      return;
+    }
+
+    const successfulBuys24h = this.tradeLogger.countSuccessfulLiveBuysByMint(
+      mint,
+      Date.now() - 24 * 60 * 60_000,
+    );
+    if (
+      successfulBuys24h < 0 ||
+      successfulBuys24h >= config.strategy.oldCoinMaxSuccessfulBuys24h
+    ) {
+      monitor.inc('SignalEngine.rejectedDailyMintLimit', 1, 'SignalEngine');
+      this._logReject(
+        signal,
+        successfulBuys24h < 0
+          ? '24h successful-buy count unavailable'
+          : `24h successful buys ${successfulBuys24h}>=${config.strategy.oldCoinMaxSuccessfulBuys24h}`,
+      );
+      return;
+    }
+
+    const openCount = this.positionManager.openPositionCount();
+    const inflightCount = this.inflightBuys.size;
+    if (openCount + inflightCount >= config.strategy.maxConcurrentPositions) {
+      this._logReject(signal, 'max concurrent positions reached');
+      return;
+    }
+    const protectionRemainingMs = this._getMintProtectionRemainingMs(mint);
+    if (protectionRemainingMs > 0) {
+      this._logReject(signal, `mint cooldown ${Math.ceil(protectionRemainingMs / 1000)}s remaining`);
+      return;
+    }
+    if (this.inflightBuys.has(mint) || this.positionManager.hasOpenPosition(mint)) {
+      this._logReject(signal, 'same mint already open or buy in-flight');
+      return;
+    }
+
+    const pullback = signal._flow?.entryOldCoin;
+    if (!pullback) {
+      this._logReject(signal, 'old-coin pullback metrics missing');
+      return;
+    }
+    const reason =
+      `old_coin_pullback_v10: drop=${pullback.dropPct.toFixed(2)}% ` +
+      `recovery=${pullback.recoveryPct.toFixed(2)}% buyers=${pullback.confirmingBuyerCount} ` +
+      `sell=${pullback.drivingSellSol.toFixed(2)}SOL tier=${pullback.priority ? 'priority' : 'standard'} ` +
+      `age=${(tokenAgeMs / 3_600_000).toFixed(1)}h fdv=$${Math.round(fdv)} lp=$${Math.round(liquidity)}`;
+
+    monitor.inc('SignalEngine.signalsAccepted', 1, 'SignalEngine');
+    monitor.inc('SignalEngine.oldCoinPullbackAccepted', 1, 'SignalEngine');
+    this.inflightBuys.add(mint);
+    this.lastTriggerTs.set(mint, Date.now());
+    this.emit('buyOrder', {
+      ...signal,
+      reason,
+      sizeSol: config.strategy.positionSizeSol,
+      _signalReceivedAt: signalReceivedAt,
+    });
+    console.log(`[SignalEngine] BUY_SIGNAL ${symbol || mint.slice(0, 6)}: ${reason}`);
+    setImmediate(() => {
+      try {
+        this.tradeLogger.logSignal({
+          ts,
+          mint,
+          symbol,
+          kind: 'BUY_SIGNAL',
+          sellSol: signal.sellSol || 0,
+          priceImpactPct: signal.priceImpactPct || 0,
+          seller: pullback.drivingSeller || null,
+          sellerTx: signature,
+          notes: reason,
+          accepted: true,
+        });
+      } catch (err) {
+        monitor.recordError('SignalEngine', err, { phase: 'old_coin_log_signal', mint });
+      }
+    });
+    monitor.set('SignalEngine.lastOldCoinSlot', slot || 0, 'SignalEngine');
   }
 
   _handleAge3EntrySignal(signal, signalReceivedAt) {

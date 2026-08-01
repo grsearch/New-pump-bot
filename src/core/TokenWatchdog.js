@@ -30,22 +30,28 @@ class TokenWatchdog {
     this.maxWatchDurationMs = process.env.MAX_WATCH_DURATION_MS != null
       ? parseInt(process.env.MAX_WATCH_DURATION_MS, 10)
       : config.strategy.maxWatchDurationMs;
+    this.minTokenAgeMs = config.strategy.minTokenAgeMs || 0;
     this.maxTokenAgeMs = config.strategy.maxTokenAgeMs;
-    const configuredMinFdvUsd = process.env.MIN_FDV_USD != null
+    const oldCoinMode = config.activityFlow.entryMode === 'OLD_COIN_PULLBACK_V10';
+    const configuredMinFdvUsd = !oldCoinMode && process.env.MIN_FDV_USD != null
       ? parseFloat(process.env.MIN_FDV_USD)
       : config.strategy.minFdVUsd;
     this.minFdVUsd = Math.max(
       Number.isFinite(configuredMinFdvUsd) ? configuredMinFdvUsd : 0,
       config.strategy.positionFdvExitUsd || 0,
     );
-    this.maxFdVUsd = process.env.MAX_FDV_USD != null
+    this.maxFdVUsd = !oldCoinMode && process.env.MAX_FDV_USD != null
       ? parseFloat(process.env.MAX_FDV_USD)
       : (config.strategy.maxFdVUsd || 0);
-    this.minLiquidityUsd = process.env.MIN_LIQUIDITY_USD != null
+    this.minLiquidityUsd = !oldCoinMode && process.env.MIN_LIQUIDITY_USD != null
       ? parseFloat(process.env.MIN_LIQUIDITY_USD)
       : config.strategy.minLiquidityUsd;
-    this.minVolume24hUsd = parseFloat(process.env.MIN_VOLUME_24H_USD || '20000');
-    this.noBuyRemoveMs = parseInt(process.env.NO_BUY_REMOVE_MS || '86400000', 10);
+    this.minVolume24hUsd = oldCoinMode
+      ? 0
+      : parseFloat(process.env.MIN_VOLUME_24H_USD || '20000');
+    this.noBuyRemoveMs = oldCoinMode
+      ? 0
+      : parseInt(process.env.NO_BUY_REMOVE_MS || '86400000', 10);
     const configuredCheckIntervalMs = Math.max(
       10_000,
       parseInt(process.env.WATCHDOG_CHECK_INTERVAL_MS || '60000', 10),
@@ -84,6 +90,7 @@ class TokenWatchdog {
       `market=dexscreener(batch ${this.marketBatchSize})+birdeye fallback`,
     ];
     if (this.maxWatchDurationMs > 0) features.push(`maxWatch=${this.maxWatchDurationMs / 60000}min`);
+    if (this.minTokenAgeMs > 0) features.push(`minAge=${this.minTokenAgeMs / 3600000}h`);
     if (this.maxTokenAgeMs > 0) features.push(`maxAge=${this.maxTokenAgeMs / 60000}min`);
     if (this.minFdVUsd > 0) features.push(`minFDV=$${this.minFdVUsd}`);
     if (this.maxFdVUsd > 0) features.push(`maxFDV=$${this.maxFdVUsd}`);
@@ -96,6 +103,7 @@ class TokenWatchdog {
   start() {
     if (
       this.maxWatchDurationMs <= 0 &&
+      this.minTokenAgeMs <= 0 &&
       this.maxTokenAgeMs <= 0 &&
       this.minFdVUsd <= 0 &&
       this.maxFdVUsd <= 0 &&
@@ -139,14 +147,15 @@ class TokenWatchdog {
     return Number.isFinite(updatedAt) && updatedAt > 0 && now - updatedAt <= this.marketStaleMs;
   }
 
-  _getMigrationAgeMs(token, now = Date.now()) {
-    const migrationTime = normalizeUnixMs(token?.migration_time);
-    if (!migrationTime) return null;
-    return Math.max(0, now - migrationTime);
+  _getTokenAgeMs(token, now = Date.now()) {
+    const ageAnchor = normalizeUnixMs(token?.migration_time) ||
+      normalizeUnixMs(token?.creation_time);
+    if (!ageAnchor) return null;
+    return Math.max(0, now - ageAnchor);
   }
 
   _isTokenTooOld(token, now = Date.now()) {
-    const ageMs = this._getMigrationAgeMs(token, now);
+    const ageMs = this._getTokenAgeMs(token, now);
     return ageMs != null && this.maxTokenAgeMs > 0 && ageMs > this.maxTokenAgeMs;
   }
 
@@ -284,7 +293,11 @@ class TokenWatchdog {
     for (const token of activeTokens) {
       const reasons = [];
 
-      const tokenAgeMs = this._getMigrationAgeMs(token, now);
+      const tokenAgeMs = this._getTokenAgeMs(token, now);
+      if (this.minTokenAgeMs > 0 && (tokenAgeMs == null || tokenAgeMs < this.minTokenAgeMs)) {
+        const actual = tokenAgeMs == null ? 'unknown' : `${(tokenAgeMs / 3600000).toFixed(1)}h`;
+        reasons.push(`token_age(${actual} < ${this.minTokenAgeMs / 3600000}h)`);
+      }
       if (tokenAgeMs != null && this.maxTokenAgeMs > 0 && tokenAgeMs > this.maxTokenAgeMs) {
         reasons.push(
           `migration_age(${Math.ceil(tokenAgeMs / 60000)}min > ` +

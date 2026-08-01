@@ -1558,6 +1558,18 @@ ${snapshotColumnsSql},
     } catch (_) { return -1; }
   }
 
+  countSuccessfulLiveBuysByMint(mint, sinceMs) {
+    try {
+      const row = this.db.prepare(
+        "SELECT count(*) AS cnt FROM trades " +
+          "WHERE mint = ? AND side = 'BUY' AND success = 1 AND dry_run = 0 AND ts >= ?",
+      ).get(mint, sinceMs);
+      return row ? Number(row.cnt) || 0 : 0;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   hasSuccessfulBuyForMint(mint) {
     const row = this.db.prepare(
       "SELECT 1 AS found FROM trades " +

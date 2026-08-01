@@ -165,6 +165,24 @@ class OrderFlowTracker extends EventEmitter {
       opts.reboundCooldownMs ??
       flowConfig.reboundCooldownMs ??
       numEnv('REBOUND_COOLDOWN_MS', 60_000);
+    this.oldCoinWindowMs =
+      opts.oldCoinWindowMs ?? flowConfig.oldCoinWindowMs ?? numEnv('OLD_COIN_PULLBACK_WINDOW_MS', 10_000);
+    this.oldCoinMinDropPct =
+      opts.oldCoinMinDropPct ?? flowConfig.oldCoinMinDropPct ?? numEnv('OLD_COIN_PULLBACK_MIN_DROP_PCT', 5);
+    this.oldCoinPriorityDropPct =
+      opts.oldCoinPriorityDropPct ?? flowConfig.oldCoinPriorityDropPct ?? numEnv('OLD_COIN_PULLBACK_PRIORITY_DROP_PCT', 15);
+    this.oldCoinMaxDropPct =
+      opts.oldCoinMaxDropPct ?? flowConfig.oldCoinMaxDropPct ?? numEnv('OLD_COIN_PULLBACK_MAX_DROP_PCT', 20);
+    this.oldCoinMinRecoveryPct =
+      opts.oldCoinMinRecoveryPct ?? flowConfig.oldCoinMinRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MIN_RECOVERY_PCT', 2);
+    this.oldCoinMaxRecoveryPct =
+      opts.oldCoinMaxRecoveryPct ?? flowConfig.oldCoinMaxRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MAX_RECOVERY_PCT', 5);
+    this.oldCoinMinTrades10s =
+      opts.oldCoinMinTrades10s ?? flowConfig.oldCoinMinTrades10s ?? numEnv('OLD_COIN_PULLBACK_MIN_TRADES_10S', 2);
+    this.oldCoinMaxLpDrop10sPct =
+      opts.oldCoinMaxLpDrop10sPct ?? flowConfig.oldCoinMaxLpDrop10sPct ?? numEnv('OLD_COIN_PULLBACK_MAX_LP_DROP_10S_PCT', 5);
+    this.oldCoinSignalCooldownMs =
+      opts.oldCoinSignalCooldownMs ?? flowConfig.oldCoinSignalCooldownMs ?? numEnv('OLD_COIN_PULLBACK_SIGNAL_COOLDOWN_MS', 10_000);
     this.breadthMinUniqueBuyers1m =
       opts.breadthMinUniqueBuyers1m ??
       flowConfig.breadthMinUniqueBuyers1m ??
@@ -349,6 +367,7 @@ class OrderFlowTracker extends EventEmitter {
     this.maxWindowMs = Math.max(
       90_000,
       this.reboundWindowMs,
+      this.oldCoinWindowMs,
       this.window5Ms,
       this.window15Ms,
       this.window30Ms,
@@ -421,6 +440,7 @@ class OrderFlowTracker extends EventEmitter {
       this.entryMode === 'BREADTH_BURST_V6' ||
       this.entryMode === 'AGE3_BREADTH_V7' ||
       this.entryMode === 'ONE_SECOND_REBOUND_V8' ||
+      this.entryMode === 'OLD_COIN_PULLBACK_V10' ||
       ev.side === 'BUY'
     ) {
       this._trySignal(state, ev);
@@ -513,6 +533,84 @@ class OrderFlowTracker extends EventEmitter {
           signature: dump?.signature || null,
           aggregated: !!dump?._aggregated,
         };
+      } else if (this.entryMode === 'OLD_COIN_PULLBACK_V10') {
+        const events = this._windowEvents(state, now, this.oldCoinWindowMs);
+        let peakIndex = -1;
+        let lowIndex = -1;
+        let peakPrice = 0;
+        let lowPrice = Infinity;
+        for (let index = 0; index < events.length; index += 1) {
+          const price = events[index].price;
+          if (price > peakPrice) {
+            peakPrice = price;
+            peakIndex = index;
+            lowPrice = Infinity;
+            lowIndex = -1;
+          }
+          if (peakIndex >= 0 && index > peakIndex && price < lowPrice) {
+            lowPrice = price;
+            lowIndex = index;
+          }
+        }
+        const dropPct = peakIndex >= 0 && lowIndex > peakIndex && peakPrice > lowPrice
+          ? ((peakPrice - lowPrice) / peakPrice) * 100
+          : 0;
+        const recoveryPct = lowPrice > 0 && Number.isFinite(lowPrice)
+          ? ((latest.price - lowPrice) / lowPrice) * 100
+          : 0;
+        const drivingSell = lowIndex > peakIndex
+          ? [...events.slice(peakIndex + 1, lowIndex + 1)].reverse().find((item) => (
+            item.side === 'SELL' && item.signer && item.signature &&
+            (item.priceChangePct < 0 || (item.priceBefore > 0 && item.price < item.priceBefore))
+          ))
+          : null;
+        const afterLow = lowIndex >= 0 ? events.slice(lowIndex + 1) : [];
+        const confirmingBuys = afterLow.filter((item) => (
+          item.side === 'BUY' && item.signer && item.signer !== drivingSell?.signer
+        ));
+        const laterSells = afterLow.filter((item) => item.side === 'SELL');
+        const largestLaterSell = laterSells.reduce(
+          (largest, item) => Math.max(largest, item.solVolume),
+          0,
+        );
+        const poolSamples = events
+          .map((item) => item.poolQuoteAfter)
+          .filter((value) => Number.isFinite(value) && value > 0);
+        const lpDropPct = poolSamples.length >= 2
+          ? Math.max(0, ((poolSamples[0] - poolSamples[poolSamples.length - 1]) / poolSamples[0]) * 100)
+          : 0;
+        const token = this.tokenRegistry?.getToken?.(mint);
+        const ageAnchor = normalizeUnixMs(token?.migration_time) || normalizeUnixMs(token?.creation_time);
+        const tokenAgeMs = ageAnchor ? now - ageAnchor : null;
+        const fdv = Number(token?.fdv);
+        const liquidity = Number(token?.liquidity);
+        conditions = {
+          age: tokenAgeMs != null && tokenAgeMs >= config.strategy.minTokenAgeMs,
+          fdv: Number.isFinite(fdv) && fdv >= config.strategy.minFdVUsd && fdv <= config.strategy.maxFdVUsd,
+          liquidity: Number.isFinite(liquidity) && liquidity >= config.strategy.minLiquidityUsd,
+          trades10s: events.length >= this.oldCoinMinTrades10s,
+          dropRange: dropPct >= this.oldCoinMinDropPct && dropPct <= this.oldCoinMaxDropPct,
+          sellDriven: Boolean(drivingSell),
+          sellerPressureEasing: Boolean(drivingSell) &&
+            largestLaterSell <= drivingSell.solVolume &&
+            sumVolume(laterSells) <= drivingSell.solVolume,
+          recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= this.oldCoinMaxRecoveryPct,
+          differentBuyer: confirmingBuys.length > 0,
+          poolStable: lpDropPct <= this.oldCoinMaxLpDrop10sPct,
+        };
+        armReady = conditions.age && conditions.fdv && conditions.liquidity &&
+          conditions.trades10s && conditions.dropRange && conditions.sellDriven;
+        triggerReady = Object.values(conditions).every(Boolean);
+        trigger = {
+          dropPct: round(dropPct, 3),
+          recoveryPct: round(recoveryPct, 3),
+          drivingSellSol: round(drivingSell?.solVolume || 0, 4),
+          confirmingBuyerCount: uniqueCount(confirmingBuys, 'signer'),
+          laterSellSol: round(sumVolume(laterSells), 4),
+          lpDropPct: round(lpDropPct, 3),
+          priority: dropPct >= this.oldCoinPriorityDropPct,
+        };
+        age3 = { tokenAgeMs, fdvUsd: fdv };
       } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         const arm = state.reboundArm;
         const currentPrice = latest.price;
@@ -648,6 +746,10 @@ class OrderFlowTracker extends EventEmitter {
           now - state.lastDumpAcceptedTs <= this.window60Ms;
         if (acceptedRecently) stage = 'signaled';
         else if (state.lastDumpSignal) stage = triggerReady ? 'ready' : 'cancelled';
+      } else if (this.entryMode === 'OLD_COIN_PULLBACK_V10') {
+        if (recentlySignaled || state.oldCoinDecision === 'signaled') stage = 'signaled';
+        else if (triggerReady) stage = 'ready';
+        else if (armReady) stage = 'confirming';
       } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         if (recentlySignaled) stage = 'signaled';
         else if (reboundArmed && triggerReady) stage = 'ready';
@@ -670,14 +772,18 @@ class OrderFlowTracker extends EventEmitter {
       summary.active++;
       if (conditions.volume1m) summary.volumeReady++;
       if (conditions.ageWindow) summary.windowReady++;
+      if (conditions.age) summary.windowReady++;
       if (conditions.fdv) summary.fdvReady++;
       if (conditions.buyers1m) summary.buyersReady++;
       if (conditions.buyers1s) summary.buyersReady++;
+      if (conditions.differentBuyer) summary.buyersReady++;
       if (conditions.dropRange) summary.dropReady++;
       if (conditions.recovery) summary.recoveryReady++;
       if (conditions.sellSize) summary.sellReady++;
+      if (conditions.sellDriven) summary.sellReady++;
       if (conditions.impactRange) summary.impactReady++;
       if (conditions.poolLiquidity) summary.poolReady++;
+      if (conditions.liquidity && conditions.poolStable) summary.poolReady++;
       if (conditions.signalFresh) summary.freshReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
@@ -712,6 +818,8 @@ class OrderFlowTracker extends EventEmitter {
         decision:
           this.entryMode === 'DUMP_BACKRUN_V9'
             ? state.dumpDecision
+            : this.entryMode === 'OLD_COIN_PULLBACK_V10'
+            ? state.oldCoinDecision
             : this.entryMode === 'ONE_SECOND_REBOUND_V8'
             ? state.reboundDecision
             : state.age3Decision,
@@ -748,6 +856,11 @@ class OrderFlowTracker extends EventEmitter {
       if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         return (Number(b.conditions.dropRange) - Number(a.conditions.dropRange)) ||
           ((b.trigger.recoveryPct || 0) - (a.trigger.recoveryPct || 0)) ||
+          (b.updatedAt - a.updatedAt);
+      }
+      if (this.entryMode === 'OLD_COIN_PULLBACK_V10') {
+        return (Number(b.triggerReady) - Number(a.triggerReady)) ||
+          ((b.trigger.dropPct || 0) - (a.trigger.dropPct || 0)) ||
           (b.updatedAt - a.updatedAt);
       }
       return (Number(b.conditions.volume1m) - Number(a.conditions.volume1m)) ||
@@ -790,6 +903,14 @@ class OrderFlowTracker extends EventEmitter {
         reboundConfirmMaxGapMs: this.reboundConfirmMaxGapMs,
         reboundMinUniqueBuyers1s: this.reboundMinUniqueBuyers1s,
         reboundCooldownMs: this.reboundCooldownMs,
+        oldCoinWindowMs: this.oldCoinWindowMs,
+        oldCoinMinDropPct: this.oldCoinMinDropPct,
+        oldCoinPriorityDropPct: this.oldCoinPriorityDropPct,
+        oldCoinMaxDropPct: this.oldCoinMaxDropPct,
+        oldCoinMinRecoveryPct: this.oldCoinMinRecoveryPct,
+        oldCoinMaxRecoveryPct: this.oldCoinMaxRecoveryPct,
+        oldCoinMinTrades10s: this.oldCoinMinTrades10s,
+        oldCoinMaxLpDrop10sPct: this.oldCoinMaxLpDrop10sPct,
         buyers1m: this.breadthMinUniqueBuyers1m,
         age3TargetMs: this.age3EntryTargetMs,
         age3ToleranceMs: this.age3EntryToleranceMs,
@@ -845,6 +966,9 @@ class OrderFlowTracker extends EventEmitter {
         reboundDecision: null,
         reboundLastDropPct: null,
         reboundLastRecoveryPct: null,
+        oldCoinDecision: null,
+        oldCoinLastDropPct: null,
+        oldCoinLastRecoveryPct: null,
         firstBuySeen: new Map(),
         lastWalletPruneTs: 0,
       };
@@ -1025,6 +1149,11 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
 
+    if (this.entryMode === 'OLD_COIN_PULLBACK_V10') {
+      this._tryOldCoinPullbackV10(state, ev, wallNow);
+      return;
+    }
+
     if (this.entryMode === 'AGE3_BREADTH_V7') {
       this._tryAge3BreadthV7(state, ev);
       return;
@@ -1084,6 +1213,117 @@ class OrderFlowTracker extends EventEmitter {
     console.log(
       `[ActivityFlow] REBOUND_CANCEL ${state.symbol || ev.mint.slice(0, 6)}: ${reason}`,
     );
+  }
+
+  _tryOldCoinPullbackV10(state, ev, wallNow) {
+    if (ev.side !== 'BUY') return;
+
+    const events = this._windowEvents(state, ev.ts, this.oldCoinWindowMs);
+    if (events.length < this.oldCoinMinTrades10s) return;
+
+    let peakIndex = -1;
+    let lowIndex = -1;
+    let peakPrice = 0;
+    let lowPrice = Infinity;
+    for (let index = 0; index < events.length; index += 1) {
+      const price = events[index].price;
+      if (price > peakPrice) {
+        peakPrice = price;
+        peakIndex = index;
+        lowPrice = Infinity;
+        lowIndex = -1;
+      }
+      if (peakIndex >= 0 && index > peakIndex && price < lowPrice) {
+        lowPrice = price;
+        lowIndex = index;
+      }
+    }
+    if (peakIndex < 0 || lowIndex <= peakIndex || !(lowPrice > 0) || !(peakPrice > lowPrice)) return;
+
+    const dropPct = ((peakPrice - lowPrice) / peakPrice) * 100;
+    const recoveryPct = ((ev.price - lowPrice) / lowPrice) * 100;
+    state.oldCoinLastDropPct = dropPct;
+    state.oldCoinLastRecoveryPct = recoveryPct;
+
+    if (dropPct > this.oldCoinMaxDropPct) {
+      state.oldCoinDecision = `drop>${this.oldCoinMaxDropPct}%`;
+      return;
+    }
+    if (dropPct < this.oldCoinMinDropPct) return;
+    if (recoveryPct < this.oldCoinMinRecoveryPct || recoveryPct > this.oldCoinMaxRecoveryPct) return;
+
+    const lowEvent = events[lowIndex];
+    const drivingSell = [...events.slice(peakIndex + 1, lowIndex + 1)]
+      .reverse()
+      .find((event) => (
+        event.side === 'SELL' &&
+        event.signer &&
+        event.signature &&
+        (event.priceChangePct < 0 || (event.priceBefore > 0 && event.price < event.priceBefore))
+      ));
+    if (!drivingSell) {
+      state.oldCoinDecision = 'drop_not_confirmed_by_sell';
+      return;
+    }
+
+    const afterLow = events.slice(lowIndex + 1);
+    const confirmingBuys = afterLow.filter((event) => (
+      event.side === 'BUY' && event.signer && event.signer !== drivingSell.signer
+    ));
+    if (confirmingBuys.length === 0) return;
+
+    const laterSells = afterLow.filter((event) => event.side === 'SELL');
+    const largestLaterSell = laterSells.reduce((max, event) => Math.max(max, event.solVolume), 0);
+    const laterSellSol = sumVolume(laterSells);
+    if (largestLaterSell > drivingSell.solVolume || laterSellSol > drivingSell.solVolume) {
+      state.oldCoinDecision = 'seller_pressure_not_easing';
+      return;
+    }
+
+    const poolSamples = events
+      .map((event) => event.poolQuoteAfter)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    let lpDropPct = 0;
+    if (poolSamples.length >= 2) {
+      const referencePool = poolSamples[0];
+      const currentPool = poolSamples[poolSamples.length - 1];
+      lpDropPct = Math.max(0, ((referencePool - currentPool) / referencePool) * 100);
+      if (lpDropPct > this.oldCoinMaxLpDrop10sPct) {
+        state.oldCoinDecision = 'pool_depth_unstable';
+        return;
+      }
+    }
+
+    const s5 = this._stats(state, ev.ts, this.window5Ms);
+    const s10 = this._stats(state, ev.ts, this.oldCoinWindowMs);
+    const s15 = this._stats(state, ev.ts, this.window15Ms);
+    const s30 = this._stats(state, ev.ts, this.window30Ms);
+    const s60 = this._stats(state, ev.ts, this.window60Ms);
+    const poolQuoteSol = ev.poolQuoteAfter || state.lastPoolQuoteAfter || null;
+    this._emitBuySignal(state, ev, {
+      s5,
+      s10,
+      s15,
+      s30,
+      s60,
+      poolQuoteSol,
+      oldCoinPattern: {
+        peakPrice,
+        lowPrice,
+        lowTs: lowEvent.ts,
+        dropPct,
+        recoveryPct,
+        priority: dropPct >= this.oldCoinPriorityDropPct,
+        drivingSellSol: drivingSell.solVolume,
+        drivingSeller: drivingSell.signer,
+        confirmingBuyerCount: uniqueCount(confirmingBuys, 'signer'),
+        laterSellSol,
+        lpDropPct,
+      },
+    });
+    state.oldCoinDecision = 'signaled';
+    state.lastV5SignalTs = ev.ts;
+    this.cooldowns.set(ev.mint, wallNow + this.oldCoinSignalCooldownMs);
   }
 
   _tryOneSecondReboundV8(state, ev, wallNow) {
@@ -1589,6 +1829,7 @@ class OrderFlowTracker extends EventEmitter {
       v6Pattern = null,
       age3Pattern = null,
       reboundPattern = null,
+      oldCoinPattern = null,
     },
   ) {
     const flow = {
@@ -1602,6 +1843,7 @@ class OrderFlowTracker extends EventEmitter {
       entryV5: v5Pattern ? this._compactV5Pattern(v5Pattern) : null,
       entryV6: v6Pattern ? this._compactV6Pattern(v6Pattern) : null,
       entryRebound: reboundPattern ? this._compactReboundPattern(reboundPattern) : null,
+      entryOldCoin: oldCoinPattern ? this._compactOldCoinPattern(oldCoinPattern) : null,
       entryAge3: age3Pattern ? {
         migrationTs: age3Pattern.migrationTs,
         tokenAgeMs: round(age3Pattern.tokenAgeMs, 0),
@@ -1609,7 +1851,7 @@ class OrderFlowTracker extends EventEmitter {
         uniqueBuyers1m: age3Pattern.uniqueBuyers1m,
       } : null,
     };
-    const entryStats = flow.entryRebound ? s1 : (
+    const entryStats = flow.entryRebound ? s1 : flow.entryOldCoin ? s10 : (
       this.entryMode === 'FLOW_ACCEL_15S' ||
       this.entryMode === 'VOLUME_RATIO_1M' ||
       this.entryMode === 'ACTIVITY_BURST_V5' ||
@@ -1624,7 +1866,7 @@ class OrderFlowTracker extends EventEmitter {
       priceImpactPct: round(Math.max(0, -entryStats.priceChangePct), 3),
       poolQuoteAfter: poolQuoteSol,
       poolQuoteSol,
-      seller: null,
+      seller: flow.entryOldCoin?.drivingSeller || null,
       signature: `activity:${ev.signature || `${ev.mint}:${ev.ts}`}`,
       ts: ev.ts,
       slot: ev.slot || 0,
@@ -1635,6 +1877,7 @@ class OrderFlowTracker extends EventEmitter {
       _activityFlow: true,
       _age3Entry: !!flow.entryAge3,
       _reboundEntry: !!flow.entryRebound,
+      _oldCoinPullbackEntry: !!flow.entryOldCoin,
       _sellCount: entryStats.sellCount,
       _sellCount10s: entryStats.sellCount,
       _totalSellSol10s: round(entryStats.sellSol, 4),
@@ -1642,13 +1885,23 @@ class OrderFlowTracker extends EventEmitter {
       _flow: flow,
       _flowPattern:
         flow.entryRebound ||
+        flow.entryOldCoin ||
         flow.entryAge3 ||
         flow.entryV6 ||
         flow.entryV5 ||
         flow.entry15s,
     };
 
-    if (flow.entryRebound) {
+    if (flow.entryOldCoin) {
+      console.log(
+        `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
+        `drop=${flow.entryOldCoin.dropPct.toFixed(2)}% ` +
+        `recovery=${flow.entryOldCoin.recoveryPct.toFixed(2)}% ` +
+        `buyers=${flow.entryOldCoin.confirmingBuyerCount} ` +
+        `sell=${flow.entryOldCoin.drivingSellSol.toFixed(2)}SOL ` +
+        `tier=${flow.entryOldCoin.priority ? 'priority' : 'standard'}`,
+      );
+    } else if (flow.entryRebound) {
       console.log(
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
         `drop=${flow.entryRebound.dropDepthPct.toFixed(2)}% ` +
@@ -1823,6 +2076,22 @@ class OrderFlowTracker extends EventEmitter {
       dropDepthPct: round(pattern.dropDepthPct, 3),
       recoveryPct: round(pattern.recoveryPct, 3),
       uniqueBuyers1s: pattern.uniqueBuyers1s,
+    };
+  }
+
+  _compactOldCoinPattern(pattern) {
+    return {
+      peakPrice: pattern.peakPrice,
+      lowPrice: pattern.lowPrice,
+      lowTs: pattern.lowTs,
+      dropPct: round(pattern.dropPct, 3),
+      recoveryPct: round(pattern.recoveryPct, 3),
+      priority: !!pattern.priority,
+      drivingSellSol: round(pattern.drivingSellSol, 4),
+      drivingSeller: pattern.drivingSeller || null,
+      confirmingBuyerCount: pattern.confirmingBuyerCount,
+      laterSellSol: round(pattern.laterSellSol, 4),
+      lpDropPct: round(pattern.lpDropPct, 3),
     };
   }
 

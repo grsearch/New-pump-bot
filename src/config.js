@@ -175,16 +175,10 @@ const config = {
     //   v3.17.19: 30秒 (30000ms) — 反弹窗口通常 5-30 秒
     //   v3.17.20: 设 0 禁用 TIMEOUT 卖出，持仓靠 TP/Trailing/Emergency 退出
     //   v3.17.32: 恢复为 4h 强制退出(数据回测: 4h+ 只有 30% 胜率, 平均亏 -13%)
-    // Activity strategies hard timeout: close every remaining position after 180 seconds.
+    // Final fallback: close every remaining position after 60 minutes.
     maxHoldMs: 60 * 60_000,
 
-    // Old-coin staged exits. These diagnose a bad entry before the 60-minute fallback.
-    oldCoinFastExitMs: 3_000,
-    oldCoinFastExitPnlPct: -5,
-    oldCoinNoBounceExitMs: 15_000,
-    oldCoinNoBounceMaxMfePct: 2,
-    oldCoinWeakBounceExitMs: 60_000,
-    oldCoinWeakBounceMaxMfePct: 5,
+    // Old-coin safety exit: remove the token if pool depth collapses.
     oldCoinLpExitWindowMs: 5_000,
     oldCoinLpExitDropPct: 10,
 

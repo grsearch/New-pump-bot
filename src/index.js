@@ -127,10 +127,8 @@ async function main() {
   console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
   if (config.strategy.exitMode === 'OLD_COIN_PULLBACK_V10') {
     console.log(
-      `Old-coin exits: 3s=${config.strategy.oldCoinFastExitPnlPct}%+new-low+negative-flow, ` +
-      `15s MFE<${config.strategy.oldCoinNoBounceMaxMfePct}%+no-positive-flow, ` +
-      `60s MFE<${config.strategy.oldCoinWeakBounceMaxMfePct}%, ` +
-      `LP ${config.strategy.oldCoinLpExitWindowMs / 1000}s drop>=${config.strategy.oldCoinLpExitDropPct}%`,
+      `Old-coin safety exit: LP ${config.strategy.oldCoinLpExitWindowMs / 1000}s ` +
+      `drop>=${config.strategy.oldCoinLpExitDropPct}%`,
     );
   }
   if (config.strategy.exitMode === 'DUMP_BACKRUN_V9') {

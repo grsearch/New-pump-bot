@@ -47,39 +47,25 @@ function position(now, ageMs, overrides = {}) {
 
 assert.strictEqual(config.strategy.fixedStopLossPct, 0);
 assert.strictEqual(config.strategy.takeProfitPct, 0);
-assert.strictEqual(config.strategy.oldCoinFastExitPnlPct, -5);
+assert.strictEqual(config.strategy.trailingActivatePct, 10);
+assert.strictEqual(config.strategy.trailingDrawdownPct, 5);
+assert.strictEqual(config.strategy.maxHoldMs, 60 * 60_000);
+assert.strictEqual(
+  typeof PositionManager.prototype._maybeOldCoinStagedExit,
+  'undefined',
+  '3s/15s/60s staged exits must remain removed',
+);
 
 {
   const now = Date.now();
-  const pos = position(now, 4_000, { _lastNewLowAt: now - 250 });
-  const manager = makeManager(pos, 0.94, [{
-    side: 'SELL', price: 0.94, solVolume: 2, ts: now - 100,
-  }]);
-  assert.strictEqual(manager._maybeOldCoinStagedExit(pos, now), true);
-  assert.strictEqual(manager.exits[0].reason, 'WRONG_ENTRY_3S');
-}
-
-{
-  const now = Date.now();
-  const pos = position(now, 16_000, {
-    highWaterMark: 1.019,
-    _maxObservedNetFlow: -0.1,
-  });
-  const manager = makeManager(pos, 0.99, []);
-  assert.strictEqual(manager._maybeOldCoinStagedExit(pos, now), true);
-  assert.strictEqual(manager.exits[0].reason, 'NO_BOUNCE_15S');
-}
-
-{
-  const now = Date.now();
-  const pos = position(now, 61_000, {
-    highWaterMark: 1.049,
-    _oldCoin15sChecked: true,
-    _maxObservedNetFlow: 1,
-  });
-  const manager = makeManager(pos, 1.01, []);
-  assert.strictEqual(manager._maybeOldCoinStagedExit(pos, now), true);
-  assert.strictEqual(manager.exits[0].reason, 'WEAK_BOUNCE_60S');
+  const pos = position(now, 10_000);
+  const manager = makeManager(pos, 0.99, [
+    { side: 'BUY', price: 1, solVolume: 1, ts: now - 4_000, poolQuoteSol: 100 },
+    { side: 'SELL', price: 0.99, solVolume: 1, ts: now - 100, poolQuoteSol: 89 },
+  ]);
+  manager._maybeOldCoinLpExit(pos, 0.99, now);
+  assert.strictEqual(manager.exits[0].reason, 'LP_DROP_5S');
+  assert.strictEqual(pos.removeAfterExit, true);
 }
 
 {
@@ -101,5 +87,5 @@ assert.strictEqual(config.strategy.oldCoinFastExitPnlPct, -5);
   assert.strictEqual(manager.exits[0].reason, 'TRAILING_STOP');
 }
 
-console.log('Old-coin staged exit tests: PASS');
+console.log('Old-coin exit policy tests: PASS');
 process.exit(0);

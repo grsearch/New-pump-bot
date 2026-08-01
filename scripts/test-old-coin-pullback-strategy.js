@@ -41,6 +41,13 @@ function event(mint, offsetMs, {
 
 function tracker(overrides = {}) {
   return new OrderFlowTracker({
+    tokenRegistry: {
+      getToken: () => ({
+        migration_time: BASE - (72 * 60 * 60_000),
+        fdv: 125_000,
+        liquidity: 25_000,
+      }),
+    },
     entryMode: 'OLD_COIN_PULLBACK_V10',
     oldCoinWindowMs: 10_000,
     oldCoinMinDropPct: 5,
@@ -103,6 +110,12 @@ assert.strictEqual(panel.thresholds.oldCoinMinDropPct, 5);
 assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 5);
 assert.strictEqual(panel.candidates[0].stage, 'signaled');
 assert.strictEqual(panel.candidates[0].trigger.priority, true);
+assert.strictEqual(panel.candidates[0].trigger.dropPct, 18);
+assert.strictEqual(panel.candidates[0].s10.tradeCount, 3);
+assert.strictEqual(panel.candidates[0].trigger.confirmingBuyerCount, 1);
+assert.strictEqual(panel.candidates[0].fdvUsd, 125_000);
+assert.strictEqual(panel.candidates[0].liquidityUsd, 25_000);
+assert.strictEqual(Math.round(panel.candidates[0].tokenAgeMs / 3_600_000), 72);
 
 const waterfall = tracker();
 const waterfallSignals = signals(waterfall);

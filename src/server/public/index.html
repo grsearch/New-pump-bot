@@ -270,7 +270,7 @@
 <body>
 
 <div class="header">
-  <h1>🎯 Dump Sniper <span class="v">Strategy V6</span></h1>
+  <h1>🎯 Dump Sniper <span class="v">Strategy V10</span></h1>
   <div class="badges">
     <a href="/reports.html" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;margin-right:8px;">📅 报告</a>
     <span id="modeBadge" class="badge dry">DRY_RUN</span>
@@ -798,8 +798,8 @@ async function refreshSignals() {
   const meta = $('strategySignalMeta');
   const tbody = $('signalsTbody');
   if (!r.ok) {
-    meta.innerHTML = `<span class="neg">${escapeHtml(r.error || 'V8 实时数据不可用')}</span>`;
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">等待 Strategy V8 数据</td></tr>';
+    meta.innerHTML = `<span class="neg">${escapeHtml(r.error || '策略实时数据不可用')}</span>`;
+    tbody.innerHTML = '<tr><td colspan="14" class="empty">等待策略数据</td></tr>';
     return;
   }
 
@@ -848,6 +848,76 @@ async function refreshSignals() {
             `${trigger.signalAgeMs == null ? '-' : trigger.signalAgeMs + 'ms'} / ≤${thresholds.dumpMaxSignalAgeMs}ms`,
             conditions.signalFresh,
             '不等待反弹确认',
+          )}</td>
+          <td>${_strategyStage(candidate, r.now || Date.now())}</td>
+        </tr>`;
+    }).join('');
+    return;
+  }
+
+  if (r.mode === 'OLD_COIN_PULLBACK_V10') {
+    $('strategySignalsHeader').innerHTML =
+      '<th>更新</th><th>Symbol</th><th>CA</th><th>10秒回调</th>' +
+      '<th>低点反弹</th><th>10秒成交</th><th>驱动卖单</th><th>确认买家</th>' +
+      '<th>卖压下降</th><th>池深变化</th><th>AGE</th><th>FDV</th><th>LP</th><th>阶段</th>';
+    meta.innerHTML = [
+      `<span>模式 <b>${escapeHtml(r.mode)}</b></span>`,
+      `<span>活跃 <b>${summary.active || 0}</b></span>`,
+      `<span>AGE达标 <b>${summary.windowReady || 0}</b></span>`,
+      `<span>FDV达标 <b>${summary.fdvReady || 0}</b></span>`,
+      `<span>回调达标 <b>${summary.dropReady || 0}</b></span>`,
+      `<span>卖出驱动 <b>${summary.sellReady || 0}</b></span>`,
+      `<span>反弹达标 <b>${summary.recoveryReady || 0}</b></span>`,
+      `<span>买家确认 <b>${summary.buyersReady || 0}</b></span>`,
+      `<span>信号 <b>${summary.signaled || 0}</b></span>`,
+    ].join('');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="14" class="empty">暂无老币回调候选</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(candidate => {
+      const conditions = candidate.conditions || {};
+      const tenSeconds = candidate.s10 || {};
+      const trigger = candidate.trigger || {};
+      const ageHours = candidate.tokenAgeMs == null
+        ? null
+        : Number(candidate.tokenAgeMs) / 3600000;
+      const ageText = Number.isFinite(ageHours)
+        ? `${_strategyNumber(ageHours, 1)}h / >=${_strategyNumber(thresholds.oldCoinMinAgeHours, 0)}h`
+        : '-';
+      return `
+        <tr>
+          <td class="mono">${fmtTime(candidate.updatedAt)}</td>
+          <td><b>${escapeHtml(candidate.symbol || (candidate.mint || '').slice(0,6))}</b></td>
+          ${caCell(candidate.mint)}
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.dropPct)}% / ${_strategyNumber(thresholds.oldCoinMinDropPct)}%-${_strategyNumber(thresholds.oldCoinMaxDropPct)}%${trigger.priority ? ' 优先' : ''}`,
+            conditions.dropRange,
+            `优先区 >=${_strategyNumber(thresholds.oldCoinPriorityDropPct)}%`,
+          )}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.recoveryPct)}% / ${_strategyNumber(thresholds.oldCoinMinRecoveryPct)}%-${_strategyNumber(thresholds.oldCoinMaxRecoveryPct)}%`,
+            conditions.recovery,
+          )}</td>
+          <td>${_strategyCondition(`${tenSeconds.tradeCount || 0} / >=${thresholds.oldCoinMinTrades10s || 0}`, conditions.trades10s)}</td>
+          <td>${_strategyCondition(`${_strategyNumber(trigger.drivingSellSol, 3)} SOL`, conditions.sellDriven)}</td>
+          <td>${_strategyCondition(`${trigger.confirmingBuyerCount || 0} / >=1`, conditions.differentBuyer, '必须与驱动卖家不同钱包')}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.laterSellSol, 3)} / ${_strategyNumber(trigger.drivingSellSol, 3)} SOL`,
+            conditions.sellerPressureEasing,
+          )}</td>
+          <td>${_strategyCondition(
+            `${_strategyNumber(trigger.lpDropPct)}% / <=${_strategyNumber(thresholds.oldCoinMaxLpDrop10sPct)}%`,
+            conditions.poolStable,
+          )}</td>
+          <td>${_strategyCondition(ageText, conditions.age)}</td>
+          <td>${_strategyCondition(
+            `${fmtMoney(candidate.fdvUsd)} / ${fmtMoney(thresholds.oldCoinMinFdvUsd)}-${fmtMoney(thresholds.oldCoinMaxFdvUsd)}`,
+            conditions.fdv,
+          )}</td>
+          <td>${_strategyCondition(
+            `${fmtMoney(candidate.liquidityUsd)} / >=${fmtMoney(thresholds.oldCoinMinLiquidityUsd)}`,
+            conditions.liquidity,
           )}</td>
           <td>${_strategyStage(candidate, r.now || Date.now())}</td>
         </tr>`;

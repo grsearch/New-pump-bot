@@ -610,7 +610,7 @@ class OrderFlowTracker extends EventEmitter {
           lpDropPct: round(lpDropPct, 3),
           priority: dropPct >= this.oldCoinPriorityDropPct,
         };
-        age3 = { tokenAgeMs, fdvUsd: fdv };
+        age3 = { tokenAgeMs, fdvUsd: fdv, liquidityUsd: liquidity };
       } else if (this.entryMode === 'ONE_SECOND_REBOUND_V8') {
         const arm = state.reboundArm;
         const currentPrice = latest.price;
@@ -825,6 +825,7 @@ class OrderFlowTracker extends EventEmitter {
             : state.age3Decision,
         tokenAgeMs: age3?.tokenAgeMs ?? null,
         fdvUsd: age3?.fdvUsd ?? null,
+        liquidityUsd: age3?.liquidityUsd ?? null,
         conditions,
         s60: {
           ...this._compactStats(s60),
@@ -911,6 +912,10 @@ class OrderFlowTracker extends EventEmitter {
         oldCoinMaxRecoveryPct: this.oldCoinMaxRecoveryPct,
         oldCoinMinTrades10s: this.oldCoinMinTrades10s,
         oldCoinMaxLpDrop10sPct: this.oldCoinMaxLpDrop10sPct,
+        oldCoinMinAgeHours: config.strategy.minMintAgeHours,
+        oldCoinMinFdvUsd: config.strategy.minFdVUsd,
+        oldCoinMaxFdvUsd: config.strategy.maxFdVUsd,
+        oldCoinMinLiquidityUsd: config.strategy.minLiquidityUsd,
         buyers1m: this.breadthMinUniqueBuyers1m,
         age3TargetMs: this.age3EntryTargetMs,
         age3ToleranceMs: this.age3EntryToleranceMs,

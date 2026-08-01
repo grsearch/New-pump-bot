@@ -187,8 +187,6 @@ class PositionManager extends EventEmitter {
       if (pos && !pos.exiting && pos.status !== 'stuck') {
         if (s.flowReversalExitEnabled) this._maybeFlowReversalExit(pos, price, ev.ts);
         if (oldCoinExit) {
-          const netFlow = this._recentNetFlow(pos.mint, ev.ts, Math.min(60_000, Math.max(1, ev.ts - (pos.openedAt || ev.ts))));
-          pos._maxObservedNetFlow = Math.max(pos._maxObservedNetFlow ?? -Infinity, netFlow);
           this._maybeOldCoinLpExit(pos, price, ev.ts);
         }
       }
@@ -238,63 +236,6 @@ class PositionManager extends EventEmitter {
     );
     monitor.inc('PositionManager.oldCoinLpExit', 1, 'PositionManager');
     this._exitForCondition(pos, price, 'LP_DROP_5S');
-  }
-
-  _maybeOldCoinStagedExit(pos, now) {
-    if (config.strategy.exitMode !== 'OLD_COIN_PULLBACK_V10') return false;
-    if (!pos || pos.exiting || pos.status === 'stuck') return false;
-    if (!pos.reconciled && !pos.dryRun) return false;
-
-    const openedAt = pos.reconciledAt || pos.openedAt || now;
-    const age = now - openedAt;
-    const price = Number(this.priceTracker.getPrice(pos.mint));
-    if (!Number.isFinite(price) || price <= 0 || !(pos.entryPrice > 0)) return false;
-    const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
-    const peakPnlPct = ((Math.max(pos.highWaterMark || pos.entryPrice, pos.entryPrice) - pos.entryPrice) / pos.entryPrice) * 100;
-    const netWindowMs = Math.max(1, Math.min(60_000, age));
-    const netFlow = this._recentNetFlow(pos.mint, now, netWindowMs);
-
-    if (
-      age >= config.strategy.oldCoinFastExitMs &&
-      age < config.strategy.oldCoinNoBounceExitMs &&
-      pnlPct <= config.strategy.oldCoinFastExitPnlPct &&
-      (pos._lastNewLowAt || 0) >= openedAt &&
-      now - pos._lastNewLowAt <= 2_000 &&
-      netFlow < 0
-    ) {
-      console.warn(
-        `[PositionManager] WRONG_ENTRY_3S ${pos.symbol || pos.mint.slice(0, 6)} ` +
-        `pnl=${pnlPct.toFixed(2)}% net=${netFlow.toFixed(2)}SOL newLow=true`,
-      );
-      this._exitForCondition(pos, price, 'WRONG_ENTRY_3S');
-      return true;
-    }
-
-    if (!pos._oldCoin15sChecked && age >= config.strategy.oldCoinNoBounceExitMs) {
-      pos._oldCoin15sChecked = true;
-      const neverTurnedPositive = !Number.isFinite(pos._maxObservedNetFlow) || pos._maxObservedNetFlow <= 0;
-      if (peakPnlPct < config.strategy.oldCoinNoBounceMaxMfePct && neverTurnedPositive) {
-        console.warn(
-          `[PositionManager] NO_BOUNCE_15S ${pos.symbol || pos.mint.slice(0, 6)} ` +
-          `peak=${peakPnlPct.toFixed(2)}% maxNet=${Number.isFinite(pos._maxObservedNetFlow) ? pos._maxObservedNetFlow.toFixed(2) : 'n/a'}SOL`,
-        );
-        this._exitForCondition(pos, price, 'NO_BOUNCE_15S');
-        return true;
-      }
-    }
-
-    if (!pos._oldCoin60sChecked && age >= config.strategy.oldCoinWeakBounceExitMs) {
-      pos._oldCoin60sChecked = true;
-      if (peakPnlPct < config.strategy.oldCoinWeakBounceMaxMfePct) {
-        console.warn(
-          `[PositionManager] WEAK_BOUNCE_60S ${pos.symbol || pos.mint.slice(0, 6)} ` +
-          `peak=${peakPnlPct.toFixed(2)}%<${config.strategy.oldCoinWeakBounceMaxMfePct}%`,
-        );
-        this._exitForCondition(pos, price, 'WEAK_BOUNCE_60S');
-        return true;
-      }
-    }
-    return false;
   }
 
   _maybeFlowReversalExit(pos, price, now) {
@@ -1247,7 +1188,6 @@ class PositionManager extends EventEmitter {
           continue;
         }
       }
-      if (this._maybeOldCoinStagedExit(pos, now)) continue;
       const timeoutMs = config.strategy.maxHoldMs;
       if (timeoutMs > 0 && age >= timeoutMs) {
         const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
@@ -1723,10 +1663,6 @@ class PositionManager extends EventEmitter {
 
     // v3.17.42: 记录最新tick价格，供前端API使用(priceTracker可能没追踪该mint)
     pos._lastTickPrice = price;
-    if (!Number.isFinite(pos._lowestObservedPrice) || price < pos._lowestObservedPrice) {
-      pos._lowestObservedPrice = price;
-      pos._lastNewLowAt = Number(context?.marketTs) || Date.now();
-    }
     const pnlPct = ((price - pos.entryPrice) / pos.entryPrice) * 100;
 
     const fdvFloorUsd = config.strategy.positionFdvExitUsd || 0;

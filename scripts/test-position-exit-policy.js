@@ -77,7 +77,28 @@ function rsiSnapshot(live, overrides = {}) {
 
 function run() {
   const mint = 'TestMint111111111111111111111111111111111';
-  assert.strictEqual(config.strategy.rebuyCooldownMs, 60_000, 'default post-sale cooldown must be 60 seconds');
+  // This suite covers the retained V9 exit implementation. Pin its policy
+  // explicitly so live V10 defaults do not turn a regression test into a
+  // stale configuration assertion.
+  Object.assign(config.strategy, {
+    rebuyCooldownMs: 60_000,
+    exitMode: 'DUMP_BACKRUN_V9',
+    trailingActivatePct: 10,
+    trailingDrawdownPct: 3,
+    takeProfitPct: 0,
+    fixedStopLossPct: -15,
+    emergencyStopLossPct: 0,
+    maxHoldMs: 20_000,
+    maxTokenAgeMs: 0,
+    positionFdvExitUsd: 0,
+    dumpBackrunRugExitMaxPnlPct: -10,
+    dumpBackrunNoBounceAgeMs: 5_000,
+    dumpBackrunNoBounceMaxMfePct: 2,
+    dumpBackrunNoBounceMaxPnlPct: -3,
+    sellSlippageBps: 500,
+    emergencySellSlippageBps: 5_000,
+  });
+  assert.strictEqual(config.strategy.rebuyCooldownMs, 60_000, 'V9 fixture cooldown must be 60 seconds');
   assert.strictEqual(config.strategy.exitMode, 'DUMP_BACKRUN_V9');
   assert.strictEqual(config.strategy.trailingActivatePct, 10);
   assert.strictEqual(config.strategy.trailingDrawdownPct, 3);

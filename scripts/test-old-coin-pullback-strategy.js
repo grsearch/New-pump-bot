@@ -9,6 +9,7 @@ Module._load = function loadWithDotenvStub(request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain);
 };
 process.env.OLD_COIN_PULLBACK_RSI_PERIOD = '7';
+process.env.OLD_COIN_PULLBACK_RSI_FILTER_ENABLED = 'false';
 process.env.OLD_COIN_PULLBACK_MAX_RSI_30S = '30';
 process.env.OLD_COIN_PULLBACK_MIN_RSI_30S_BARS = '8';
 process.env.OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL = '2.5';
@@ -70,11 +71,13 @@ function tracker(overrides = {}) {
     },
     entryMode: 'OLD_COIN_PULLBACK_V10',
     oldCoinWindowMs: 10_000,
-    oldCoinMinDropPct: 5,
+    oldCoinMinDropPct: 10,
+    oldCoinPriorityEnabled: false,
     oldCoinPriorityDropPct: 15,
-    oldCoinMaxDropPct: 20,
+    oldCoinMaxDropPct: 15,
     oldCoinMinRecoveryPct: 2,
-    oldCoinMaxRecoveryPct: 5,
+    oldCoinMaxRecoveryPct: 3,
+    oldCoinRsiFilterEnabled: false,
     oldCoinRsiPeriod: 7,
     oldCoinMaxRsi30s: 30,
     oldCoinMinRsi30sBars: 8,
@@ -130,8 +133,19 @@ assert.strictEqual(config.strategy.maxTokenAgeMs, 0);
 assert.strictEqual(config.strategy.fixedStopLossPct, 0);
 assert.strictEqual(config.strategy.trailingActivatePct, 10);
 assert.strictEqual(config.strategy.trailingDrawdownPct, 5);
-assert.strictEqual(config.strategy.maxHoldMs, 60 * 60_000);
+assert.strictEqual(config.strategy.maxHoldMs, 30 * 60_000);
+assert.strictEqual(config.strategy.noBounceExitEnabled, true);
+assert.strictEqual(config.strategy.noBounceExitMs, 10 * 60_000);
+assert.strictEqual(config.strategy.noBounceMaxPeakPnlPct, 3);
+assert.strictEqual(config.strategy.noBounceMaxPnlPct, -3);
+assert.strictEqual(config.strategy.oldCoinLpExitDropPct, 0);
 assert.strictEqual(config.strategy.oldCoinMaxSuccessfulBuys24h, undefined);
+assert.strictEqual(config.activityFlow.oldCoinMinDropPct, 10);
+assert.strictEqual(config.activityFlow.oldCoinMaxDropPct, 15);
+assert.strictEqual(config.activityFlow.oldCoinMinRecoveryPct, 2);
+assert.strictEqual(config.activityFlow.oldCoinMaxRecoveryPct, 3);
+assert.strictEqual(config.activityFlow.oldCoinPriorityEnabled, false);
+assert.strictEqual(config.activityFlow.oldCoinRsiFilterEnabled, false);
 assert.strictEqual(config.activityFlow.oldCoinRsiPeriod, 7);
 assert.strictEqual(config.activityFlow.oldCoinMaxRsi30s, 30);
 assert.strictEqual(config.activityFlow.oldCoinMinRsi30sBars, 8);
@@ -145,15 +159,18 @@ assert.strictEqual(config.activityFlow.oldCoinPriorityMaxRecoveryPct, 10);
 
 const passing = tracker();
 const passingSignals = signals(passing);
-replay(passing, 'old-pass', 0.82, 0.84);
-assert.strictEqual(passingSignals.length, 1, 'an 18% sell drop with a 2-5% recovery must signal');
+replay(passing, 'old-pass', 0.89, 0.913);
+assert.strictEqual(passingSignals.length, 1, 'an 11% sell drop with a 2-3% recovery must signal');
 assert.strictEqual(passingSignals[0]._oldCoinPullbackEntry, true);
 assert.strictEqual(passingSignals[0]._flow.entryOldCoin.priority, false);
 assert.strictEqual(passingSignals[0]._flow.entryOldCoin.confirmingBuyerCount, 2);
 const panel = passing.getStrategyCandidates(10, BASE + 300);
 assert.strictEqual(panel.mode, 'OLD_COIN_PULLBACK_V10');
-assert.strictEqual(panel.thresholds.oldCoinMinDropPct, 5);
-assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 5);
+assert.strictEqual(panel.thresholds.oldCoinMinDropPct, 10);
+assert.strictEqual(panel.thresholds.oldCoinMaxDropPct, 15);
+assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 3);
+assert.strictEqual(panel.thresholds.oldCoinPriorityEnabled, false);
+assert.strictEqual(panel.thresholds.oldCoinRsiFilterEnabled, false);
 assert.strictEqual(panel.thresholds.oldCoinRsiPeriod, 7);
 assert.strictEqual(panel.thresholds.oldCoinMaxRsi30s, 30);
 assert.strictEqual(panel.thresholds.oldCoinMinRsi30sBars, 8);
@@ -166,7 +183,7 @@ assert.strictEqual(panel.thresholds.oldCoinPriorityMinConfirmingBuyers, 3);
 assert.strictEqual(panel.thresholds.oldCoinPriorityMaxRecoveryPct, 10);
 assert.strictEqual(panel.candidates[0].stage, 'signaled');
 assert.strictEqual(panel.candidates[0].trigger.priority, false);
-assert.strictEqual(panel.candidates[0].trigger.dropPct, 18);
+assert.strictEqual(panel.candidates[0].trigger.dropPct, 11);
 assert.strictEqual(panel.candidates[0].s10.tradeCount, 4);
 assert.strictEqual(panel.candidates[0].trigger.confirmingBuyerCount, 2);
 assert.strictEqual(panel.candidates[0].trigger.rsi30s, 20);
@@ -179,36 +196,36 @@ const intraSwapDrop = tracker();
 const intraSwapSignals = signals(intraSwapDrop);
 intraSwapDrop.handleSwap(event('old-intra-swap', -40_000, { price: 1, wallet: 'context-buyer' }));
 intraSwapDrop.handleSwap(event('old-intra-swap', 0, {
-  side: 'SELL', wallet: 'single-seller', priceBefore: 1, price: 0.9, solVolume: 6,
+  side: 'SELL', wallet: 'single-seller', priceBefore: 1, price: 0.89, solVolume: 6,
 }));
 intraSwapDrop.handleSwap(event('old-intra-swap', 500, {
-  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.9, price: 0.91,
+  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.89, price: 0.9,
 }));
 intraSwapDrop.handleSwap(event('old-intra-swap', 800, {
-  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.91, price: 0.923,
+  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.9, price: 0.913,
 }));
 assert.strictEqual(
   intraSwapSignals.length,
   1,
   'the priceBefore-to-price drop inside the driving sell must be visible without a pre-buy event',
 );
-assert.strictEqual(intraSwapSignals[0]._flow.entryOldCoin.dropPct, 10);
+assert.strictEqual(intraSwapSignals[0]._flow.entryOldCoin.dropPct, 11);
 assert.strictEqual(intraSwapSignals[0]._flow.entryOldCoin.sellQualification, 'single');
 
 const cumulativeSell = tracker();
 const cumulativeSignals = signals(cumulativeSell);
 cumulativeSell.handleSwap(event('old-cumulative', -40_000, { price: 1, wallet: 'context-buyer' }));
 cumulativeSell.handleSwap(event('old-cumulative', 0, {
-  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.95, solVolume: 2.8,
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.94, solVolume: 2.8,
 }));
 cumulativeSell.handleSwap(event('old-cumulative', 100, {
-  side: 'SELL', wallet: 'seller-b', priceBefore: 0.95, price: 0.9, solVolume: 2.7,
+  side: 'SELL', wallet: 'seller-b', priceBefore: 0.94, price: 0.89, solVolume: 2.7,
 }));
 cumulativeSell.handleSwap(event('old-cumulative', 300, {
-  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.9, price: 0.91,
+  side: 'BUY', wallet: 'confirming-buyer-1', priceBefore: 0.89, price: 0.9,
 }));
 cumulativeSell.handleSwap(event('old-cumulative', 500, {
-  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.91, price: 0.927,
+  side: 'BUY', wallet: 'confirming-buyer-2', priceBefore: 0.9, price: 0.913,
 }));
 assert.strictEqual(cumulativeSignals.length, 1, 'two independent sellers totaling 5 SOL must qualify');
 assert.strictEqual(cumulativeSignals[0]._flow.entryOldCoin.sellQualification, 'cumulative');
@@ -219,16 +236,16 @@ const oneCumulativeSeller = tracker();
 const oneCumulativeSellerSignals = signals(oneCumulativeSeller);
 oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', -40_000, { price: 1 }));
 oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 0, {
-  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.95, solVolume: 2.8,
+  side: 'SELL', wallet: 'seller-a', priceBefore: 1, price: 0.94, solVolume: 2.8,
 }));
 oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 100, {
-  side: 'SELL', wallet: 'seller-a', priceBefore: 0.95, price: 0.9, solVolume: 2.7,
+  side: 'SELL', wallet: 'seller-a', priceBefore: 0.94, price: 0.89, solVolume: 2.7,
 }));
 oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 300, {
-  side: 'BUY', wallet: 'confirming-buyer-1', price: 0.91,
+  side: 'BUY', wallet: 'confirming-buyer-1', price: 0.9,
 }));
 oneCumulativeSeller.handleSwap(event('old-one-cumulative-seller', 500, {
-  side: 'BUY', wallet: 'confirming-buyer-2', price: 0.927,
+  side: 'BUY', wallet: 'confirming-buyer-2', price: 0.913,
 }));
 assert.strictEqual(
   oneCumulativeSellerSignals.length,
@@ -254,9 +271,11 @@ priorityRecovery.handleSwap(event('old-priority', 500, {
 priorityRecovery.handleSwap(event('old-priority', 700, {
   side: 'BUY', wallet: 'confirming-buyer-3', priceBefore: 0.875, price: 0.8856,
 }));
-assert.strictEqual(prioritySignals.length, 1, 'strong deep pullbacks may recover up to 10%');
-assert.strictEqual(prioritySignals[0]._flow.entryOldCoin.priority, true);
-assert.strictEqual(prioritySignals[0]._flow.entryOldCoin.effectiveMaxRecoveryPct, 10);
+assert.strictEqual(
+  prioritySignals.length,
+  0,
+  'the priority recovery bypass must remain disabled and drops over 15% must reject',
+);
 
 const standardRecoveryCap = tracker();
 const standardRecoverySignals = signals(standardRecoveryCap);
@@ -281,29 +300,29 @@ assert.strictEqual(
 
 const highRsi = tracker({ rsi30s: 30 });
 const highRsiSignals = signals(highRsi);
-replay(highRsi, 'old-high-rsi', 0.9, 0.92);
+replay(highRsi, 'old-high-rsi', 0.89, 0.913);
 assert.strictEqual(
   highRsiSignals.length,
-  0,
-  'closed 30-second RSI must be strictly below 30',
+  1,
+  'closed 30-second RSI must be telemetry only when the filter is disabled',
 );
 
 const insufficientRsi = tracker({ rsi30sBucketCount: 7 });
 const insufficientRsiSignals = signals(insufficientRsi);
-replay(insufficientRsi, 'old-rsi-not-ready', 0.9, 0.92);
+replay(insufficientRsi, 'old-rsi-not-ready', 0.89, 0.913);
 assert.strictEqual(
   insufficientRsiSignals.length,
-  0,
-  'fewer than eight fully closed 30-second candles must reject',
+  1,
+  'missing RSI history must not reject when the filter is disabled',
 );
 
 const unhealthyRsiPool = tracker({ rsi30sPoolHealthy: false });
 const unhealthyRsiPoolSignals = signals(unhealthyRsiPool);
-replay(unhealthyRsiPool, 'old-rsi-unhealthy-pool', 0.9, 0.92);
+replay(unhealthyRsiPool, 'old-rsi-unhealthy-pool', 0.89, 0.913);
 assert.strictEqual(
   unhealthyRsiPoolSignals.length,
-  0,
-  'RSI without a healthy pool must reject',
+  1,
+  'RSI pool health must not reject when the filter is disabled',
 );
 
 const sameWindowPump = tracker();
@@ -329,21 +348,21 @@ assert.strictEqual(
 const waterfall = tracker();
 const waterfallSignals = signals(waterfall);
 replay(waterfall, 'old-waterfall', 0.79, 0.81);
-assert.strictEqual(waterfallSignals.length, 0, 'a pullback deeper than 20% must be rejected');
+assert.strictEqual(waterfallSignals.length, 0, 'a pullback deeper than 15% must be rejected');
 
 const lowSell = tracker();
 const lowSellSignals = signals(lowSell);
-replay(lowSell, 'old-low-sell', 0.9, 0.92, { drivingSellSol: 4.9 });
+replay(lowSell, 'old-low-sell', 0.89, 0.913, { drivingSellSol: 4.9 });
 assert.strictEqual(lowSellSignals.length, 0, 'a driving sell below 5 SOL must be rejected');
 
 const oneBuyer = tracker();
 const oneBuyerSignals = signals(oneBuyer);
-replay(oneBuyer, 'old-one-buyer', 0.9, 0.92, { confirmingWallets: ['only-buyer'] });
+replay(oneBuyer, 'old-one-buyer', 0.89, 0.913, { confirmingWallets: ['only-buyer'] });
 assert.strictEqual(oneBuyerSignals.length, 0, 'one confirming buyer must be rejected');
 
 const sameWallet = tracker();
 const sameWalletSignals = signals(sameWallet);
-replay(sameWallet, 'old-same-wallet', 0.9, 0.92, {
+replay(sameWallet, 'old-same-wallet', 0.89, 0.913, {
   confirmingWallets: ['driving-seller', 'driving-seller'],
 });
 assert.strictEqual(sameWalletSignals.length, 0, 'the confirming BUY must come from another wallet');
@@ -364,7 +383,7 @@ assert.strictEqual(sellerPressureSignals.length, 0, 'seller pressure that grows 
 
 const unstablePool = tracker();
 const unstablePoolSignals = signals(unstablePool);
-replay(unstablePool, 'old-pool-drop', 0.9, 0.92, { finalPoolQuote: 90 });
+replay(unstablePool, 'old-pool-drop', 0.89, 0.913, { finalPoolQuote: 90 });
 assert.strictEqual(unstablePoolSignals.length, 0, 'a pool depth drop over 5% must reject');
 
 console.log('Old-coin pullback V10 tests: PASS');

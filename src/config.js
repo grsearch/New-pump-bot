@@ -175,18 +175,21 @@ const config = {
     //   v3.17.19: 30秒 (30000ms) — 反弹窗口通常 5-30 秒
     //   v3.17.20: 设 0 禁用 TIMEOUT 卖出，持仓靠 TP/Trailing/Emergency 退出
     //   v3.17.32: 恢复为 4h 强制退出(数据回测: 4h+ 只有 30% 胜率, 平均亏 -13%)
-    // Final fallback: close every remaining position after 60 minutes.
-    maxHoldMs: 60 * 60_000,
+    // Final fallback: close every remaining position after 30 minutes.
+    maxHoldMs: 30 * 60_000,
 
-    // Old-coin safety exit: remove the token if pool depth collapses.
+    // This policy uses trailing/no-bounce/timeout only. LP depth remains
+    // telemetry and an entry guard, but is not an independent exit trigger.
     oldCoinLpExitWindowMs: 5_000,
-    oldCoinLpExitDropPct: 10,
+    oldCoinLpExitDropPct: 0,
 
-    // Activity strategies exit quiet positions before the hard 180s timeout.
-    noBounceExitEnabled: false,
-    noBounceExitMs: parseInt(process.env.NO_BOUNCE_EXIT_MS || '90000', 10),
-    noBounceMaxPeakPnlPct: parseFloat(process.env.NO_BOUNCE_MAX_PEAK_PNL_PCT || '5'),
-    noBounceFlowWindowMs: parseInt(process.env.NO_BOUNCE_FLOW_WINDOW_MS || '30000', 10),
+    // At 10 minutes, leave only when the position never bounced 3%, remains
+    // below -3%, and the latest 30-second net flow is still non-positive.
+    noBounceExitEnabled: true,
+    noBounceExitMs: 10 * 60_000,
+    noBounceMaxPeakPnlPct: 3,
+    noBounceMaxPnlPct: -3,
+    noBounceFlowWindowMs: 30_000,
     lowPeakTimeoutMs: 0,
     // Exit when two closed 15-second net-flow values turn positive to negative.
     flowReversalExitEnabled: false,
@@ -302,11 +305,13 @@ const config = {
     replaceDumpSignal: true,
     entryMode: 'OLD_COIN_PULLBACK_V10',
     oldCoinWindowMs: parseInt(process.env.OLD_COIN_PULLBACK_WINDOW_MS || '10000', 10),
-    oldCoinMinDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_DROP_PCT || '5'),
+    oldCoinMinDropPct: 10,
+    oldCoinPriorityEnabled: false,
     oldCoinPriorityDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_PRIORITY_DROP_PCT || '15'),
-    oldCoinMaxDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_DROP_PCT || '20'),
-    oldCoinMinRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_RECOVERY_PCT || '2'),
-    oldCoinMaxRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_RECOVERY_PCT || '5'),
+    oldCoinMaxDropPct: 15,
+    oldCoinMinRecoveryPct: 2,
+    oldCoinMaxRecoveryPct: 3,
+    oldCoinRsiFilterEnabled: false,
     oldCoinRsiPeriod: Math.max(
       1,
       parseInt(process.env.OLD_COIN_PULLBACK_RSI_PERIOD || '7', 10),

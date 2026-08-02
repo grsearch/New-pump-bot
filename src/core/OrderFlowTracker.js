@@ -178,6 +178,10 @@ class OrderFlowTracker extends EventEmitter {
       opts.oldCoinMinRecoveryPct ?? flowConfig.oldCoinMinRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MIN_RECOVERY_PCT', 2);
     this.oldCoinMaxRecoveryPct =
       opts.oldCoinMaxRecoveryPct ?? flowConfig.oldCoinMaxRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MAX_RECOVERY_PCT', 5);
+    this.oldCoinPriorityEnabled =
+      opts.oldCoinPriorityEnabled ?? flowConfig.oldCoinPriorityEnabled ?? false;
+    this.oldCoinRsiFilterEnabled =
+      opts.oldCoinRsiFilterEnabled ?? flowConfig.oldCoinRsiFilterEnabled ?? false;
     this.oldCoinRsiPeriod =
       opts.oldCoinRsiPeriod ?? flowConfig.oldCoinRsiPeriod ?? numEnv('OLD_COIN_PULLBACK_RSI_PERIOD', 7);
     this.oldCoinMaxRsi30s =
@@ -567,7 +571,7 @@ class OrderFlowTracker extends EventEmitter {
         const rsi30s = this._oldCoinRsiMetrics(mint, now);
         const sellMetrics = geometry ? this._oldCoinSellMetrics(geometry) : null;
         const confirmingBuyerCount = sellMetrics?.confirmingBuyerCount || 0;
-        const priorityRecovery = Boolean(sellMetrics?.sellQualified) &&
+        const priorityRecovery = this.oldCoinPriorityEnabled && Boolean(sellMetrics?.sellQualified) &&
           dropPct >= this.oldCoinPriorityDropPct &&
           sellMetrics.cumulativeSellSol >= this.oldCoinPriorityMinCumulativeSellSol &&
           confirmingBuyerCount >= this.oldCoinPriorityMinConfirmingBuyers;
@@ -594,7 +598,8 @@ class OrderFlowTracker extends EventEmitter {
           sellDriven: Boolean(sellMetrics?.sellQualified),
           sellerPressureEasing: Boolean(sellMetrics?.sellerPressureEasing),
           recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= effectiveMaxRecoveryPct,
-          rsiOversold: rsi30s.ready && rsi30s.rsi < this.oldCoinMaxRsi30s,
+          rsiOversold: !this.oldCoinRsiFilterEnabled ||
+            (rsi30s.ready && rsi30s.rsi < this.oldCoinMaxRsi30s),
           differentBuyer: confirmingBuyerCount >= this.oldCoinMinConfirmingBuyers,
           poolStable: lpDropPct <= this.oldCoinMaxLpDrop10sPct,
         };
@@ -616,6 +621,7 @@ class OrderFlowTracker extends EventEmitter {
           rsi30sBucketCount: rsi30s.bucketCount,
           rsi30sLastClosedTs: rsi30s.lastClosedBucketTs,
           rsi30sPoolHealthy: rsi30s.poolHealthy,
+          rsiFilterEnabled: this.oldCoinRsiFilterEnabled,
           priority: priorityRecovery,
         };
         age3 = { tokenAgeMs, fdvUsd: fdv, liquidityUsd: liquidity };
@@ -919,6 +925,8 @@ class OrderFlowTracker extends EventEmitter {
         oldCoinMaxDropPct: this.oldCoinMaxDropPct,
         oldCoinMinRecoveryPct: this.oldCoinMinRecoveryPct,
         oldCoinMaxRecoveryPct: this.oldCoinMaxRecoveryPct,
+        oldCoinPriorityEnabled: this.oldCoinPriorityEnabled,
+        oldCoinRsiFilterEnabled: this.oldCoinRsiFilterEnabled,
         oldCoinRsiPeriod: this.oldCoinRsiPeriod,
         oldCoinMaxRsi30s: this.oldCoinMaxRsi30s,
         oldCoinMinRsi30sBars: this.oldCoinMinRsi30sBars,
@@ -1352,17 +1360,19 @@ class OrderFlowTracker extends EventEmitter {
     if (dropPct < this.oldCoinMinDropPct) return;
 
     const rsi30s = this._oldCoinRsiMetrics(ev.mint, ev.ts);
-    if (!rsi30s.poolHealthy) {
-      state.oldCoinDecision = 'rsi30s_pool_unhealthy';
-      return;
-    }
-    if (!rsi30s.ready) {
-      state.oldCoinDecision = `rsi30s_not_ready_${rsi30s.bucketCount}/${this.oldCoinMinRsi30sBars}`;
-      return;
-    }
-    if (rsi30s.rsi >= this.oldCoinMaxRsi30s) {
-      state.oldCoinDecision = `rsi30s>=${this.oldCoinMaxRsi30s}`;
-      return;
+    if (this.oldCoinRsiFilterEnabled) {
+      if (!rsi30s.poolHealthy) {
+        state.oldCoinDecision = 'rsi30s_pool_unhealthy';
+        return;
+      }
+      if (!rsi30s.ready) {
+        state.oldCoinDecision = `rsi30s_not_ready_${rsi30s.bucketCount}/${this.oldCoinMinRsi30sBars}`;
+        return;
+      }
+      if (rsi30s.rsi >= this.oldCoinMaxRsi30s) {
+        state.oldCoinDecision = `rsi30s>=${this.oldCoinMaxRsi30s}`;
+        return;
+      }
     }
 
     const sellMetrics = this._oldCoinSellMetrics(geometry);
@@ -1383,7 +1393,7 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
 
-    const priorityRecovery =
+    const priorityRecovery = this.oldCoinPriorityEnabled &&
       dropPct >= this.oldCoinPriorityDropPct &&
       sellMetrics.cumulativeSellSol >= this.oldCoinPriorityMinCumulativeSellSol &&
       confirmingBuyerCount >= this.oldCoinPriorityMinConfirmingBuyers;
@@ -1448,6 +1458,7 @@ class OrderFlowTracker extends EventEmitter {
         rsi30sBucketCount: rsi30s.bucketCount,
         rsi30sLastClosedTs: rsi30s.lastClosedBucketTs,
         rsi30sPoolHealthy: rsi30s.poolHealthy,
+        rsiFilterEnabled: this.oldCoinRsiFilterEnabled,
       },
     });
     state.oldCoinDecision = 'signaled';
@@ -2042,8 +2053,10 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
         `drop=${flow.entryOldCoin.dropPct.toFixed(2)}% ` +
         `recovery=${flow.entryOldCoin.recoveryPct.toFixed(2)}% ` +
-        `closedRsi30=${flow.entryOldCoin.rsi30s.toFixed(2)}/` +
-        `${flow.entryOldCoin.rsi30sBucketCount}bars ` +
+        `closedRsi30=${Number.isFinite(flow.entryOldCoin.rsi30s)
+          ? flow.entryOldCoin.rsi30s.toFixed(2)
+          : 'n/a'}/${flow.entryOldCoin.rsi30sBucketCount}bars` +
+        `${flow.entryOldCoin.rsiFilterEnabled ? '' : '(telemetry-only)'} ` +
         `buyers=${flow.entryOldCoin.confirmingBuyerCount} ` +
         `sell=${flow.entryOldCoin.drivingSellSol.toFixed(2)}SOL/` +
         `${flow.entryOldCoin.cumulativeSellSol.toFixed(2)}SOL/` +
@@ -2245,10 +2258,11 @@ class OrderFlowTracker extends EventEmitter {
       confirmingBuyerCount: pattern.confirmingBuyerCount,
       laterSellSol: round(pattern.laterSellSol, 4),
       lpDropPct: round(pattern.lpDropPct, 3),
-      rsi30s: round(pattern.rsi30s, 3),
+      rsi30s: Number.isFinite(pattern.rsi30s) ? round(pattern.rsi30s, 3) : null,
       rsi30sBucketCount: pattern.rsi30sBucketCount,
       rsi30sLastClosedTs: pattern.rsi30sLastClosedTs || null,
       rsi30sPoolHealthy: pattern.rsi30sPoolHealthy === true,
+      rsiFilterEnabled: pattern.rsiFilterEnabled === true,
     };
   }
 

@@ -81,16 +81,20 @@ async function main() {
         `drop=${config.activityFlow.oldCoinMinDropPct}-${config.activityFlow.oldCoinMaxDropPct}%/` +
         `${config.activityFlow.oldCoinWindowMs}ms, ` +
         `recovery=${config.activityFlow.oldCoinMinRecoveryPct}-${config.activityFlow.oldCoinMaxRecoveryPct}%, ` +
-        `closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})<${config.activityFlow.oldCoinMaxRsi30s}/` +
-        `${config.activityFlow.oldCoinMinRsi30sBars}bars, ` +
+        `${config.activityFlow.oldCoinRsiFilterEnabled
+          ? `closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})<${config.activityFlow.oldCoinMaxRsi30s}/` +
+            `${config.activityFlow.oldCoinMinRsi30sBars}bars`
+          : 'RSI filter disabled'}, ` +
         `sell>=${config.activityFlow.oldCoinMinDrivingSellSol}SOL or ` +
         `cumulative>=${config.activityFlow.oldCoinMinCumulativeSellSol}SOL/` +
         `${config.activityFlow.oldCoinMinCumulativeSellers}sellers, ` +
         `buyers>=${config.activityFlow.oldCoinMinConfirmingBuyers}, ` +
-        `priority=${config.activityFlow.oldCoinPriorityDropPct}%drop/` +
-        `${config.activityFlow.oldCoinPriorityMinCumulativeSellSol}SOL/` +
-        `${config.activityFlow.oldCoinPriorityMinConfirmingBuyers}buyers/` +
-        `recovery<=${config.activityFlow.oldCoinPriorityMaxRecoveryPct}%, ` +
+        `${config.activityFlow.oldCoinPriorityEnabled
+          ? `priority=${config.activityFlow.oldCoinPriorityDropPct}%drop/` +
+            `${config.activityFlow.oldCoinPriorityMinCumulativeSellSol}SOL/` +
+            `${config.activityFlow.oldCoinPriorityMinConfirmingBuyers}buyers/` +
+            `recovery<=${config.activityFlow.oldCoinPriorityMaxRecoveryPct}%`
+          : 'priority recovery disabled'}, ` +
         `signal<=${config.activityFlow.maxSignalAgeMs}ms)`,
     );
   } else if (config.activityFlow.entryMode === 'ONE_SECOND_REBOUND_V8') {
@@ -135,12 +139,19 @@ async function main() {
       : 'disabled'}`,
   );
   console.log(`Emergency stop: ${config.strategy.emergencyStopLossPct < 0 ? config.strategy.emergencyStopLossPct + '%' : 'disabled'}`);
-  console.log(`No-bounce exit: ${config.strategy.noBounceExitEnabled ? config.strategy.noBounceExitMs / 1000 + 's' : 'disabled'}`);
+  console.log(
+    `No-bounce exit: ${config.strategy.noBounceExitEnabled
+      ? `${config.strategy.noBounceExitMs / 60_000}min, ` +
+        `MFE<${config.strategy.noBounceMaxPeakPnlPct}%, ` +
+        `PnL<${config.strategy.noBounceMaxPnlPct}%, ` +
+        `net${config.strategy.noBounceFlowWindowMs / 1000}s<=0`
+      : 'disabled'}`,
+  );
   if (config.strategy.exitMode === 'OLD_COIN_PULLBACK_V10') {
-    console.log(
-      `Old-coin safety exit: LP ${config.strategy.oldCoinLpExitWindowMs / 1000}s ` +
-      `drop>=${config.strategy.oldCoinLpExitDropPct}%`,
-    );
+    console.log(config.strategy.oldCoinLpExitDropPct > 0
+      ? `Old-coin safety exit: LP ${config.strategy.oldCoinLpExitWindowMs / 1000}s ` +
+        `drop>=${config.strategy.oldCoinLpExitDropPct}%`
+      : 'Old-coin LP exit: disabled');
   }
   if (config.strategy.exitMode === 'DUMP_BACKRUN_V9') {
     console.log(
@@ -300,7 +311,7 @@ async function main() {
   // v3.17.17: SS pre-warm 需要 tokenRegistry 做 base_vault → mint 反查
   tickStream.setTokenRegistry(tokenRegistry);
 
-  // V10 uses fully closed 30-second candle closes for its RSI entry filter.
+  // Keep RSI telemetry available even when the V10 RSI entry gate is disabled.
   const RsiCalculator = require('./core/RsiCalculator');
   const rsiCalculator = new RsiCalculator({
     period30: config.activityFlow.oldCoinRsiPeriod,
@@ -308,10 +319,10 @@ async function main() {
     priceScaleResetRatio: config.activityFlow.rsiPriceScaleResetRatio,
   });
   if (rsiCalculator) {
-    console.log(
-      `[main] V10 RSI entry filter enabled: closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})` +
-        `<${config.activityFlow.oldCoinMaxRsi30s}, bars>=${config.activityFlow.oldCoinMinRsi30sBars}`,
-    );
+    console.log(config.activityFlow.oldCoinRsiFilterEnabled
+      ? `[main] V10 RSI entry filter enabled: closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})` +
+        `<${config.activityFlow.oldCoinMaxRsi30s}, bars>=${config.activityFlow.oldCoinMinRsi30sBars}`
+      : '[main] V10 RSI entry filter disabled; RSI remains telemetry only');
     // Quiet old coins may go several minutes without a swap. Keep their bounded
     // RSI state long enough for the next burst instead of forcing a cold restart.
     const rsiStateStaleMs = config.activityFlow.entryMode === 'OLD_COIN_PULLBACK_V10'
@@ -427,8 +438,10 @@ async function main() {
     ? `drop=${activityFlowTracker.oldCoinMinDropPct}-${activityFlowTracker.oldCoinMaxDropPct}%/` +
       `${activityFlowTracker.oldCoinWindowMs}ms ` +
       `recovery=${activityFlowTracker.oldCoinMinRecoveryPct}-${activityFlowTracker.oldCoinMaxRecoveryPct}% ` +
-      `closed30sRSI(${activityFlowTracker.oldCoinRsiPeriod})<${activityFlowTracker.oldCoinMaxRsi30s} ` +
-      `bars>=${activityFlowTracker.oldCoinMinRsi30sBars}`
+      `${activityFlowTracker.oldCoinRsiFilterEnabled
+        ? `closed30sRSI(${activityFlowTracker.oldCoinRsiPeriod})<${activityFlowTracker.oldCoinMaxRsi30s} ` +
+          `bars>=${activityFlowTracker.oldCoinMinRsi30sBars}`
+        : 'RSI-filter=off'}`
     : activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
     ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
       `${activityFlowTracker.reboundWindowMs}ms ` +

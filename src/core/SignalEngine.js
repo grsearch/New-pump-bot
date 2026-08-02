@@ -1294,7 +1294,8 @@ class SignalEngine extends EventEmitter {
       `recovery=${pullback.recoveryPct.toFixed(2)}% buyers=${pullback.confirmingBuyerCount} ` +
       `sell=${pullback.drivingSellSol.toFixed(2)}SOL/${pullback.cumulativeSellSol.toFixed(2)}SOL/` +
       `${pullback.drivingSellerCount}sellers/${pullback.sellQualification} ` +
-      `closedRsi30=${pullback.rsi30s.toFixed(2)}/${pullback.rsi30sBucketCount}bars ` +
+      `closedRsi30=${Number.isFinite(pullback.rsi30s) ? pullback.rsi30s.toFixed(2) : 'n/a'}/` +
+      `${pullback.rsi30sBucketCount}bars${pullback.rsiFilterEnabled ? '' : '(telemetry-only)'} ` +
       `tier=${pullback.priority ? 'priority' : 'standard'} ` +
       `age=${(tokenAgeMs / 3_600_000).toFixed(1)}h fdv=$${Math.round(fdv)} lp=$${Math.round(liquidity)}`;
 

@@ -18,6 +18,8 @@ function makeManager(pos, price, events = []) {
   manager.byMint = new Map([[pos.mint, new Set([pos.positionId])]]);
   manager._flowExitEvents = new Map([[pos.mint, events]]);
   manager.priceTracker = { getPrice: () => price };
+  manager.tokenRegistry = { getToken: () => null };
+  manager._fillPreVolFallback = () => {};
   manager.exits = [];
   manager._exit = function mockExit(target, exitPrice, reason) {
     target.exiting = true;
@@ -49,7 +51,13 @@ assert.strictEqual(config.strategy.fixedStopLossPct, 0);
 assert.strictEqual(config.strategy.takeProfitPct, 0);
 assert.strictEqual(config.strategy.trailingActivatePct, 10);
 assert.strictEqual(config.strategy.trailingDrawdownPct, 5);
-assert.strictEqual(config.strategy.maxHoldMs, 60 * 60_000);
+assert.strictEqual(config.strategy.maxHoldMs, 30 * 60_000);
+assert.strictEqual(config.strategy.noBounceExitEnabled, true);
+assert.strictEqual(config.strategy.noBounceExitMs, 10 * 60_000);
+assert.strictEqual(config.strategy.noBounceMaxPeakPnlPct, 3);
+assert.strictEqual(config.strategy.noBounceMaxPnlPct, -3);
+assert.strictEqual(config.strategy.noBounceFlowWindowMs, 30_000);
+assert.strictEqual(config.strategy.oldCoinLpExitDropPct, 0);
 assert.strictEqual(
   typeof PositionManager.prototype._maybeOldCoinStagedExit,
   'undefined',
@@ -64,8 +72,56 @@ assert.strictEqual(
     { side: 'SELL', price: 0.99, solVolume: 1, ts: now - 100, poolQuoteSol: 89 },
   ]);
   manager._maybeOldCoinLpExit(pos, 0.99, now);
-  assert.strictEqual(manager.exits[0].reason, 'LP_DROP_5S');
-  assert.strictEqual(pos.removeAfterExit, true);
+  assert.strictEqual(manager.exits.length, 0, 'LP depth changes must remain telemetry only');
+  assert.strictEqual(pos.removeAfterExit, undefined);
+}
+
+{
+  const now = Date.now();
+  const pos = position(now, 10 * 60_000 + 1_000, { highWaterMark: 1.02 });
+  const manager = makeManager(pos, 0.96, [
+    { side: 'SELL', price: 0.96, solVolume: 2, ts: now - 1_000, poolQuoteSol: 100 },
+  ]);
+  manager._tick();
+  assert.strictEqual(manager.exits[0].reason, 'NO_BOUNCE_EXIT');
+}
+
+{
+  const now = Date.now();
+  const pos = position(now, 10 * 60_000 + 1_000, { highWaterMark: 1.02 });
+  const manager = makeManager(pos, 0.98, [
+    { side: 'SELL', price: 0.98, solVolume: 2, ts: now - 1_000, poolQuoteSol: 100 },
+  ]);
+  manager._tick();
+  assert.strictEqual(manager.exits.length, 0, 'PnL above -3% must not trigger no-bounce exit');
+}
+
+{
+  const now = Date.now();
+  const pos = position(now, 10 * 60_000 + 1_000, { highWaterMark: 1.04 });
+  const manager = makeManager(pos, 0.96, [
+    { side: 'SELL', price: 0.96, solVolume: 2, ts: now - 1_000, poolQuoteSol: 100 },
+  ]);
+  manager._tick();
+  assert.strictEqual(manager.exits.length, 0, 'MFE at or above 3% must not trigger no-bounce exit');
+}
+
+{
+  const now = Date.now();
+  const pos = position(now, 10 * 60_000 + 1_000, { highWaterMark: 1.02 });
+  const manager = makeManager(pos, 0.96, [
+    { side: 'BUY', price: 0.96, solVolume: 2, ts: now - 1_000, poolQuoteSol: 100 },
+  ]);
+  manager._tick();
+  assert.strictEqual(manager.exits.length, 0, 'positive net flow must not trigger no-bounce exit');
+}
+
+{
+  const now = Date.now();
+  const pos = position(now, 30 * 60_000 + 1_000, { highWaterMark: 1.04 });
+  const manager = makeManager(pos, 1.01, []);
+  manager._tick();
+  assert.strictEqual(manager.exits[0].reason, 'TIMEOUT_30M');
 }
 
 {

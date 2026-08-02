@@ -1180,11 +1180,19 @@ class PositionManager extends EventEmitter {
         peakPnlForTimeout < config.strategy.noBounceMaxPeakPnlPct
       ) {
         const netFlow = this._recentNetFlow(pos.mint, now, config.strategy.noBounceFlowWindowMs);
-        if (netFlow <= 0) {
-          const lastPrice = this.priceTracker.getPrice(pos.mint) || pos.entryPrice;
+        const lastPrice = Number(this.priceTracker.getPrice(pos.mint)) || pos.entryPrice;
+        const pnlPct = pos.entryPrice > 0
+          ? ((lastPrice - pos.entryPrice) / pos.entryPrice) * 100
+          : null;
+        if (
+          pnlPct != null &&
+          pnlPct < config.strategy.noBounceMaxPnlPct &&
+          netFlow <= 0
+        ) {
           console.log(
             `[PositionManager] NO_BOUNCE_EXIT ${pos.symbol || pos.mint.slice(0, 6)} ` +
-              `peak=${peakPnlForTimeout.toFixed(2)}% net${config.strategy.noBounceFlowWindowMs / 1000}s=` +
+              `peak=${peakPnlForTimeout.toFixed(2)}% pnl=${pnlPct.toFixed(2)}% ` +
+              `net${config.strategy.noBounceFlowWindowMs / 1000}s=` +
               `${netFlow.toFixed(2)}SOL age=${(age / 1000).toFixed(0)}s`,
           );
           monitor.inc('PositionManager.noBounceExit', 1, 'PositionManager');

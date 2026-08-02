@@ -51,6 +51,7 @@ const {
   resolveFreshPoolState,
 } = require('./BuyExecutionGuard');
 const { classifyChainFailure, parseInstructionError } = require('./ChainFailureDiagnostics');
+const { quoteAssetDelta } = require('../utils/quoteAssetAccounting');
 
 // AllenHark Slipstream SDK (lazy load)
 let SlipstreamClient = null;
@@ -74,6 +75,7 @@ monitor.registerModule('Executor', { staleMs: 24 * 60 * 60_000, label: 'Trade Ex
 class Executor {
   constructor() {
     this.dryRun = config.DRY_RUN;
+    this.tradeLogger = null;
     this._latestBuySlot = 0;  // BUY 提交时的链上 slot
     // v3.15 通道分流（Openclaw 发现：staked RPC 限流严格，70 token 刷新会打爆）
     //   - this.rpc：普通公共 RPC（用于 PoolStateCache 后台刷新 + getTransaction / getSignatureStatuses 等查询）
@@ -505,6 +507,10 @@ class Executor {
     this.poolStateCache = cache;
   }
 
+  setTradeLogger(tradeLogger) {
+    this.tradeLogger = tradeLogger;
+  }
+
   /** v3.17.11: 外部（main）在 BUY 前更新 latestSlot，
    *  Executor.buy() 返回时带上 buySlot 给 PositionManager
    */
@@ -855,17 +861,8 @@ class Executor {
 
       // SOL 净变化
       // accountKeys 顺序与 preBalances/postBalances 一致
-      const keys = tx.transaction.message.accountKeys || tx.transaction.message.staticAccountKeys || [];
-      const ownerIdx = keys.findIndex((k) => {
-        const s = typeof k === 'string' ? k : k.pubkey || k.toString?.();
-        return s === owner;
-      });
-      let realSolDelta = 0;
-      if (ownerIdx >= 0) {
-        const pre = tx.meta.preBalances[ownerIdx] || 0;
-        const post = tx.meta.postBalances[ownerIdx] || 0;
-        realSolDelta = (post - pre) / 1e9; // SOL
-      }
+      const quote = quoteAssetDelta(tx.meta, tx.transaction.message, owner);
+      const realQuoteDelta = quote.quoteAssetDelta;
 
       // Token 净变化（对应 mint）
       let realTokenDelta = 0;
@@ -888,13 +885,30 @@ class Executor {
         }
       }
 
-      return {
-        realSolDelta,
+      const result = {
+        // Compatibility alias: callers historically read realSolDelta.
+        realSolDelta: realQuoteDelta,
+        realQuoteDelta,
+        nativeSolDelta: quote.nativeSolDelta,
+        wsolDelta: quote.wsolDelta,
+        wsolBefore: quote.wsolBefore,
+        wsolAfter: quote.wsolAfter,
         realTokenDelta,
         fee: tx.meta.fee || 0,
         computeUnitsConsumed: tx.meta.computeUnitsConsumed || 0,
         success: !tx.meta.err,
       };
+      this.tradeLogger?.saveTxQuoteReconciliation?.({
+        signature,
+        mint,
+        nativeSolDelta: result.nativeSolDelta,
+        wsolDelta: result.wsolDelta,
+        quoteAssetDelta: result.realQuoteDelta,
+        tokenDelta: result.realTokenDelta,
+        feeLamports: result.fee,
+        success: result.success,
+      });
+      return result;
     } catch (err) {
       monitor.recordError('Executor', err, { phase: 'fetchTxSwapResult', signature });
       return null;

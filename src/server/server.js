@@ -18,6 +18,7 @@ class Server {
     activityFlowTracker,
     dailyReport,
     competitorTracker,
+    quoteAssetReconciler,
     onTokenListChanged,
     onTokenAdded,
   }) {
@@ -28,6 +29,7 @@ class Server {
     this.activityFlowTracker = activityFlowTracker || null;
     this.dailyReport = dailyReport;
     this.competitorTracker = competitorTracker || null;
+    this.quoteAssetReconciler = quoteAssetReconciler || null;
     this.onTokenListChanged = onTokenListChanged;
     this.onTokenAdded = onTokenAdded;
 
@@ -370,6 +372,7 @@ class Server {
         dryRun: config.DRY_RUN,
         watchedTokens: this.tokenRegistry.listActive().length,
         openPositions: this.positionManager.openPositionCount(),
+        quoteAssets: this.quoteAssetReconciler?.getLatestSnapshot?.() || null,
         config: {
           minSellSol: config.strategy.minSellSol,
           minPriceImpactPct: config.strategy.minPriceImpactPct,

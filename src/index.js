@@ -23,6 +23,7 @@ const { resolveCompetitorWallets } = require('./utils/competitorWallets');
 const ActivityFlowTracker = require('./core/OrderFlowTracker');
 const PumpGraduationDiscovery = require('./core/PumpGraduationDiscovery');
 const FeatureRecorder = require('./core/FeatureRecorder');
+const QuoteAssetReconciler = require('./core/QuoteAssetReconciler');
 const { fetchTokenMarketsFromDexScreener } = require('./utils/tokenMeta');
 
 const monitor = getMonitor();
@@ -163,6 +164,11 @@ async function main() {
   );
   console.log('Add-on: disabled');
   console.log(`Executor: Pump AMM SDK direct (no Jupiter)`);
+  console.log(
+    `WSOL reconcile: ${config.quoteAssetReconciler.enabled
+      ? '00:00/06:00/12:00/18:00 BJT'
+      : 'disabled'}; wallet auto-unwrap>=${config.quoteAssetReconciler.autoUnwrapMinSol} SOL`,
+  );
   console.log(`Pump graduation discovery: ${config.pumpDiscovery.enabled ? 'enabled' : 'disabled'}`);
   console.log(
     `ShredStream token auto-add: ${config.pumpDiscovery.shredstreamAutoAddEnabled ? 'enabled' : 'disabled'}`,
@@ -188,6 +194,7 @@ async function main() {
   const priceTracker = new PriceTracker();
   const dumpDetector = new DumpDetector(tokenRegistry);
   const executor = new Executor();
+  executor.setTradeLogger(tradeLogger);
 
   // v3.5: PoolStateCache - 后台预热所有监控代币的 Pump pool state
   // BUY 路径不再阻塞 swapSolanaState（80-150ms RPC），从内存读 0ms
@@ -505,6 +512,13 @@ async function main() {
   });
 
   // ============ 服务器 ============
+  const quoteAssetReconciler = new QuoteAssetReconciler({
+    executor,
+    tradeLogger,
+    isTradingBusy: () =>
+      signalEngine.hasInflightBuys() || positionManager.hasPendingSells(),
+  });
+
   const server = new Server({
     tokenRegistry,
     tradeLogger,
@@ -513,6 +527,7 @@ async function main() {
     activityFlowTracker,
     dailyReport,
     competitorTracker,
+    quoteAssetReconciler,
     onTokenListChanged: () => {
       const mints = tokenRegistry.listActive().map((t) => t.mint);
       tickStream.updateSubscription(mints);
@@ -1286,6 +1301,7 @@ async function main() {
 
   // ============ 启动服务器 ============
   await server.start();
+  quoteAssetReconciler.start();
 
   // ============ 启动前补充 pool 信息（异步后台） ============
   if (config.autoFillPoolsOnStart) {
@@ -1311,6 +1327,7 @@ async function main() {
       postExitTracker.shutdown();
       positionManager.stop();
       tokenWatchdog.stop();
+      quoteAssetReconciler.stop();
       dumpDetector.shutdown && dumpDetector.shutdown();
       alertChecker.stop();
       monitor.stop();

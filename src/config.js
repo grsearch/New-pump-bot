@@ -575,6 +575,26 @@ const config = {
     privateKeyBs58: process.env.WALLET_PRIVATE_KEY_BS58,
   },
 
+  // Wallet quote-asset accounting and WSOL cleanup. Scheduled at
+  // 00:00/06:00/12:00/18:00 Beijing time; external Jupiter accounts are
+  // monitored only and are never closed by this process.
+  quoteAssetReconciler: {
+    enabled: (process.env.WSOL_RECONCILE_ENABLED ?? 'true').toLowerCase() === 'true',
+    autoUnwrapEnabled:
+      (process.env.WSOL_AUTO_UNWRAP_ENABLED ?? 'true').toLowerCase() === 'true',
+    autoUnwrapMinSol: parseFloat(process.env.WSOL_AUTO_UNWRAP_MIN_SOL || '0.01'),
+    scheduleHours: [0, 6, 12, 18],
+    utcOffsetMinutes: 8 * 60,
+    busyRetryMs: parseInt(process.env.WSOL_RECONCILE_BUSY_RETRY_MS || '60000', 10),
+    jupiterEscrowAlertMinSol: parseFloat(
+      process.env.JUPITER_ESCROW_ALERT_MIN_SOL || '0.01',
+    ),
+    jupiterEscrowWsolAccounts: (
+      process.env.JUPITER_ESCROW_WSOL_ACCOUNTS ||
+      'DmrQLy5nVJNnRrP8RimSuW8GJxvcjByizcYVzcyFEJFZ'
+    ).split(',').map((value) => value.trim()).filter(Boolean),
+  },
+
   // ============ Programs ============
   programs: {
     pump: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',

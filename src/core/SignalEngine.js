@@ -215,6 +215,10 @@ class SignalEngine extends EventEmitter {
     this.inflightBuys.delete(mint);
   }
 
+  hasInflightBuys() {
+    return this.inflightBuys.size > 0;
+  }
+
   _getMintProtectionRemainingMs(mint, now = Date.now()) {
     const expiresAt = this._exitCooldowns.get(mint) || 0;
     if (!expiresAt) return 0;

@@ -39,6 +39,7 @@
     "test:token-market": "node scripts/test-token-watchdog-market.js",
     "test:competitor-wallets": "node scripts/test-competitor-wallet-config.js",
     "test:competitor-forensics": "node scripts/test-competitor-forensics.js",
+    "test:quote-assets": "node scripts/test-quote-asset-reconciler.js",
     "fill-pools": "node scripts/fill-pools.js",
     "verify-pools": "node scripts/verify-pools.js",
     "verify-pools:fix": "node scripts/verify-pools.js --fix",

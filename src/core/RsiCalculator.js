@@ -359,6 +359,12 @@ class RsiCalculator {
     return prices;
   }
 
+  _bucketsToCloses(buckets) {
+    return buckets
+      .map((bucket) => Number(bucket.lastPrice))
+      .filter((price) => Number.isFinite(price) && price > 0);
+  }
+
   /**
    * Wilder's RSI: 用 EMA 平均涨跌幅
    * @param {number[]} prices
@@ -458,6 +464,34 @@ class RsiCalculator {
     const s = this.state.get(mint);
     if (!s) return null;
     return this._computeSnapshot(s, poolHealthyMinSol);
+  }
+
+  /**
+   * Return Wilder RSI(7) from fully closed 30-second candle closes only.
+   * The bucket containing atTs is deliberately excluded to prevent repainting.
+   */
+  closedRsi30s(mint, atTs = Date.now(), poolHealthyMinSol = 20) {
+    const s = this.state.get(mint);
+    if (!s) return null;
+
+    const timestamp = Number.isFinite(Number(atTs)) ? Number(atTs) : Date.now();
+    const currentBucketIdx = Math.floor(timestamp / this.bucketMs30);
+    const closedBuckets = s.buckets30s.filter((bucket) => bucket.idx < currentBucketIdx);
+    const closes = this._bucketsToCloses(closedBuckets);
+    const lastClosedBucket = closedBuckets[closedBuckets.length - 1] || null;
+
+    return {
+      rsi: this._wildersRsi(closes, this.period30),
+      period: this.period30,
+      bucketCount: closes.length,
+      requiredBucketCount: this.period30 + 1,
+      lastClosedBucketTs: lastClosedBucket
+        ? (lastClosedBucket.idx + 1) * this.bucketMs30
+        : null,
+      lastPoolQuoteSol: s.lastPoolQuoteSol,
+      poolHealthy: Number.isFinite(Number(s.lastPoolQuoteSol)) &&
+        Number(s.lastPoolQuoteSol) >= poolHealthyMinSol,
+    };
   }
 
   /**

@@ -8,8 +8,9 @@ Module._load = function loadWithDotenvStub(request, parent, isMain) {
   if (request === 'dotenv') return { config() {} };
   return originalLoad.call(this, request, parent, isMain);
 };
-process.env.OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS = '30000';
-process.env.OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS = '5000';
+process.env.OLD_COIN_PULLBACK_RSI_PERIOD = '7';
+process.env.OLD_COIN_PULLBACK_MAX_RSI_30S = '30';
+process.env.OLD_COIN_PULLBACK_MIN_RSI_30S_BARS = '8';
 process.env.OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL = '2.5';
 process.env.OLD_COIN_PULLBACK_MIN_CONFIRMING_BUYERS = '1';
 const OrderFlowTracker = require('../src/core/OrderFlowTracker');
@@ -44,12 +45,27 @@ function event(mint, offsetMs, {
 }
 
 function tracker(overrides = {}) {
+  const {
+    rsi30s = 20,
+    rsi30sBucketCount = 8,
+    rsi30sPoolHealthy = true,
+    ...trackerOverrides
+  } = overrides;
   return new OrderFlowTracker({
     tokenRegistry: {
       getToken: () => ({
         migration_time: BASE - (72 * 60 * 60_000),
         fdv: 125_000,
         liquidity: 25_000,
+      }),
+    },
+    rsiCalculator: {
+      closedRsi30s: () => ({
+        rsi: rsi30s,
+        period: 7,
+        bucketCount: rsi30sBucketCount,
+        lastClosedBucketTs: BASE,
+        poolHealthy: rsi30sPoolHealthy,
       }),
     },
     entryMode: 'OLD_COIN_PULLBACK_V10',
@@ -59,10 +75,9 @@ function tracker(overrides = {}) {
     oldCoinMaxDropPct: 20,
     oldCoinMinRecoveryPct: 2,
     oldCoinMaxRecoveryPct: 5,
-    oldCoinRunupLookbackMs: 60_000,
-    oldCoinMinPrePeakContextMs: 30_000,
-    oldCoinMaxNetGain10sPct: 5,
-    oldCoinMaxPrePeakRunupPct: 15,
+    oldCoinRsiPeriod: 7,
+    oldCoinMaxRsi30s: 30,
+    oldCoinMinRsi30sBars: 8,
     oldCoinMinDrivingSellSol: 5,
     oldCoinMinCumulativeSellSol: 5,
     oldCoinMinCumulativeSellers: 2,
@@ -74,7 +89,7 @@ function tracker(overrides = {}) {
     oldCoinMaxLpDrop10sPct: 5,
     oldCoinSignalCooldownMs: 10_000,
     maxSignalAgeMs: 0,
-    ...overrides,
+    ...trackerOverrides,
   });
 }
 
@@ -116,8 +131,10 @@ assert.strictEqual(config.strategy.fixedStopLossPct, 0);
 assert.strictEqual(config.strategy.trailingActivatePct, 10);
 assert.strictEqual(config.strategy.trailingDrawdownPct, 5);
 assert.strictEqual(config.strategy.maxHoldMs, 60 * 60_000);
-assert.strictEqual(config.activityFlow.oldCoinRunupLookbackMs, 60_000);
-assert.strictEqual(config.activityFlow.oldCoinMinPrePeakContextMs, 30_000);
+assert.strictEqual(config.strategy.oldCoinMaxSuccessfulBuys24h, undefined);
+assert.strictEqual(config.activityFlow.oldCoinRsiPeriod, 7);
+assert.strictEqual(config.activityFlow.oldCoinMaxRsi30s, 30);
+assert.strictEqual(config.activityFlow.oldCoinMinRsi30sBars, 8);
 assert.strictEqual(config.activityFlow.oldCoinMinDrivingSellSol, 5);
 assert.strictEqual(config.activityFlow.oldCoinMinCumulativeSellSol, 5);
 assert.strictEqual(config.activityFlow.oldCoinMinCumulativeSellers, 2);
@@ -137,8 +154,9 @@ const panel = passing.getStrategyCandidates(10, BASE + 300);
 assert.strictEqual(panel.mode, 'OLD_COIN_PULLBACK_V10');
 assert.strictEqual(panel.thresholds.oldCoinMinDropPct, 5);
 assert.strictEqual(panel.thresholds.oldCoinMaxRecoveryPct, 5);
-assert.strictEqual(panel.thresholds.oldCoinMaxNetGain10sPct, 5);
-assert.strictEqual(panel.thresholds.oldCoinMaxPrePeakRunupPct, 15);
+assert.strictEqual(panel.thresholds.oldCoinRsiPeriod, 7);
+assert.strictEqual(panel.thresholds.oldCoinMaxRsi30s, 30);
+assert.strictEqual(panel.thresholds.oldCoinMinRsi30sBars, 8);
 assert.strictEqual(panel.thresholds.oldCoinMinDrivingSellSol, 5);
 assert.strictEqual(panel.thresholds.oldCoinMinCumulativeSellSol, 5);
 assert.strictEqual(panel.thresholds.oldCoinMinCumulativeSellers, 2);
@@ -151,6 +169,8 @@ assert.strictEqual(panel.candidates[0].trigger.priority, false);
 assert.strictEqual(panel.candidates[0].trigger.dropPct, 18);
 assert.strictEqual(panel.candidates[0].s10.tradeCount, 4);
 assert.strictEqual(panel.candidates[0].trigger.confirmingBuyerCount, 2);
+assert.strictEqual(panel.candidates[0].trigger.rsi30s, 20);
+assert.strictEqual(panel.candidates[0].conditions.rsiOversold, true);
 assert.strictEqual(panel.candidates[0].fdvUsd, 125_000);
 assert.strictEqual(panel.candidates[0].liquidityUsd, 25_000);
 assert.strictEqual(Math.round(panel.candidates[0].tokenAgeMs / 3_600_000), 72);
@@ -259,16 +279,34 @@ assert.strictEqual(
   'a deep pullback below 10 cumulative SOL must retain the standard 5% recovery cap',
 );
 
-const topChase = tracker({ oldCoinMaxNetGain10sPct: 100 });
-const topChaseSignals = signals(topChase);
-replay(topChase, 'old-top-chase', 1.18, 1.21, { contextPrice: 0.8 });
+const highRsi = tracker({ rsi30s: 30 });
+const highRsiSignals = signals(highRsi);
+replay(highRsi, 'old-high-rsi', 0.9, 0.92);
 assert.strictEqual(
-  topChaseSignals.length,
+  highRsiSignals.length,
   0,
-  'a small pullback at the top of a >15% 30-second run-up must be rejected',
+  'closed 30-second RSI must be strictly below 30',
 );
 
-const sameWindowPump = tracker({ oldCoinMaxPrePeakRunupPct: 100 });
+const insufficientRsi = tracker({ rsi30sBucketCount: 7 });
+const insufficientRsiSignals = signals(insufficientRsi);
+replay(insufficientRsi, 'old-rsi-not-ready', 0.9, 0.92);
+assert.strictEqual(
+  insufficientRsiSignals.length,
+  0,
+  'fewer than eight fully closed 30-second candles must reject',
+);
+
+const unhealthyRsiPool = tracker({ rsi30sPoolHealthy: false });
+const unhealthyRsiPoolSignals = signals(unhealthyRsiPool);
+replay(unhealthyRsiPool, 'old-rsi-unhealthy-pool', 0.9, 0.92);
+assert.strictEqual(
+  unhealthyRsiPoolSignals.length,
+  0,
+  'RSI without a healthy pool must reject',
+);
+
+const sameWindowPump = tracker();
 const sameWindowSignals = signals(sameWindowPump);
 sameWindowPump.handleSwap(event('old-window-pump', -40_000, { price: 1, wallet: 'context-buyer' }));
 sameWindowPump.handleSwap(event('old-window-pump', 0, { price: 1, wallet: 'pre-buyer' }));
@@ -284,8 +322,8 @@ sameWindowPump.handleSwap(event('old-window-pump', 300, {
 }));
 assert.strictEqual(
   sameWindowSignals.length,
-  0,
-  'a pullback whose current price is still >5% above the 10-second start must be rejected',
+  1,
+  'legacy window-gain and pre-peak-runup anti-chase checks must no longer reject a low-RSI setup',
 );
 
 const waterfall = tracker();

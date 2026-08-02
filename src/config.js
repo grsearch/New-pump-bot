@@ -241,7 +241,6 @@ const config = {
     rebuyCooldownMs: 10 * 60_000,
     oldCoinTrailingCooldownMs: 10 * 60_000,
     oldCoinTimeoutCooldownMs: 60 * 60_000,
-    oldCoinMaxSuccessfulBuys24h: 3,
     maxConcurrentPositions: parseInt(process.env.MAX_CONCURRENT_POSITIONS || '10', 10),
 
     // v3.17.6: 同砸单去重时间窗（毫秒）
@@ -308,16 +307,15 @@ const config = {
     oldCoinMaxDropPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_DROP_PCT || '20'),
     oldCoinMinRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MIN_RECOVERY_PCT || '2'),
     oldCoinMaxRecoveryPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_RECOVERY_PCT || '5'),
-    oldCoinRunupLookbackMs: Math.max(
-      60_000,
-      parseInt(process.env.OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS || '60000', 10),
+    oldCoinRsiPeriod: Math.max(
+      1,
+      parseInt(process.env.OLD_COIN_PULLBACK_RSI_PERIOD || '7', 10),
     ),
-    oldCoinMinPrePeakContextMs: Math.max(
-      30_000,
-      parseInt(process.env.OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS || '30000', 10),
+    oldCoinMaxRsi30s: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_RSI_30S || '30'),
+    oldCoinMinRsi30sBars: Math.max(
+      2,
+      parseInt(process.env.OLD_COIN_PULLBACK_MIN_RSI_30S_BARS || '8', 10),
     ),
-    oldCoinMaxNetGain10sPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_NET_GAIN_10S_PCT || '5'),
-    oldCoinMaxPrePeakRunupPct: parseFloat(process.env.OLD_COIN_PULLBACK_MAX_PRE_PEAK_RUNUP_PCT || '15'),
     oldCoinMinDrivingSellSol: Math.max(
       5,
       parseFloat(process.env.OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL || '5'),

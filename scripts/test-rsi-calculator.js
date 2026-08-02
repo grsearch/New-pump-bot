@@ -30,6 +30,31 @@ function referenceRsi(closes, period) {
 }
 
 function run() {
+  const closed30s = new RsiCalculator({ period30: 7 });
+  const closed30sMint = 'closed-rsi-30s';
+  const bucket30s = 30_000;
+  const aligned30s = Math.floor(Date.now() / bucket30s) * bucket30s;
+  [100, 99, 98, 97, 96, 95, 94, 93].forEach((price, index) => {
+    closed30s.feedTrade(
+      closed30sMint,
+      price,
+      1,
+      'sell',
+      aligned30s + ((index - 8) * bucket30s) + 1_000,
+      25,
+    );
+  });
+  closed30s.feedTrade(closed30sMint, 200, 1, 'buy', aligned30s + 1_000, 25);
+  const closed30sSnapshot = closed30s.closedRsi30s(closed30sMint, aligned30s + 2_000);
+  assert.strictEqual(closed30sSnapshot.bucketCount, 8);
+  assert.strictEqual(closed30sSnapshot.poolHealthy, true);
+  assert.strictEqual(closed30sSnapshot.lastClosedBucketTs, aligned30s);
+  approx(closed30sSnapshot.rsi, 0);
+  assert.ok(
+    closed30s.snapshot(closed30sMint).rsi30s > closed30sSnapshot.rsi,
+    'the open 30-second candle may change live RSI but must not change closed RSI',
+  );
+
   const calculator = new RsiCalculator({ period60: 7 });
   const mint = 'rsi-test-mint';
   const minute = 60_000;

@@ -1264,24 +1264,6 @@ class SignalEngine extends EventEmitter {
       return;
     }
 
-    const successfulBuys24h = this.tradeLogger.countSuccessfulLiveBuysByMint(
-      mint,
-      Date.now() - 24 * 60 * 60_000,
-    );
-    if (
-      successfulBuys24h < 0 ||
-      successfulBuys24h >= config.strategy.oldCoinMaxSuccessfulBuys24h
-    ) {
-      monitor.inc('SignalEngine.rejectedDailyMintLimit', 1, 'SignalEngine');
-      this._logReject(
-        signal,
-        successfulBuys24h < 0
-          ? '24h successful-buy count unavailable'
-          : `24h successful buys ${successfulBuys24h}>=${config.strategy.oldCoinMaxSuccessfulBuys24h}`,
-      );
-      return;
-    }
-
     const openCount = this.positionManager.openPositionCount();
     const inflightCount = this.inflightBuys.size;
     if (openCount + inflightCount >= config.strategy.maxConcurrentPositions) {
@@ -1308,8 +1290,7 @@ class SignalEngine extends EventEmitter {
       `recovery=${pullback.recoveryPct.toFixed(2)}% buyers=${pullback.confirmingBuyerCount} ` +
       `sell=${pullback.drivingSellSol.toFixed(2)}SOL/${pullback.cumulativeSellSol.toFixed(2)}SOL/` +
       `${pullback.drivingSellerCount}sellers/${pullback.sellQualification} ` +
-      `net10=${pullback.windowNetGainPct.toFixed(2)}% ` +
-      `runup=${pullback.prePeakRunupPct.toFixed(2)}% context=${Math.round(pullback.prePeakContextMs)}ms ` +
+      `closedRsi30=${pullback.rsi30s.toFixed(2)}/${pullback.rsi30sBucketCount}bars ` +
       `tier=${pullback.priority ? 'priority' : 'standard'} ` +
       `age=${(tokenAgeMs / 3_600_000).toFixed(1)}h fdv=$${Math.round(fdv)} lp=$${Math.round(liquidity)}`;
 

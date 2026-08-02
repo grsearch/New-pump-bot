@@ -857,7 +857,7 @@ async function refreshSignals() {
   if (r.mode === 'OLD_COIN_PULLBACK_V10') {
     $('strategySignalsHeader').innerHTML =
       '<th>更新</th><th>Symbol</th><th>CA</th><th>10秒回调</th>' +
-      '<th>低点反弹</th><th>追涨过滤</th><th>10秒成交</th><th>驱动卖单</th><th>确认买家</th>' +
+      '<th>低点反弹</th><th>已收盘30秒RSI</th><th>10秒成交</th><th>驱动卖单</th><th>确认买家</th>' +
       '<th>卖压下降</th><th>池深变化</th><th>AGE</th><th>FDV</th><th>LP</th><th>阶段</th>';
     meta.innerHTML = [
       `<span>模式 <b>${escapeHtml(r.mode)}</b></span>`,
@@ -867,7 +867,7 @@ async function refreshSignals() {
       `<span>回调达标 <b>${summary.dropReady || 0}</b></span>`,
       `<span>卖出驱动 <b>${summary.sellReady || 0}</b></span>`,
       `<span>反弹达标 <b>${summary.recoveryReady || 0}</b></span>`,
-      `<span>非追涨 <b>${summary.antiChaseReady || 0}</b></span>`,
+      `<span>RSI达标 <b>${summary.rsiReady || 0}</b></span>`,
       `<span>买家确认 <b>${summary.buyersReady || 0}</b></span>`,
       `<span>信号 <b>${summary.signaled || 0}</b></span>`,
     ].join('');
@@ -901,9 +901,9 @@ async function refreshSignals() {
             `优先条件：跌幅>=${_strategyNumber(thresholds.oldCoinPriorityDropPct)}%，累计卖出>=${_strategyNumber(thresholds.oldCoinPriorityMinCumulativeSellSol, 1)} SOL，买家>=${thresholds.oldCoinPriorityMinConfirmingBuyers || 0}，反弹<=${_strategyNumber(thresholds.oldCoinPriorityMaxRecoveryPct)}%`,
           )}</td>
           <td>${_strategyCondition(
-            `10s ${_strategyNumber(trigger.windowNetGainPct)}% / 30s ${_strategyNumber(trigger.prePeakRunupPct)}%`,
-            conditions.antiChase,
-            `要求高点前至少${_strategyNumber(thresholds.oldCoinMinPrePeakContextMs / 1000, 0)}秒上下文，10秒净涨<=${_strategyNumber(thresholds.oldCoinMaxNetGain10sPct)}%，${_strategyNumber(thresholds.oldCoinRunupLookbackMs / 1000, 0)}秒冲高<=${_strategyNumber(thresholds.oldCoinMaxPrePeakRunupPct)}%`,
+            `${trigger.rsi30s == null ? '-' : _strategyNumber(trigger.rsi30s, 2)} / <${_strategyNumber(thresholds.oldCoinMaxRsi30s, 0)}`,
+            conditions.rsiOversold,
+            `只使用已收盘30秒K线的RSI(${thresholds.oldCoinRsiPeriod || 7})，至少${thresholds.oldCoinMinRsi30sBars || 8}根；当前30秒K线不参与`,
           )}</td>
           <td>${_strategyCondition(`${tenSeconds.tradeCount || 0} / >=${thresholds.oldCoinMinTrades10s || 0}`, conditions.trades10s)}</td>
           <td>${_strategyCondition(

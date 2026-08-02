@@ -50,6 +50,7 @@ class OrderFlowTracker extends EventEmitter {
     super();
     const flowConfig = config.activityFlow || {};
     this.tokenRegistry = opts.tokenRegistry || null;
+    this.rsiCalculator = opts.rsiCalculator || null;
     this.solPriceUsd = opts.solPriceUsd ?? numEnv('SOL_PRICE_USD', 72);
 
     this.enabled =
@@ -177,14 +178,12 @@ class OrderFlowTracker extends EventEmitter {
       opts.oldCoinMinRecoveryPct ?? flowConfig.oldCoinMinRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MIN_RECOVERY_PCT', 2);
     this.oldCoinMaxRecoveryPct =
       opts.oldCoinMaxRecoveryPct ?? flowConfig.oldCoinMaxRecoveryPct ?? numEnv('OLD_COIN_PULLBACK_MAX_RECOVERY_PCT', 5);
-    this.oldCoinRunupLookbackMs =
-      opts.oldCoinRunupLookbackMs ?? flowConfig.oldCoinRunupLookbackMs ?? numEnv('OLD_COIN_PULLBACK_RUNUP_LOOKBACK_MS', 60_000);
-    this.oldCoinMinPrePeakContextMs =
-      opts.oldCoinMinPrePeakContextMs ?? flowConfig.oldCoinMinPrePeakContextMs ?? numEnv('OLD_COIN_PULLBACK_MIN_PRE_PEAK_CONTEXT_MS', 30_000);
-    this.oldCoinMaxNetGain10sPct =
-      opts.oldCoinMaxNetGain10sPct ?? flowConfig.oldCoinMaxNetGain10sPct ?? numEnv('OLD_COIN_PULLBACK_MAX_NET_GAIN_10S_PCT', 5);
-    this.oldCoinMaxPrePeakRunupPct =
-      opts.oldCoinMaxPrePeakRunupPct ?? flowConfig.oldCoinMaxPrePeakRunupPct ?? numEnv('OLD_COIN_PULLBACK_MAX_PRE_PEAK_RUNUP_PCT', 15);
+    this.oldCoinRsiPeriod =
+      opts.oldCoinRsiPeriod ?? flowConfig.oldCoinRsiPeriod ?? numEnv('OLD_COIN_PULLBACK_RSI_PERIOD', 7);
+    this.oldCoinMaxRsi30s =
+      opts.oldCoinMaxRsi30s ?? flowConfig.oldCoinMaxRsi30s ?? numEnv('OLD_COIN_PULLBACK_MAX_RSI_30S', 30);
+    this.oldCoinMinRsi30sBars =
+      opts.oldCoinMinRsi30sBars ?? flowConfig.oldCoinMinRsi30sBars ?? numEnv('OLD_COIN_PULLBACK_MIN_RSI_30S_BARS', 8);
     this.oldCoinMinDrivingSellSol =
       opts.oldCoinMinDrivingSellSol ?? flowConfig.oldCoinMinDrivingSellSol ?? numEnv('OLD_COIN_PULLBACK_MIN_DRIVING_SELL_SOL', 5);
     this.oldCoinMinCumulativeSellSol =
@@ -390,7 +389,6 @@ class OrderFlowTracker extends EventEmitter {
       90_000,
       this.reboundWindowMs,
       this.oldCoinWindowMs,
-      this.oldCoinRunupLookbackMs,
       this.window5Ms,
       this.window15Ms,
       this.window30Ms,
@@ -503,7 +501,7 @@ class OrderFlowTracker extends EventEmitter {
       impactReady: 0,
       poolReady: 0,
       freshReady: 0,
-      antiChaseReady: 0,
+      rsiReady: 0,
       armReady: 0,
       armed: 0,
       waiting: 0,
@@ -566,14 +564,7 @@ class OrderFlowTracker extends EventEmitter {
         const recoveryPct = geometry?.lowPrice > 0
           ? ((latest.price - geometry.lowPrice) / geometry.lowPrice) * 100
           : 0;
-        const antiChase = this._oldCoinAntiChaseMetrics(
-          state,
-          now,
-          events,
-          geometry?.peakIndex ?? -1,
-          geometry?.peakPrice ?? 0,
-          latest.price,
-        );
+        const rsi30s = this._oldCoinRsiMetrics(mint, now);
         const sellMetrics = geometry ? this._oldCoinSellMetrics(geometry) : null;
         const confirmingBuyerCount = sellMetrics?.confirmingBuyerCount || 0;
         const priorityRecovery = Boolean(sellMetrics?.sellQualified) &&
@@ -603,7 +594,7 @@ class OrderFlowTracker extends EventEmitter {
           sellDriven: Boolean(sellMetrics?.sellQualified),
           sellerPressureEasing: Boolean(sellMetrics?.sellerPressureEasing),
           recovery: recoveryPct >= this.oldCoinMinRecoveryPct && recoveryPct <= effectiveMaxRecoveryPct,
-          antiChase: antiChase.ready,
+          rsiOversold: rsi30s.ready && rsi30s.rsi < this.oldCoinMaxRsi30s,
           differentBuyer: confirmingBuyerCount >= this.oldCoinMinConfirmingBuyers,
           poolStable: lpDropPct <= this.oldCoinMaxLpDrop10sPct,
         };
@@ -621,9 +612,10 @@ class OrderFlowTracker extends EventEmitter {
           confirmingBuyerCount,
           laterSellSol: round(sellMetrics?.laterSellSol || 0, 4),
           lpDropPct: round(lpDropPct, 3),
-          windowNetGainPct: round(antiChase.windowNetGainPct, 3),
-          prePeakRunupPct: round(antiChase.prePeakRunupPct, 3),
-          prePeakContextMs: round(antiChase.contextCoverageMs, 0),
+          rsi30s: Number.isFinite(rsi30s.rsi) ? round(rsi30s.rsi, 3) : null,
+          rsi30sBucketCount: rsi30s.bucketCount,
+          rsi30sLastClosedTs: rsi30s.lastClosedBucketTs,
+          rsi30sPoolHealthy: rsi30s.poolHealthy,
           priority: priorityRecovery,
         };
         age3 = { tokenAgeMs, fdvUsd: fdv, liquidityUsd: liquidity };
@@ -801,7 +793,7 @@ class OrderFlowTracker extends EventEmitter {
       if (conditions.poolLiquidity) summary.poolReady++;
       if (conditions.liquidity && conditions.poolStable) summary.poolReady++;
       if (conditions.signalFresh) summary.freshReady++;
-      if (conditions.antiChase) summary.antiChaseReady++;
+      if (conditions.rsiOversold) summary.rsiReady++;
       if (armReady) summary.armReady++;
       if (stage === 'armed') summary.armed++;
       if (stage === 'waiting') summary.waiting++;
@@ -927,10 +919,9 @@ class OrderFlowTracker extends EventEmitter {
         oldCoinMaxDropPct: this.oldCoinMaxDropPct,
         oldCoinMinRecoveryPct: this.oldCoinMinRecoveryPct,
         oldCoinMaxRecoveryPct: this.oldCoinMaxRecoveryPct,
-        oldCoinRunupLookbackMs: this.oldCoinRunupLookbackMs,
-        oldCoinMinPrePeakContextMs: this.oldCoinMinPrePeakContextMs,
-        oldCoinMaxNetGain10sPct: this.oldCoinMaxNetGain10sPct,
-        oldCoinMaxPrePeakRunupPct: this.oldCoinMaxPrePeakRunupPct,
+        oldCoinRsiPeriod: this.oldCoinRsiPeriod,
+        oldCoinMaxRsi30s: this.oldCoinMaxRsi30s,
+        oldCoinMinRsi30sBars: this.oldCoinMinRsi30sBars,
         oldCoinMinDrivingSellSol: this.oldCoinMinDrivingSellSol,
         oldCoinMinCumulativeSellSol: this.oldCoinMinCumulativeSellSol,
         oldCoinMinCumulativeSellers: this.oldCoinMinCumulativeSellers,
@@ -1348,17 +1339,9 @@ class OrderFlowTracker extends EventEmitter {
 
     const geometry = this._oldCoinPullbackGeometry(events);
     if (!geometry) return;
-    const { peakIndex, peakPrice, lowPrice, lowEvent } = geometry;
+    const { peakPrice, lowPrice, lowEvent } = geometry;
     const dropPct = ((peakPrice - lowPrice) / peakPrice) * 100;
     const recoveryPct = ((ev.price - lowPrice) / lowPrice) * 100;
-    const antiChase = this._oldCoinAntiChaseMetrics(
-      state,
-      ev.ts,
-      events,
-      peakIndex,
-      peakPrice,
-      ev.price,
-    );
     state.oldCoinLastDropPct = dropPct;
     state.oldCoinLastRecoveryPct = recoveryPct;
 
@@ -1367,16 +1350,18 @@ class OrderFlowTracker extends EventEmitter {
       return;
     }
     if (dropPct < this.oldCoinMinDropPct) return;
-    if (!antiChase.contextReady) {
-      state.oldCoinDecision = 'insufficient_pre_peak_context';
+
+    const rsi30s = this._oldCoinRsiMetrics(ev.mint, ev.ts);
+    if (!rsi30s.poolHealthy) {
+      state.oldCoinDecision = 'rsi30s_pool_unhealthy';
       return;
     }
-    if (antiChase.windowNetGainPct > this.oldCoinMaxNetGain10sPct) {
-      state.oldCoinDecision = `window_gain>${this.oldCoinMaxNetGain10sPct}%`;
+    if (!rsi30s.ready) {
+      state.oldCoinDecision = `rsi30s_not_ready_${rsi30s.bucketCount}/${this.oldCoinMinRsi30sBars}`;
       return;
     }
-    if (antiChase.prePeakRunupPct > this.oldCoinMaxPrePeakRunupPct) {
-      state.oldCoinDecision = `pre_peak_runup>${this.oldCoinMaxPrePeakRunupPct}%`;
+    if (rsi30s.rsi >= this.oldCoinMaxRsi30s) {
+      state.oldCoinDecision = `rsi30s>=${this.oldCoinMaxRsi30s}`;
       return;
     }
 
@@ -1459,9 +1444,10 @@ class OrderFlowTracker extends EventEmitter {
         confirmingBuyerCount,
         laterSellSol: sellMetrics.laterSellSol,
         lpDropPct,
-        windowNetGainPct: antiChase.windowNetGainPct,
-        prePeakRunupPct: antiChase.prePeakRunupPct,
-        prePeakContextMs: antiChase.contextCoverageMs,
+        rsi30s: rsi30s.rsi,
+        rsi30sBucketCount: rsi30s.bucketCount,
+        rsi30sLastClosedTs: rsi30s.lastClosedBucketTs,
+        rsi30sPoolHealthy: rsi30s.poolHealthy,
       },
     });
     state.oldCoinDecision = 'signaled';
@@ -1469,36 +1455,19 @@ class OrderFlowTracker extends EventEmitter {
     this.cooldowns.set(ev.mint, wallNow + this.oldCoinSignalCooldownMs);
   }
 
-  _oldCoinAntiChaseMetrics(state, now, events, peakIndex, peakPrice, currentPrice) {
-    const firstEvent = events[0];
-    const firstPriceBefore = Number(firstEvent?.priceBefore);
-    const windowStartPrice = firstPriceBefore > 0
-      ? firstPriceBefore
-      : Number(firstEvent?.price);
-    const windowNetGainPct = windowStartPrice > 0 && currentPrice > 0
-      ? ((currentPrice - windowStartPrice) / windowStartPrice) * 100
-      : Infinity;
-    const peakEvent = events[peakIndex];
-    const contextEvents = this._windowEvents(state, now, this.oldCoinRunupLookbackMs)
-      .filter((event) => Number(event.price) > 0);
-    const contextCutoff = Number(peakEvent?.ts) - this.oldCoinMinPrePeakContextMs;
-    const baselineEvent = contextEvents.find((event) => event.ts <= contextCutoff);
-    const baselinePrice = Number(baselineEvent?.price);
-    const contextCoverageMs = baselineEvent && peakEvent
-      ? peakEvent.ts - baselineEvent.ts
-      : 0;
-    const prePeakRunupPct = baselinePrice > 0 && peakPrice > 0
-      ? ((peakPrice - baselinePrice) / baselinePrice) * 100
-      : Infinity;
-    const contextReady = contextCoverageMs >= this.oldCoinMinPrePeakContextMs;
+  _oldCoinRsiMetrics(mint, now) {
+    const snapshot = this.rsiCalculator?.closedRsi30s?.(mint, now, 20) || null;
+    const rsi = snapshot?.rsi == null ? null : Number(snapshot.rsi);
+    const bucketCount = Number(snapshot?.bucketCount || 0);
+    const poolHealthy = snapshot?.poolHealthy === true;
     return {
-      contextReady,
-      contextCoverageMs,
-      windowNetGainPct,
-      prePeakRunupPct,
-      ready: contextReady &&
-        windowNetGainPct <= this.oldCoinMaxNetGain10sPct &&
-        prePeakRunupPct <= this.oldCoinMaxPrePeakRunupPct,
+      rsi: Number.isFinite(rsi) ? rsi : null,
+      bucketCount,
+      lastClosedBucketTs: snapshot?.lastClosedBucketTs || null,
+      poolHealthy,
+      ready: poolHealthy &&
+        bucketCount >= this.oldCoinMinRsi30sBars &&
+        Number.isFinite(rsi),
     };
   }
 
@@ -2073,9 +2042,8 @@ class OrderFlowTracker extends EventEmitter {
         `[ActivityFlow] BUY_CONFIRM ${signal.symbol || ev.mint.slice(0, 6)} mode=${this.entryMode} ` +
         `drop=${flow.entryOldCoin.dropPct.toFixed(2)}% ` +
         `recovery=${flow.entryOldCoin.recoveryPct.toFixed(2)}% ` +
-        `net10=${flow.entryOldCoin.windowNetGainPct.toFixed(2)}% ` +
-        `runup=${flow.entryOldCoin.prePeakRunupPct.toFixed(2)}%/` +
-        `${Math.round(flow.entryOldCoin.prePeakContextMs)}ms ` +
+        `closedRsi30=${flow.entryOldCoin.rsi30s.toFixed(2)}/` +
+        `${flow.entryOldCoin.rsi30sBucketCount}bars ` +
         `buyers=${flow.entryOldCoin.confirmingBuyerCount} ` +
         `sell=${flow.entryOldCoin.drivingSellSol.toFixed(2)}SOL/` +
         `${flow.entryOldCoin.cumulativeSellSol.toFixed(2)}SOL/` +
@@ -2277,9 +2245,10 @@ class OrderFlowTracker extends EventEmitter {
       confirmingBuyerCount: pattern.confirmingBuyerCount,
       laterSellSol: round(pattern.laterSellSol, 4),
       lpDropPct: round(pattern.lpDropPct, 3),
-      windowNetGainPct: round(pattern.windowNetGainPct, 3),
-      prePeakRunupPct: round(pattern.prePeakRunupPct, 3),
-      prePeakContextMs: round(pattern.prePeakContextMs, 0),
+      rsi30s: round(pattern.rsi30s, 3),
+      rsi30sBucketCount: pattern.rsi30sBucketCount,
+      rsi30sLastClosedTs: pattern.rsi30sLastClosedTs || null,
+      rsi30sPoolHealthy: pattern.rsi30sPoolHealthy === true,
     };
   }
 

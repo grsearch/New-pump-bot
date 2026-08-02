@@ -80,9 +80,8 @@ async function main() {
         `drop=${config.activityFlow.oldCoinMinDropPct}-${config.activityFlow.oldCoinMaxDropPct}%/` +
         `${config.activityFlow.oldCoinWindowMs}ms, ` +
         `recovery=${config.activityFlow.oldCoinMinRecoveryPct}-${config.activityFlow.oldCoinMaxRecoveryPct}%, ` +
-        `net10<=${config.activityFlow.oldCoinMaxNetGain10sPct}%, ` +
-        `runup${config.activityFlow.oldCoinRunupLookbackMs / 1000}s<=${config.activityFlow.oldCoinMaxPrePeakRunupPct}%, ` +
-        `context>=${config.activityFlow.oldCoinMinPrePeakContextMs / 1000}s, ` +
+        `closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})<${config.activityFlow.oldCoinMaxRsi30s}/` +
+        `${config.activityFlow.oldCoinMinRsi30sBars}bars, ` +
         `sell>=${config.activityFlow.oldCoinMinDrivingSellSol}SOL or ` +
         `cumulative>=${config.activityFlow.oldCoinMinCumulativeSellSol}SOL/` +
         `${config.activityFlow.oldCoinMinCumulativeSellers}sellers, ` +
@@ -294,15 +293,24 @@ async function main() {
   // v3.17.17: SS pre-warm 需要 tokenRegistry 做 base_vault → mint 反查
   tickStream.setTokenRegistry(tokenRegistry);
 
-  // RsiCalculator remains for price-history helpers; RSI buy/sell filters are disabled.
+  // V10 uses fully closed 30-second candle closes for its RSI entry filter.
   const RsiCalculator = require('./core/RsiCalculator');
   const rsiCalculator = new RsiCalculator({
+    period30: config.activityFlow.oldCoinRsiPeriod,
     period60: config.activityFlow.rsi1mPeriod,
     priceScaleResetRatio: config.activityFlow.rsiPriceScaleResetRatio,
   });
   if (rsiCalculator) {
-    console.log('[main] RSI filters disabled; RSI data kept for price-history helpers only');
-    setInterval(() => rsiCalculator.cleanup(), 60_000);
+    console.log(
+      `[main] V10 RSI entry filter enabled: closed30s RSI(${config.activityFlow.oldCoinRsiPeriod})` +
+        `<${config.activityFlow.oldCoinMaxRsi30s}, bars>=${config.activityFlow.oldCoinMinRsi30sBars}`,
+    );
+    // Quiet old coins may go several minutes without a swap. Keep their bounded
+    // RSI state long enough for the next burst instead of forcing a cold restart.
+    const rsiStateStaleMs = config.activityFlow.entryMode === 'OLD_COIN_PULLBACK_V10'
+      ? 2 * 60 * 60_000
+      : 5 * 60_000;
+    setInterval(() => rsiCalculator.cleanup(rsiStateStaleMs), 60_000);
 
     // Rebuild RSI from captured swaps. The lookback is a maximum, not a token-age
     // requirement: a newly migrated token uses every minute that actually exists.
@@ -387,7 +395,7 @@ async function main() {
     forensics: competitorForensics,
     onAddressesChanged: (addresses) => tickStream.updateCompetitorWallets(addresses),
   });
-  const activityFlowTracker = new ActivityFlowTracker({ tokenRegistry });
+  const activityFlowTracker = new ActivityFlowTracker({ tokenRegistry, rsiCalculator });
   const featureRecorder = new FeatureRecorder({ tradeLogger, tokenRegistry });
   featureRecorder.start();
   const swapSanitizer = dumpDetector.swapEventSanitizer;
@@ -408,6 +416,12 @@ async function main() {
           `gap<=${config.strategy.dumpBackrunFastBuyMaxSlotGap}/` +
           `meta<=${config.strategy.dumpBackrunFastBuyMaxMetadataAgeMs}ms`
         : 'disabled'}`
+    : activityFlowTracker.entryMode === 'OLD_COIN_PULLBACK_V10'
+    ? `drop=${activityFlowTracker.oldCoinMinDropPct}-${activityFlowTracker.oldCoinMaxDropPct}%/` +
+      `${activityFlowTracker.oldCoinWindowMs}ms ` +
+      `recovery=${activityFlowTracker.oldCoinMinRecoveryPct}-${activityFlowTracker.oldCoinMaxRecoveryPct}% ` +
+      `closed30sRSI(${activityFlowTracker.oldCoinRsiPeriod})<${activityFlowTracker.oldCoinMaxRsi30s} ` +
+      `bars>=${activityFlowTracker.oldCoinMinRsi30sBars}`
     : activityFlowTracker.entryMode === 'ONE_SECOND_REBOUND_V8'
     ? `drop=${activityFlowTracker.reboundMinDropPct}%-<${activityFlowTracker.reboundMaxDropPct}%/` +
       `${activityFlowTracker.reboundWindowMs}ms ` +

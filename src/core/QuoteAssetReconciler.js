@@ -140,14 +140,13 @@ class QuoteAssetReconciler {
 
   async _readSnapshot() {
     const owner = this.keypair.publicKey;
-    const [nativeLamports, tokenAccounts, externalAccounts] = await Promise.all([
+    const [nativeLamports, tokenAccounts] = await Promise.all([
       this.rpc.getBalance(owner, 'confirmed'),
       this.rpc.getParsedTokenAccountsByOwner(
         owner,
         { mint: NATIVE_MINT },
         'confirmed',
       ),
-      this._readExternalAccounts(),
     ]);
 
     const walletAccounts = (tokenAccounts?.value || []).map((row) => {
@@ -165,7 +164,6 @@ class QuoteAssetReconciler {
       (!row.closeAuthority || row.closeAuthority === owner.toBase58()),
     );
     const walletWsol = walletAccounts.reduce((sum, row) => sum + row.amountSol, 0);
-    const externalEscrowWsol = externalAccounts.reduce((sum, row) => sum + row.amountSol, 0);
     const nativeSol = nativeLamports / 1_000_000_000;
 
     return {
@@ -174,39 +172,14 @@ class QuoteAssetReconciler {
       nativeSol,
       walletWsol,
       walletQuoteSol: nativeSol + walletWsol,
-      externalEscrowWsol,
+      externalEscrowWsol: 0,
       walletWsolAccountCount: walletAccounts.length,
-      externalEscrowAccountCount: externalAccounts.length,
+      externalEscrowAccountCount: 0,
       walletAccounts,
       unwrapAccounts,
-      externalAccounts,
+      externalAccounts: [],
       unwrapSignatures: [],
     };
-  }
-
-  async _readExternalAccounts() {
-    const addresses = this.settings.jupiterEscrowWsolAccounts;
-    if (!addresses.length) return [];
-
-    const publicKeys = addresses.map((address) => new PublicKey(address));
-    let infos;
-    if (typeof this.rpc.getMultipleParsedAccounts === 'function') {
-      infos = (await this.rpc.getMultipleParsedAccounts(publicKeys, 'confirmed')).value;
-    } else {
-      infos = await Promise.all(
-        publicKeys.map(async (key) => (await this.rpc.getParsedAccountInfo(key, 'confirmed')).value),
-      );
-    }
-
-    return infos.map((account, index) => {
-      const info = account?.data?.parsed?.info || {};
-      return {
-        address: addresses[index],
-        amountSol: info.mint === NATIVE_MINT.toBase58() ? parsedTokenAmount(account) : 0,
-        authority: info.owner || null,
-        mint: info.mint || null,
-      };
-    });
   }
 
   async _unwrap(accounts) {
@@ -274,16 +247,9 @@ class QuoteAssetReconciler {
     );
     monitor.set('QuoteAssetReconciler.lastRunAt', snapshot.ts, 'QuoteAssetReconciler');
 
-    if (snapshot.externalEscrowWsol >= this.settings.jupiterEscrowAlertMinSol) {
-      monitor.fireAlert(
-        'quoteAsset.jupiterEscrowPending',
-        'warn',
-        `Jupiter external WSOL pending: ${snapshot.externalEscrowWsol.toFixed(6)} SOL`,
-        { accounts: snapshot.externalAccounts },
-      );
-    } else {
-      monitor.clearAlert('quoteAsset.jupiterEscrowPending');
-    }
+    // Clear the legacy false-positive alert. A router-owned token account is
+    // not attributable to this wallet and must never be reported as its asset.
+    monitor.clearAlert('quoteAsset.jupiterEscrowPending');
 
     this.tradeLogger?.saveQuoteAssetSnapshot?.({
       ...publicSnapshot,
@@ -296,8 +262,7 @@ class QuoteAssetReconciler {
     console.log(
       `[QuoteAssetReconciler] native=${snapshot.nativeSol.toFixed(6)} ` +
       `walletWSOL=${snapshot.walletWsol.toFixed(6)} ` +
-      `walletQuote=${snapshot.walletQuoteSol.toFixed(6)} ` +
-      `externalPending=${snapshot.externalEscrowWsol.toFixed(6)}`,
+      `walletQuote=${snapshot.walletQuoteSol.toFixed(6)}`,
     );
   }
 }

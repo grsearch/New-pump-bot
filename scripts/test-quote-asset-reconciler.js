@@ -122,11 +122,10 @@ async function testWalletOwnedWsolUnwrap() {
     enabled: true,
     autoUnwrapEnabled: true,
     autoUnwrapMinSol: 0.01,
-    jupiterEscrowWsolAccounts: [],
-    jupiterEscrowAlertMinSol: 0.01,
   };
   const result = await reconciler.reconcile({ allowUnwrap: true });
   assert.strictEqual(result.walletWsol, 0);
+  assert.strictEqual(result.externalEscrowWsol, 0);
   assert.deepStrictEqual(result.unwrapSignatures, ['unwrap-signature']);
   assert.strictEqual(saved.length, 1);
 }
